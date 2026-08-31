@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -38,6 +38,193 @@ type Profile = { displayName: string; familyName: string; role: Role };
 
 const queryClient = new QueryClient();
 const PROFILE_KEY = 'amparo-profile';
+const LANGUAGE_KEY = 'amparo-language';
+
+const pt = {
+  language: { brazil: 'Português do Brasil', english: 'English', switcher: 'Idioma' },
+  onboarding: {
+    aside: 'um espaço de família, não uma sala de controle', overline: 'privado por padrão',
+    heroOne: 'Segurança funciona', heroTwo: 'melhor', heroThree: 'às claras.',
+    description: 'O Amparo oferece à família um lugar compartilhado para combinar cuidados, conversar e compartilhar uma localização quando todos concordarem. Sem monitoramento escondido. Sem adivinhar o que é real.',
+    checkOne: 'Todos podem ver o que é compartilhado', checkTwo: 'Nada começa sem consentimento',
+    step: '01 / comece aqui', question: 'Qual é o seu papel nesta família?', choiceDescription: 'Sua escolha define o que você vê. É possível mudar depois.',
+    adult: 'Adulto responsável', adultDescription: 'Ajudo a manter a família conectada.',
+    child: 'Criança', childDescription: 'Quero participar do meu espaço de segurança.',
+    yourName: 'Seu nome', yourNamePlaceholder: 'Digite seu nome', familyName: 'Nome do espaço da família', familyNamePlaceholder: 'Dê um nome ao seu espaço',
+    localNote: 'Por enquanto, isso fica neste dispositivo. O Amparo nunca inventa uma pessoa, mensagem ou localização.',
+    error: 'Escolha um papel e preencha os dois campos para continuar.', create: 'Criar meu espaço de família',
+    footer: 'Amparo / um espaço claro para cuidar', help: 'Precisa de ajuda? Peça para sua família configurar junto.',
+  },
+  nav: { overview: 'Visão geral', conversations: 'Conversas', location: 'Localização', settings: 'Configurações' },
+  shell: {
+    yourProfile: 'Seu perfil', setupIncomplete: 'Configuração incompleta', completeSetup: 'Concluir configuração',
+    familySpace: 'Espaço da família', noMonitoring: 'Sem monitoramento escondido, nunca.', localMode: 'modo local',
+    familyNotSet: 'não configurado', localPrivate: 'local e privado', openMenu: 'Abrir menu', closeMenu: 'Fechar menu',
+    closeNavigation: 'Fechar navegação', mainNav: 'Navegação principal', mobileNav: 'Navegação móvel', bottomNav: 'Navegação inferior',
+  },
+  dashboard: {
+    eyebrow: '01 / visão geral', greeting: 'Bom ter você aqui, {name}.', title: 'Um lugar claro para cuidar.',
+    description: 'Este é o espaço compartilhado de segurança da sua família. Ele começa quieto, porque só atualizações reais devem aparecer aqui.',
+    noProfileDescription: 'Configure seu perfil de família para tornar este espaço seu. Até lá, nada é coletado ou presumido.',
+    setupTitle: 'Seu espaço ainda não foi configurado.', setupText: 'Comece com seu papel e um nome para que este espaço pertença a você.', setupAction: 'Configurar espaço',
+    sharedTruth: 'verdade compartilhada', noReport: 'Nada para relatar', goodNews: 'é uma boa notícia.',
+    emptyExplanation: 'Quando sua família começar a compartilhar, é aqui que as atualizações claras e combinadas vão aparecer.',
+    status: 'status do espaço', quietReady: 'Quieto e pronto', profile: 'Seu perfil', profileDone: 'Configurado neste dispositivo', profileNeeds: 'Precisa dos seus dados',
+    approved: 'Nenhuma conversa aprovada', noChildLocation: 'Nenhuma localização de criança compartilhada',
+    onlyShows: 'O Amparo mostra apenas informações que alguém escolheu ativamente compartilhar com este espaço da família.',
+    connectEyebrow: 'manter conectado', connectTitle: 'Conversas aprovadas', connectText: 'Um lugar para mensagens que todos podem ver como parte do espaço da família.', connectAction: 'Abrir conversas',
+    locationEyebrow: 'quando importa', locationTitle: 'Localização, com consentimento', locationText: 'A localização fica vazia até que uma criança escolha compartilhá-la. A permissão fica sempre visível.', locationAction: 'Revisar localização',
+  },
+  conversations: {
+    eyebrow: '02 / conversas', title: 'Converse onde mora a confiança.',
+    description: 'Somente conversas aprovadas ficam aqui. O canal privado da família é identificado com clareza e nunca é compartilhado em silêncio.',
+    privacy: 'Como a privacidade funciona', approvedTab: 'Conversas aprovadas', privateTab: 'Canal privado da família',
+    emptyEyebrow: 'nada compartilhado ainda', emptyTitle: 'Suas conversas estão vazias.',
+    emptyText: 'Quando uma pessoa da família for aprovada e iniciar uma conversa, ela aparecerá aqui. O Amparo não cria mensagens de exemplo.',
+    learnPrivate: 'Conhecer o canal privado', privateTitle: 'Canal privado da família', privateBadge: 'privado',
+    privateDescription: 'Um espaço direto para um adulto responsável e uma criança. As mensagens aqui só ficam visíveis para essas duas pessoas quando os dois perfis entrarem neste espaço da família.',
+    noParticipants: 'nenhum participante ainda', readyTitle: 'Este canal estará pronto quando sua família estiver.',
+    readyWithProfile: 'Adicione outro perfil de família no dispositivo dele para disponibilizar este canal privado.',
+    readyWithoutProfile: 'Complete seu perfil e depois convide as pessoas em quem confia.',
+    prepare: 'Preparar canal privado', alert: 'Os perfis de família serão conectados quando o serviço compartilhado estiver disponível.',
+    privateFooter: 'Privado significa privado: este canal nunca será listado como uma conversa de grupo aprovada.',
+  },
+  location: {
+    eyebrow: '03 / localização', title: 'Localização, por acordo.',
+    description: 'Uma localização nunca é inferida aqui. Ela aparece somente depois que uma criança escolhe compartilhá-la e o dispositivo permite.',
+    permission: 'Permissão do dispositivo', allowed: 'permitida', denied: 'não permitida', notRequested: 'não solicitada',
+    permissionText: 'Permissão e compartilhamento com a família são escolhas separadas. O Amparo só pergunta ao dispositivo quando você pede.',
+    waiting: 'Aguardando sua escolha…', granted: 'Permissão concedida', ask: 'Pedir permissão',
+    locationUnavailable: 'A permissão de localização não está disponível neste navegador.', notGranted: 'A permissão não foi concedida. Nenhuma localização foi salva.',
+    share: 'Compartilhar minha localização', sharedChoice: 'Sua família pode ver que você escolheu compartilhar.', privateChoice: 'Sua localização permanece privada.',
+    map: 'mapa da família', consent: 'consentimento necessário', noLocation: 'Nenhuma localização compartilhada',
+    sharingOnEmpty: 'O compartilhamento está ativo, mas ainda não há atualização de localização.',
+    mapEmpty: 'Este mapa permanece intencionalmente vazio até que uma criança escolha compartilhar uma localização.',
+    noTracking: 'Sem rastreamento em segundo plano. Sem último ponto visto.',
+  },
+  settings: {
+    eyebrow: '04 / configurações', title: 'Seu espaço, sua voz.',
+    description: 'Veja e altere o perfil e as permissões do dispositivo que dão forma a este espaço do Amparo.',
+    profile: 'Perfil da família', stored: 'Armazenado somente neste dispositivo', save: 'Salvar alterações', saved: 'Salvo neste dispositivo.',
+    notifications: 'Notificações', notificationsText: 'Uma preferência local para futuras atualizações aprovadas.',
+    device: 'Este dispositivo', deviceText: 'O Amparo está rodando em modo local. Não há sincronização de conta nem coleta em segundo plano.',
+    browserData: 'Os dados ficam no seu navegador', remove: 'Remover perfil local', removeText: 'Isso limpa seu perfil e as escolhas locais de compartilhamento deste dispositivo.',
+    removeButton: 'Remover perfil', removeConfirm: 'Remover este perfil local de família deste dispositivo?',
+  },
+  notFound: { title: 'Esta página não está aqui.', text: 'O espaço do Amparo que você pediu não existe.', back: 'Voltar ao Amparo' },
+  metadata: { title: 'Amparo — um espaço claro para cuidar', description: 'Um espaço transparente de segurança familiar para adultos responsáveis e crianças.' },
+} as const;
+
+const en = {
+  language: { brazil: 'Brazilian Portuguese', english: 'English', switcher: 'Language' },
+  onboarding: {
+    aside: 'a family space, not a control room', overline: 'private by default',
+    heroOne: 'Safety works', heroTwo: 'better', heroThree: 'in the open.',
+    description: 'Amparo gives families a shared place to check in, talk, and share a location when everyone agrees. No hidden monitoring. No guessing what is real.',
+    checkOne: 'Everyone can see what is shared', checkTwo: 'Nothing starts without consent',
+    step: '01 / start here', question: 'Who are you in this family?', choiceDescription: 'Your choice shapes what you see. You can change it later.',
+    adult: 'Responsible adult', adultDescription: 'I help keep the family connected.',
+    child: 'Child', childDescription: 'I want a say in my safety space.',
+    yourName: 'Your name', yourNamePlaceholder: 'Type your name', familyName: 'Family space name', familyNamePlaceholder: 'Give your space a name',
+    localNote: 'This stays on this device for now. Amparo will never make up a person, message, or location.',
+    error: 'Choose a role and complete both fields to continue.', create: 'Create my family space',
+    footer: 'Amparo / a clear space for care', help: 'Need help? Ask your family to set this up together.',
+  },
+  nav: { overview: 'Overview', conversations: 'Conversations', location: 'Location', settings: 'Settings' },
+  shell: {
+    yourProfile: 'Your profile', setupIncomplete: 'Setup incomplete', completeSetup: 'Complete setup',
+    familySpace: 'Family space', noMonitoring: 'No hidden monitoring, ever.', localMode: 'local mode',
+    familyNotSet: 'not set up', localPrivate: 'local and private', openMenu: 'Open menu', closeMenu: 'Close menu',
+    closeNavigation: 'Close navigation', mainNav: 'Main navigation', mobileNav: 'Mobile navigation', bottomNav: 'Bottom navigation',
+  },
+  dashboard: {
+    eyebrow: '01 / overview', greeting: 'Good to have you, {name}.', title: 'A clear place to care.',
+    description: 'This is your family’s shared safety space. It starts quiet, because only your real updates belong here.',
+    noProfileDescription: 'Set up your family profile to make this space yours. Until then, nothing is being collected or assumed.',
+    setupTitle: 'Your family space is not set up yet.', setupText: 'Start with your role and a name so this space belongs to you.', setupAction: 'Set up space',
+    sharedTruth: 'shared truth', noReport: 'Nothing to report', goodNews: 'is good news.',
+    emptyExplanation: 'When your family starts sharing, this is where the clear, agreed-upon updates will appear.',
+    status: 'space status', quietReady: 'Quiet and ready', profile: 'Your profile', profileDone: 'Set up on this device', profileNeeds: 'Needs your details',
+    approved: 'No approved conversations', noChildLocation: 'No child location shared',
+    onlyShows: 'Amparo only shows information someone has actively chosen to share with this family space.',
+    connectEyebrow: 'stay connected', connectTitle: 'Approved conversations', connectText: 'A place for messages that everyone can see are part of the family space.', connectAction: 'Open conversations',
+    locationEyebrow: 'when it matters', locationTitle: 'Location, with consent', locationText: 'Location is empty until a child chooses to share it. Permission is always visible.', locationAction: 'Review location',
+  },
+  conversations: {
+    eyebrow: '02 / conversations', title: 'Talk where trust lives.',
+    description: 'Only approved conversations belong here. The private family channel is clearly marked and never silently shared.',
+    privacy: 'How privacy works', approvedTab: 'Approved conversations', privateTab: 'Private family channel',
+    emptyEyebrow: 'nothing shared yet', emptyTitle: 'Your conversations are empty.',
+    emptyText: 'When a family member is approved and starts a conversation, it will appear here. Amparo does not create placeholder messages.',
+    learnPrivate: 'Learn about the private channel', privateTitle: 'Private family channel', privateBadge: 'private',
+    privateDescription: 'A direct space for a responsible adult and child. Messages here are visible only to those two people once both profiles join this family space.',
+    noParticipants: 'no participants yet', readyTitle: 'This channel is ready when your family is.',
+    readyWithProfile: 'Add another family profile on their own device to make this private channel available.',
+    readyWithoutProfile: 'Complete your profile first, then invite the people you trust.',
+    prepare: 'Prepare private channel', alert: 'Family profiles will be connected when the shared family service is available.',
+    privateFooter: 'Private means private: this channel will never be listed as an approved group conversation.',
+  },
+  location: {
+    eyebrow: '03 / location', title: 'Location, by agreement.',
+    description: 'A location is never inferred here. It appears only after a child chooses to share it and the device allows it.',
+    permission: 'Device permission', allowed: 'allowed', denied: 'not allowed', notRequested: 'not requested',
+    permissionText: 'Permission and family sharing are separate choices. Amparo asks the device only when you ask Amparo.',
+    waiting: 'Waiting for your choice…', granted: 'Permission granted', ask: 'Ask for permission',
+    locationUnavailable: 'Location permission is not available in this browser.', notGranted: 'Permission was not granted. No location was saved.',
+    share: 'Share my location', sharedChoice: 'Your family can see that you chose to share.', privateChoice: 'Your location stays private.',
+    map: 'family map', consent: 'consent required', noLocation: 'No location shared',
+    sharingOnEmpty: 'Sharing is on, but there is no location update yet.',
+    mapEmpty: 'This map stays intentionally empty until a child chooses to share a location.',
+    noTracking: 'No background tracking. No last-seen pin.',
+  },
+  settings: {
+    eyebrow: '04 / settings', title: 'Your space, your say.',
+    description: 'See and change the profile and device permissions that shape this Amparo space.',
+    profile: 'Family profile', stored: 'Stored on this device only', save: 'Save changes', saved: 'Saved on this device.',
+    notifications: 'Notifications', notificationsText: 'A local preference for future approved updates.',
+    device: 'This device', deviceText: 'Amparo is running in local mode. There is no account sync or background collection.',
+    browserData: 'Data stays in your browser', remove: 'Remove local profile', removeText: 'This clears your profile and local sharing choices from this device.',
+    removeButton: 'Remove profile', removeConfirm: 'Remove this local family profile from this device?',
+  },
+  notFound: { title: 'This page is not here.', text: 'The Amparo space you asked for does not exist.', back: 'Back to Amparo' },
+  metadata: { title: 'Amparo — a clear space for care', description: 'A transparent family safety space for responsible adults and children.' },
+} as const;
+
+type Language = 'pt-BR' | 'en';
+type Copy = typeof pt | typeof en;
+const copies = { 'pt-BR': pt, en };
+const LanguageContext = createContext<{ language: Language; setLanguage: (language: Language) => void; t: Copy }>({
+  language: 'pt-BR', setLanguage: () => undefined, t: pt,
+});
+
+function useLanguage() {
+  return useContext(LanguageContext);
+}
+
+function LanguageProvider({ children }: { children: ReactNode }) {
+  const [language, setLanguageState] = useState<Language>(() => localStorage.getItem(LANGUAGE_KEY) === 'en' ? 'en' : 'pt-BR');
+  const setLanguage = (next: Language) => {
+    setLanguageState(next);
+    localStorage.setItem(LANGUAGE_KEY, next);
+  };
+  useEffect(() => {
+    document.documentElement.lang = language === 'en' ? 'en' : 'pt-BR';
+    document.title = copies[language].metadata.title;
+    const description = document.querySelector('meta[name="description"]');
+    description?.setAttribute('content', copies[language].metadata.description);
+  }, [language]);
+  return <LanguageContext.Provider value={{ language, setLanguage, t: copies[language] }}>{children}</LanguageContext.Provider>;
+}
+
+function LanguageSwitcher() {
+  const { language, setLanguage, t } = useLanguage();
+  return (
+    <div className="flex items-center gap-1 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--card)/.7)] p-1" aria-label={t.language.switcher}>
+      <button type="button" onClick={() => setLanguage('pt-BR')} aria-label={t.language.brazil} aria-pressed={language === 'pt-BR'} data-testid="button-language-pt" className={`grid size-8 place-items-center rounded-full text-base transition-colors ${language === 'pt-BR' ? 'bg-[hsl(var(--primary))] grayscale-0' : 'grayscale opacity-60 hover:grayscale-0 hover:opacity-100'}`}>🇧🇷</button>
+      <button type="button" onClick={() => setLanguage('en')} aria-label={t.language.english} aria-pressed={language === 'en'} data-testid="button-language-en" className={`grid size-8 place-items-center rounded-full text-base transition-colors ${language === 'en' ? 'bg-[hsl(var(--primary))] grayscale-0' : 'grayscale opacity-60 hover:grayscale-0 hover:opacity-100'}`}>🇺🇸</button>
+    </div>
+  );
+}
 
 function readProfile(): Profile | null {
   try {
@@ -125,6 +312,7 @@ function IconBox({
 
 function Onboarding() {
   const [, setLocation] = useLocation();
+  const { t } = useLanguage();
   const existing = readProfile();
   const [role, setRole] = useState<Role | null>(existing?.role ?? null);
   const [displayName, setDisplayName] = useState(existing?.displayName ?? '');
@@ -134,7 +322,7 @@ function Onboarding() {
   function finish(event: FormEvent) {
     event.preventDefault();
     if (!role || !displayName.trim() || !familyName.trim()) {
-      setError('Choose a role and complete both fields to continue.');
+      setError(t.onboarding.error);
       return;
     }
     saveProfile({ role, displayName: displayName.trim(), familyName: familyName.trim() });
@@ -146,9 +334,12 @@ function Onboarding() {
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1440px] flex-col px-5 py-5 sm:px-8 sm:py-8 lg:px-14">
         <header className="flex items-center justify-between">
           <BrandMark />
+          <div className="flex items-center gap-4">
           <div className="hidden items-center gap-2 text-xs font-bold uppercase tracking-[.16em] text-[hsl(var(--muted-foreground))] sm:flex">
             <span className="size-2 rounded-full bg-[hsl(var(--accent))]" />
-            a family space, not a control room
+            {t.onboarding.aside}
+          </div>
+          <LanguageSwitcher />
           </div>
         </header>
 
@@ -156,48 +347,48 @@ function Onboarding() {
           <section className="animate-rise-in max-w-[680px]">
             <p className="mb-5 flex items-center gap-2 text-xs font-extrabold uppercase tracking-[.2em] text-[hsl(var(--primary))]">
               <span className="h-px w-8 bg-[hsl(var(--accent))]" />
-              private by default
+              {t.onboarding.overline}
             </p>
             <h1 className="font-display text-[clamp(3.5rem,8vw,7.5rem)] leading-[.86] tracking-[-.065em] text-[hsl(var(--foreground))]">
-              Safety works<br />
-              <em className="text-[hsl(var(--primary))]">better</em> in the open.
+              {t.onboarding.heroOne}<br />
+              <em className="text-[hsl(var(--primary))]">{t.onboarding.heroTwo}</em> {t.onboarding.heroThree}
             </h1>
             <p className="mt-8 max-w-[510px] text-lg leading-8 text-[hsl(var(--muted-foreground))]">
-              Amparo gives families a shared place to check in, talk, and share a location when everyone agrees. No hidden monitoring. No guessing what is real.
+              {t.onboarding.description}
             </p>
             <div className="mt-10 flex flex-wrap gap-5 text-sm font-semibold text-[hsl(var(--foreground))]">
-              <span className="flex items-center gap-2"><Check size={16} className="text-[hsl(var(--primary))]" /> Everyone can see what is shared</span>
-              <span className="flex items-center gap-2"><Check size={16} className="text-[hsl(var(--primary))]" /> Nothing starts without consent</span>
+              <span className="flex items-center gap-2"><Check size={16} className="text-[hsl(var(--primary))]" /> {t.onboarding.checkOne}</span>
+              <span className="flex items-center gap-2"><Check size={16} className="text-[hsl(var(--primary))]" /> {t.onboarding.checkTwo}</span>
             </div>
           </section>
 
           <section className="animate-rise-in rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card)/.8)] p-5 shadow-card backdrop-blur sm:p-8" style={{ animationDelay: '120ms' }}>
             <div className="mb-8">
-              <p className="font-mono-app text-[11px] font-medium uppercase tracking-[.17em] text-[hsl(var(--muted-foreground))]">01 / start here</p>
-              <h2 className="mt-3 font-display text-4xl tracking-[-.045em]">Who are you in this family?</h2>
-              <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">Your choice shapes what you see. You can change it later.</p>
+              <p className="font-mono-app text-[11px] font-medium uppercase tracking-[.17em] text-[hsl(var(--muted-foreground))]">{t.onboarding.step}</p>
+              <h2 className="mt-3 font-display text-4xl tracking-[-.045em]">{t.onboarding.question}</h2>
+              <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{t.onboarding.choiceDescription}</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <RoleChoice selected={role === 'responsible'} onClick={() => { setRole('responsible'); setError(''); }} icon={HeartHandshake} title="Responsible adult" text="I help keep the family connected." testId="button-role-responsible" />
-              <RoleChoice selected={role === 'child'} onClick={() => { setRole('child'); setError(''); }} icon={Baby} title="Child" text="I want a say in my safety space." testId="button-role-child" />
+              <RoleChoice selected={role === 'responsible'} onClick={() => { setRole('responsible'); setError(''); }} icon={HeartHandshake} title={t.onboarding.adult} text={t.onboarding.adultDescription} testId="button-role-responsible" />
+              <RoleChoice selected={role === 'child'} onClick={() => { setRole('child'); setError(''); }} icon={Baby} title={t.onboarding.child} text={t.onboarding.childDescription} testId="button-role-child" />
             </div>
             <form onSubmit={finish} className="mt-8 space-y-5">
-              <Field label="Your name" value={displayName} onChange={setDisplayName} placeholder="Type your name" testId="input-profile-name" />
-              <Field label="Family space name" value={familyName} onChange={setFamilyName} placeholder="Give your space a name" testId="input-family-name" />
+              <Field label={t.onboarding.yourName} value={displayName} onChange={setDisplayName} placeholder={t.onboarding.yourNamePlaceholder} testId="input-profile-name" />
+              <Field label={t.onboarding.familyName} value={familyName} onChange={setFamilyName} placeholder={t.onboarding.familyNamePlaceholder} testId="input-family-name" />
               <div className="flex items-start gap-3 border-t border-[hsl(var(--border))] pt-5 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
                 <LockKeyhole size={16} className="mt-0.5 shrink-0 text-[hsl(var(--primary))]" />
-                <span>This stays on this device for now. Amparo will never make up a person, message, or location.</span>
+                <span>{t.onboarding.localNote}</span>
               </div>
-              {error && <p className="text-sm font-semibold text-[hsl(var(--destructive))]" role="alert" data-testid="status-onboarding-error">{error}</p>}
+              {error && <p className="text-sm font-semibold text-[hsl(var(--destructive))]" role="alert" data-testid="status-onboarding-error">{t.onboarding.error}</p>}
               <Button type="submit" className="w-full" testId="button-create-family">
-                Create my family space <ArrowRight size={17} />
+                {t.onboarding.create} <ArrowRight size={17} />
               </Button>
             </form>
           </section>
         </div>
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[hsl(var(--border))] pt-5 text-xs text-[hsl(var(--muted-foreground))]">
-          <span>Amparo / a clear space for care</span>
-          <span className="flex items-center gap-2"><CircleHelp size={14} /> Need help? Ask your family to set this up together.</span>
+          <span>{t.onboarding.footer}</span>
+          <span className="flex items-center gap-2"><CircleHelp size={14} /> {t.onboarding.help}</span>
         </footer>
       </div>
     </main>
@@ -247,6 +438,7 @@ const navItems = [
 function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { t } = useLanguage();
   const profile = readProfile();
   return (
     <div className="texture min-h-[100dvh] bg-[hsl(var(--background))]">
@@ -256,41 +448,41 @@ function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3">
             <Avatar name={profile?.displayName} dark />
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold">{profile?.displayName || 'Your profile'}</p>
-              <p className="truncate text-xs text-[hsl(var(--sidebar-foreground)/.6)]">{profile?.familyName || 'Setup incomplete'}</p>
+              <p className="truncate text-sm font-bold">{profile?.displayName || t.shell.yourProfile}</p>
+              <p className="truncate text-xs text-[hsl(var(--sidebar-foreground)/.6)]">{profile?.familyName || t.shell.setupIncomplete}</p>
             </div>
           </div>
-          {!profile && <Link href="/" className="mt-3 flex items-center justify-between text-xs font-bold text-[hsl(var(--sidebar-primary))]" data-testid="link-complete-setup">Complete setup <ArrowRight size={13} /></Link>}
+          {!profile && <Link href="/" className="mt-3 flex items-center justify-between text-xs font-bold text-[hsl(var(--sidebar-primary))]" data-testid="link-complete-setup">{t.shell.completeSetup} <ArrowRight size={13} /></Link>}
         </div>
-        <nav className="mt-9 flex-1 space-y-1" aria-label="Main navigation">
-          <p className="mb-3 px-3 font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--sidebar-foreground)/.45)]">Family space</p>
+        <nav className="mt-9 flex-1 space-y-1" aria-label={t.shell.mainNav}>
+          <p className="mb-3 px-3 font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--sidebar-foreground)/.45)]">{t.shell.familySpace}</p>
           {navItems.map((item) => <NavItem key={item.href} item={item} active={location === item.href} onClick={() => setMenuOpen(false)} />)}
         </nav>
         <div className="border-t border-[hsl(var(--sidebar-border))] pt-5">
-          <p className="flex items-center gap-2 text-xs leading-5 text-[hsl(var(--sidebar-foreground)/.6)]"><EyeOff size={15} /> No hidden monitoring, ever.</p>
-          <p className="mt-4 font-mono-app text-[10px] uppercase tracking-[.16em] text-[hsl(var(--sidebar-foreground)/.35)]">Amparo v0.1 / local mode</p>
+          <p className="flex items-center gap-2 text-xs leading-5 text-[hsl(var(--sidebar-foreground)/.6)]"><EyeOff size={15} /> {t.shell.noMonitoring}</p>
+          <p className="mt-4 font-mono-app text-[10px] uppercase tracking-[.16em] text-[hsl(var(--sidebar-foreground)/.35)]">Amparo v0.1 / {t.shell.localMode}</p>
         </div>
       </aside>
 
-      {menuOpen && <button aria-label="Close navigation" data-testid="button-close-mobile-nav" className="fixed inset-0 z-40 bg-[hsl(var(--foreground)/.28)] lg:hidden" onClick={() => setMenuOpen(false)} />}
+      {menuOpen && <button aria-label={t.shell.closeNavigation} data-testid="button-close-mobile-nav" className="fixed inset-0 z-40 bg-[hsl(var(--foreground)/.28)] lg:hidden" onClick={() => setMenuOpen(false)} />}
       <aside className={`fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col bg-[hsl(var(--sidebar))] px-5 py-7 text-[hsl(var(--sidebar-foreground))] transition-transform duration-300 lg:hidden ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex items-center justify-between"><BrandMark compact /><button className="grid size-11 place-items-center rounded-full hover:bg-[hsl(var(--sidebar-accent))]" onClick={() => setMenuOpen(false)} aria-label="Close menu" data-testid="button-close-menu"><X size={20} /></button></div>
-        <nav className="mt-10 space-y-1" aria-label="Mobile navigation">
+        <div className="flex items-center justify-between"><BrandMark compact /><button className="grid size-11 place-items-center rounded-full hover:bg-[hsl(var(--sidebar-accent))]" onClick={() => setMenuOpen(false)} aria-label={t.shell.closeMenu} data-testid="button-close-menu"><X size={20} /></button></div>
+        <nav className="mt-10 space-y-1" aria-label={t.shell.mobileNav}>
           {navItems.map((item) => <NavItem key={item.href} item={item} active={location === item.href} onClick={() => setMenuOpen(false)} />)}
         </nav>
       </aside>
 
       <div className="lg:pl-[252px]">
         <header className="sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-[hsl(var(--border)/.75)] bg-[hsl(var(--background)/.86)] px-5 backdrop-blur-md sm:px-8 lg:px-12">
-          <button className="grid size-11 place-items-center rounded-full hover:bg-[hsl(var(--muted))] lg:hidden" onClick={() => setMenuOpen(true)} aria-label="Open menu" data-testid="button-open-menu"><Menu size={21} /></button>
+          <button className="grid size-11 place-items-center rounded-full hover:bg-[hsl(var(--muted))] lg:hidden" onClick={() => setMenuOpen(true)} aria-label={t.shell.openMenu} data-testid="button-open-menu"><Menu size={21} /></button>
           <div className="lg:hidden"><BrandMark /></div>
-          <div className="hidden lg:block"><p className="font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]">Family space / {profile?.familyName || 'not set up'}</p></div>
-          <div className="flex items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))]"><span className="size-2 rounded-full bg-[hsl(var(--primary))]" /> local and private</div>
+          <div className="hidden lg:block"><p className="font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]">{t.shell.familySpace} / {profile?.familyName || t.shell.familyNotSet}</p></div>
+          <div className="flex items-center gap-3"><LanguageSwitcher /><span className="hidden items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))] sm:flex"><span className="size-2 rounded-full bg-[hsl(var(--primary))]" /> {t.shell.localPrivate}</span></div>
         </header>
         <main className="mx-auto max-w-[1280px] px-5 pb-28 pt-9 sm:px-8 lg:px-12 lg:pb-12 lg:pt-12">{children}</main>
       </div>
 
-      <nav className="fixed inset-x-3 bottom-3 z-20 flex h-[70px] items-center justify-around rounded-[22px] border border-[hsl(var(--border))] bg-[hsl(var(--card)/.94)] px-1 shadow-[0_12px_40px_rgba(24,48,48,.12)] backdrop-blur lg:hidden" aria-label="Bottom navigation">
+      <nav className="fixed inset-x-3 bottom-3 z-20 flex h-[70px] items-center justify-around rounded-[22px] border border-[hsl(var(--border))] bg-[hsl(var(--card)/.94)] px-1 shadow-[0_12px_40px_rgba(24,48,48,.12)] backdrop-blur lg:hidden" aria-label={t.shell.bottomNav}>
         {navItems.map((item) => <NavItem key={item.href} item={item} active={location === item.href} mobile />)}
       </nav>
     </div>
@@ -299,10 +491,13 @@ function AppShell({ children }: { children: ReactNode }) {
 
 function NavItem({ item, active, onClick, mobile = false }: { item: typeof navItems[number]; active: boolean; onClick?: () => void; mobile?: boolean }) {
   const Icon = item.icon;
+  const { t } = useLanguage();
+  const labels = [t.nav.overview, t.nav.conversations, t.nav.location, t.nav.settings];
+  const label = labels[navItems.findIndex((nav) => nav.href === item.href)];
   return (
-    <Link href={item.href} onClick={onClick} data-testid={`link-nav-${item.label.toLowerCase()}`} className={`${mobile ? 'flex min-w-[64px] flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[10px]' : 'flex items-center gap-3 rounded-xl px-3 py-3 text-sm'} font-bold transition-colors ${active ? (mobile ? 'bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-primary))]') : (mobile ? 'text-[hsl(var(--muted-foreground))]' : 'text-[hsl(var(--sidebar-foreground)/.65)] hover:bg-[hsl(var(--sidebar-accent)/.7)] hover:text-[hsl(var(--sidebar-foreground))]')}`}>
+    <Link href={item.href} onClick={onClick} data-testid={`link-nav-${item.href.slice(1)}`} className={`${mobile ? 'flex min-w-[64px] flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[10px]' : 'flex items-center gap-3 rounded-xl px-3 py-3 text-sm'} font-bold transition-colors ${active ? (mobile ? 'bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-primary))]') : (mobile ? 'text-[hsl(var(--muted-foreground))]' : 'text-[hsl(var(--sidebar-foreground)/.65)] hover:bg-[hsl(var(--sidebar-accent)/.7)] hover:text-[hsl(var(--sidebar-foreground))]')}`}>
       <Icon size={mobile ? 19 : 18} strokeWidth={active ? 2.3 : 1.8} />
-      <span>{item.label}</span>
+      <span>{label}</span>
     </Link>
   );
 }
@@ -326,43 +521,45 @@ function PageIntro({ eyebrow, title, description, action }: { eyebrow: string; t
 }
 
 function SetupNotice() {
+  const { t } = useLanguage();
   const profile = readProfile();
   if (profile) return null;
   return (
     <div className="mb-7 flex flex-col gap-4 rounded-2xl border border-[hsl(var(--accent)/.5)] bg-[hsl(var(--accent)/.12)] p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3"><Info size={18} className="mt-0.5 shrink-0 text-[hsl(31_55%_32%)]" /><div><p className="text-sm font-extrabold">Your family space is not set up yet.</p><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Start with your role and a name so this space belongs to you.</p></div></div>
-      <Link href="/" data-testid="link-setup-notice" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full bg-[hsl(var(--primary))] px-4 text-xs font-bold text-[hsl(var(--primary-foreground))]">Set up space <ArrowRight size={14} /></Link>
+      <div className="flex items-start gap-3"><Info size={18} className="mt-0.5 shrink-0 text-[hsl(31_55%_32%)]" /><div><p className="text-sm font-extrabold">{t.dashboard.setupTitle}</p><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.dashboard.setupText}</p></div></div>
+      <Link href="/" data-testid="link-setup-notice" className="inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-full bg-[hsl(var(--primary))] px-4 text-xs font-bold text-[hsl(var(--primary-foreground))]">{t.dashboard.setupAction} <ArrowRight size={14} /></Link>
     </div>
   );
 }
 
 function Dashboard() {
+  const { t } = useLanguage();
   const profile = readProfile();
   return (
     <>
-      <PageIntro eyebrow="01 / overview" title={profile ? `Good to have you, ${profile.displayName}.` : 'A clear place to care.'} description={profile ? 'This is your family’s shared safety space. It starts quiet, because only your real updates belong here.' : 'Set up your family profile to make this space yours. Until then, nothing is being collected or assumed.'} />
+      <PageIntro eyebrow={t.dashboard.eyebrow} title={profile ? t.dashboard.greeting.replace('{name}', profile.displayName) : t.dashboard.title} description={profile ? t.dashboard.description : t.dashboard.noProfileDescription} />
       <SetupNotice />
       <section className="grid gap-5 lg:grid-cols-[1.25fr_.75fr]">
         <div className="relative min-h-[330px] overflow-hidden rounded-[26px] bg-[hsl(var(--primary))] p-7 text-[hsl(var(--primary-foreground))] sm:p-9">
           <div className="absolute -right-16 -top-16 size-64 rounded-full border border-[hsl(var(--accent)/.25)]" /><div className="absolute -right-5 top-[-5px] size-44 rounded-full border border-[hsl(var(--accent)/.2)]" />
           <div className="relative flex h-full flex-col justify-between">
-            <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.15em] text-[hsl(var(--primary-foreground)/.65)]"><span className="size-2 rounded-full bg-[hsl(var(--accent))]" /> shared truth</span><ShieldCheck size={24} className="text-[hsl(var(--accent))]" /></div>
-            <div className="mt-20 max-w-[480px]"><p className="font-display text-[clamp(2.5rem,5vw,4.2rem)] leading-[.92] tracking-[-.06em]">Nothing to report<br /><em className="text-[hsl(var(--accent))]">is good news.</em></p><p className="mt-5 max-w-[370px] text-sm leading-6 text-[hsl(var(--primary-foreground)/.7)]">When your family starts sharing, this is where the clear, agreed-upon updates will appear.</p></div>
+            <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.15em] text-[hsl(var(--primary-foreground)/.65)]"><span className="size-2 rounded-full bg-[hsl(var(--accent))]" /> {t.dashboard.sharedTruth}</span><ShieldCheck size={24} className="text-[hsl(var(--accent))]" /></div>
+            <div className="mt-20 max-w-[480px]"><p className="font-display text-[clamp(2.5rem,5vw,4.2rem)] leading-[.92] tracking-[-.06em]">{t.dashboard.noReport}<br /><em className="text-[hsl(var(--accent))]">{t.dashboard.goodNews}</em></p><p className="mt-5 max-w-[370px] text-sm leading-6 text-[hsl(var(--primary-foreground)/.7)]">{t.dashboard.emptyExplanation}</p></div>
           </div>
         </div>
         <div className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7">
-          <div className="flex items-center justify-between"><div><p className="font-mono-app text-[10px] uppercase tracking-[.16em] text-[hsl(var(--muted-foreground))]">space status</p><h2 className="mt-2 text-xl font-extrabold">Quiet and ready</h2></div><IconBox icon={WifiOff} tone="slate" /></div>
+          <div className="flex items-center justify-between"><div><p className="font-mono-app text-[10px] uppercase tracking-[.16em] text-[hsl(var(--muted-foreground))]">{t.dashboard.status}</p><h2 className="mt-2 text-xl font-extrabold">{t.dashboard.quietReady}</h2></div><IconBox icon={WifiOff} tone="slate" /></div>
           <div className="mt-7 space-y-0">
-            <StatusRow icon={UserRound} label="Your profile" value={profile ? 'Set up on this device' : 'Needs your details'} done={!!profile} />
-            <StatusRow icon={MessageCircle} label="Conversations" value="No approved conversations" />
-            <StatusRow icon={MapPin} label="Location sharing" value="No child location shared" />
+            <StatusRow icon={UserRound} label={t.dashboard.profile} value={profile ? t.dashboard.profileDone : t.dashboard.profileNeeds} done={!!profile} />
+            <StatusRow icon={MessageCircle} label={t.nav.conversations} value={t.dashboard.approved} />
+            <StatusRow icon={MapPin} label={t.nav.location} value={t.dashboard.noChildLocation} />
           </div>
-          <p className="mt-7 border-t border-[hsl(var(--border))] pt-5 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Amparo only shows information someone has actively chosen to share with this family space.</p>
+          <p className="mt-7 border-t border-[hsl(var(--border))] pt-5 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.dashboard.onlyShows}</p>
         </div>
       </section>
       <section className="mt-5 grid gap-5 md:grid-cols-2">
-        <ActionCard icon={MessageCircle} tone="gold" eyebrow="stay connected" title="Approved conversations" text="A place for messages that everyone can see are part of the family space." href="/conversations" action="Open conversations" />
-        <ActionCard icon={Navigation} tone="teal" eyebrow="when it matters" title="Location, with consent" text="Location is empty until a child chooses to share it. Permission is always visible." href="/location" action="Review location" />
+        <ActionCard icon={MessageCircle} tone="gold" eyebrow={t.dashboard.connectEyebrow} title={t.dashboard.connectTitle} text={t.dashboard.connectText} href="/conversations" action={t.dashboard.connectAction} />
+        <ActionCard icon={Navigation} tone="teal" eyebrow={t.dashboard.locationEyebrow} title={t.dashboard.locationTitle} text={t.dashboard.locationText} href="/location" action={t.dashboard.locationAction} />
       </section>
     </>
   );
@@ -378,21 +575,22 @@ function ActionCard({ icon, tone, eyebrow, title, text, href, action }: { icon: 
 
 function Conversations() {
   const [privateOpen, setPrivateOpen] = useState(false);
+  const { t } = useLanguage();
   const profile = readProfile();
   return (
     <>
-      <PageIntro eyebrow="02 / conversations" title="Talk where trust lives." description="Only approved conversations belong here. The private family channel is clearly marked and never silently shared." action={<Button variant="outline" onClick={() => setPrivateOpen(true)} testId="button-open-channel-info"><Info size={16} /> How privacy works</Button>} />
+      <PageIntro eyebrow={t.conversations.eyebrow} title={t.conversations.title} description={t.conversations.description} action={<Button variant="outline" onClick={() => setPrivateOpen(true)} testId="button-open-channel-info"><Info size={16} /> {t.conversations.privacy}</Button>} />
       <div className="mb-6 flex items-center gap-1 rounded-2xl bg-[hsl(var(--muted)/.65)] p-1 sm:w-fit">
-        <button onClick={() => setPrivateOpen(false)} data-testid="button-tab-approved" className={`min-h-10 rounded-xl px-4 text-xs font-extrabold transition-colors ${!privateOpen ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]'}`}>Approved conversations</button>
-        <button onClick={() => setPrivateOpen(true)} data-testid="button-tab-private" className={`min-h-10 rounded-xl px-4 text-xs font-extrabold transition-colors ${privateOpen ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]'}`}>Private family channel</button>
+        <button onClick={() => setPrivateOpen(false)} data-testid="button-tab-approved" className={`min-h-10 rounded-xl px-4 text-xs font-extrabold transition-colors ${!privateOpen ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]'}`}>{t.conversations.approvedTab}</button>
+        <button onClick={() => setPrivateOpen(true)} data-testid="button-tab-private" className={`min-h-10 rounded-xl px-4 text-xs font-extrabold transition-colors ${privateOpen ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]'}`}>{t.conversations.privateTab}</button>
       </div>
       {!privateOpen ? (
-        <EmptyState icon={MessageCircle} eyebrow="nothing shared yet" title="Your conversations are empty." text="When a family member is approved and starts a conversation, it will appear here. Amparo does not create placeholder messages." actionLabel="Learn about the private channel" onAction={() => setPrivateOpen(true)} testId="button-empty-private" />
+        <EmptyState icon={MessageCircle} eyebrow={t.conversations.emptyEyebrow} title={t.conversations.emptyTitle} text={t.conversations.emptyText} actionLabel={t.conversations.learnPrivate} onAction={() => setPrivateOpen(true)} testId="button-empty-private" />
       ) : (
         <section className="overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] shadow-card">
-          <div className="flex flex-col gap-4 border-b border-[hsl(var(--border))] p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8"><div className="flex items-start gap-4"><IconBox icon={LockKeyhole} tone="teal" /><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-extrabold">Private family channel</h2><span className="rounded-full bg-[hsl(var(--primary)/.1)] px-2.5 py-1 font-mono-app text-[10px] font-medium uppercase tracking-[.08em] text-[hsl(var(--primary))]">private</span></div><p className="mt-2 max-w-[590px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">A direct space for a responsible adult and child. Messages here are visible only to those two people once both profiles join this family space.</p></div></div><span className="flex items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))]"><EyeOff size={15} /> no participants yet</span></div>
-          <div className="flex min-h-[290px] flex-col items-center justify-center px-6 py-12 text-center"><div className="relative mb-5"><span className="absolute inset-[-9px] rounded-full border border-dashed border-[hsl(var(--accent)/.65)] animate-pulse-soft" /><span className="relative grid size-16 place-items-center rounded-full bg-[hsl(var(--accent)/.24)] text-[hsl(31_55%_32%)]"><UserPlus size={25} /></span></div><h3 className="font-display text-3xl tracking-[-.04em]">This channel is ready when your family is.</h3><p className="mt-3 max-w-[410px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{profile ? 'Add another family profile on their own device to make this private channel available.' : 'Complete your profile first, then invite the people you trust.'}</p><Button variant="soft" className="mt-6" onClick={() => window.alert('Family profiles will be connected when the shared family service is available.')} testId="button-prepare-channel">Prepare private channel <Plus size={16} /></Button></div>
-          <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-6 py-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" /> Private means private: this channel will never be listed as an approved group conversation.</div>
+          <div className="flex flex-col gap-4 border-b border-[hsl(var(--border))] p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8"><div className="flex items-start gap-4"><IconBox icon={LockKeyhole} tone="teal" /><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-extrabold">{t.conversations.privateTitle}</h2><span className="rounded-full bg-[hsl(var(--primary)/.1)] px-2.5 py-1 font-mono-app text-[10px] font-medium uppercase tracking-[.08em] text-[hsl(var(--primary))]">{t.conversations.privateBadge}</span></div><p className="mt-2 max-w-[590px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{t.conversations.privateDescription}</p></div></div><span className="flex items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))]"><EyeOff size={15} /> {t.conversations.noParticipants}</span></div>
+          <div className="flex min-h-[290px] flex-col items-center justify-center px-6 py-12 text-center"><div className="relative mb-5"><span className="absolute inset-[-9px] rounded-full border border-dashed border-[hsl(var(--accent)/.65)] animate-pulse-soft" /><span className="relative grid size-16 place-items-center rounded-full bg-[hsl(var(--accent)/.24)] text-[hsl(31_55%_32%)]"><UserPlus size={25} /></span></div><h3 className="font-display text-3xl tracking-[-.04em]">{t.conversations.readyTitle}</h3><p className="mt-3 max-w-[410px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{profile ? t.conversations.readyWithProfile : t.conversations.readyWithoutProfile}</p><Button variant="soft" className="mt-6" onClick={() => window.alert(t.conversations.alert)} testId="button-prepare-channel">{t.conversations.prepare} <Plus size={16} /></Button></div>
+          <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-6 py-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" /> {t.conversations.privateFooter}</div>
         </section>
       )}
     </>
@@ -404,6 +602,7 @@ function EmptyState({ icon: Icon, eyebrow, title, text, actionLabel, onAction, t
 }
 
 function LocationPage() {
+  const { t } = useLanguage();
   const profile = readProfile();
   const [permission, setPermission] = useState<'unknown' | 'asking' | 'granted' | 'denied'>('unknown');
   const [sharing, setSharing] = useState(() => localStorage.getItem('amparo-location-sharing') === 'true');
@@ -411,9 +610,9 @@ function LocationPage() {
 
   function requestPermission() {
     setError('');
-    if (!navigator.geolocation) { setPermission('denied'); setError('Location permission is not available in this browser.'); return; }
+    if (!navigator.geolocation) { setPermission('denied'); setError(t.location.locationUnavailable); return; }
     setPermission('asking');
-    navigator.geolocation.getCurrentPosition(() => setPermission('granted'), () => { setPermission('denied'); setError('Permission was not granted. No location was saved.'); }, { enableHighAccuracy: false, timeout: 8000 });
+    navigator.geolocation.getCurrentPosition(() => setPermission('granted'), () => { setPermission('denied'); setError(t.location.notGranted); }, { enableHighAccuracy: false, timeout: 8000 });
   }
   function toggleSharing() {
     const next = !sharing;
@@ -422,18 +621,18 @@ function LocationPage() {
   }
   return (
     <>
-      <PageIntro eyebrow="03 / location" title="Location, by agreement." description="A location is never inferred here. It appears only after a child chooses to share it and the device allows it." />
+      <PageIntro eyebrow={t.location.eyebrow} title={t.location.title} description={t.location.description} />
       <div className="grid gap-5 lg:grid-cols-[.82fr_1.18fr]">
         <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
-          <div className="flex items-start justify-between"><IconBox icon={MapPin} tone="gold" /><span className={`rounded-full px-3 py-1 font-mono-app text-[10px] uppercase tracking-[.08em] ${permission === 'granted' ? 'bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : permission === 'denied' ? 'bg-[hsl(var(--destructive)/.1)] text-[hsl(var(--destructive))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'}`}>{permission === 'granted' ? 'allowed' : permission === 'denied' ? 'not allowed' : 'not requested'}</span></div>
-          <h2 className="mt-8 font-display text-4xl tracking-[-.05em]">Device permission</h2><p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">Permission and family sharing are separate choices. Amparo asks the device only when you ask Amparo.</p>
-          <Button className="mt-7 w-full" onClick={requestPermission} disabled={permission === 'asking'} testId="button-request-location">{permission === 'asking' ? 'Waiting for your choice…' : permission === 'granted' ? 'Permission granted' : 'Ask for permission'} <Navigation size={16} /></Button>
+          <div className="flex items-start justify-between"><IconBox icon={MapPin} tone="gold" /><span className={`rounded-full px-3 py-1 font-mono-app text-[10px] uppercase tracking-[.08em] ${permission === 'granted' ? 'bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : permission === 'denied' ? 'bg-[hsl(var(--destructive)/.1)] text-[hsl(var(--destructive))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'}`}>{permission === 'granted' ? t.location.allowed : permission === 'denied' ? t.location.denied : t.location.notRequested}</span></div>
+          <h2 className="mt-8 font-display text-4xl tracking-[-.05em]">{t.location.permission}</h2><p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{t.location.permissionText}</p>
+          <Button className="mt-7 w-full" onClick={requestPermission} disabled={permission === 'asking'} testId="button-request-location">{permission === 'asking' ? t.location.waiting : permission === 'granted' ? t.location.granted : t.location.ask} <Navigation size={16} /></Button>
           {error && <p className="mt-3 text-xs font-semibold leading-5 text-[hsl(var(--destructive))]" role="alert" data-testid="status-location-error">{error}</p>}
-          {profile?.role === 'child' && <div className="mt-8 border-t border-[hsl(var(--border))] pt-6"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-extrabold">Share my location</p><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{sharing ? 'Your family can see that you chose to share.' : 'Your location stays private.'}</p></div><button role="switch" aria-checked={sharing} onClick={toggleSharing} data-testid="switch-location-sharing" className={`relative h-7 w-12 rounded-full transition-colors ${sharing ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${sharing ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></div>}
+          {profile?.role === 'child' && <div className="mt-8 border-t border-[hsl(var(--border))] pt-6"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-extrabold">{t.location.share}</p><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{sharing ? t.location.sharedChoice : t.location.privateChoice}</p></div><button role="switch" aria-checked={sharing} onClick={toggleSharing} data-testid="switch-location-sharing" className={`relative h-7 w-12 rounded-full transition-colors ${sharing ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${sharing ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></div>}
         </section>
         <section className="relative min-h-[430px] overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(191_25%_25%)] p-6 text-[hsl(var(--card))] sm:p-8">
           <div className="absolute inset-0 opacity-25" style={{ backgroundImage: 'linear-gradient(32deg, transparent 48%, hsl(38 77% 65% / .18) 49%, transparent 50%), linear-gradient(118deg, transparent 48%, hsl(42 32% 95% / .12) 49%, transparent 50%)', backgroundSize: '78px 78px' }} />
-          <div className="relative flex h-full flex-col justify-between"><div className="flex items-center justify-between"><span className="font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--accent))]">family map</span><span className="flex items-center gap-2 rounded-full border border-[hsl(var(--card)/.2)] px-3 py-1.5 text-[10px] font-bold text-[hsl(var(--card)/.65)]"><LockKeyhole size={12} /> consent required</span></div><div className="flex flex-1 flex-col items-center justify-center text-center"><span className="mb-6 grid size-20 place-items-center rounded-full border border-[hsl(var(--accent)/.45)] bg-[hsl(var(--accent)/.13)] text-[hsl(var(--accent))]"><MapPin size={31} strokeWidth={1.4} /></span><h2 className="font-display text-4xl tracking-[-.05em]">No location shared</h2><p className="mt-3 max-w-[330px] text-sm leading-6 text-[hsl(var(--card)/.65)]">{profile?.role === 'child' && sharing ? 'Sharing is on, but there is no location update yet.' : 'This map stays intentionally empty until a child chooses to share a location.'}</p></div><div className="flex items-center gap-2 border-t border-[hsl(var(--card)/.15)] pt-5 text-xs text-[hsl(var(--card)/.6)]"><EyeOff size={15} /> No background tracking. No last-seen pin.</div></div>
+          <div className="relative flex h-full flex-col justify-between"><div className="flex items-center justify-between"><span className="font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--accent))]">{t.location.map}</span><span className="flex items-center gap-2 rounded-full border border-[hsl(var(--card)/.2)] px-3 py-1.5 text-[10px] font-bold text-[hsl(var(--card)/.65)]"><LockKeyhole size={12} /> {t.location.consent}</span></div><div className="flex flex-1 flex-col items-center justify-center text-center"><span className="mb-6 grid size-20 place-items-center rounded-full border border-[hsl(var(--accent)/.45)] bg-[hsl(var(--accent)/.13)] text-[hsl(var(--accent))]"><MapPin size={31} strokeWidth={1.4} /></span><h2 className="font-display text-4xl tracking-[-.05em]">{t.location.noLocation}</h2><p className="mt-3 max-w-[330px] text-sm leading-6 text-[hsl(var(--card)/.65)]">{profile?.role === 'child' && sharing ? t.location.sharingOnEmpty : t.location.mapEmpty}</p></div><div className="flex items-center gap-2 border-t border-[hsl(var(--card)/.15)] pt-5 text-xs text-[hsl(var(--card)/.6)]"><EyeOff size={15} /> {t.location.noTracking}</div></div>
         </section>
       </div>
     </>
@@ -441,6 +640,7 @@ function LocationPage() {
 }
 
 function SettingsPage() {
+  const { t } = useLanguage();
   const profile = readProfile();
   const [name, setName] = useState(profile?.displayName ?? '');
   const [family, setFamily] = useState(profile?.familyName ?? '');
@@ -456,7 +656,7 @@ function SettingsPage() {
     window.setTimeout(() => setSaved(false), 2200);
   }
   function deleteProfile() {
-    if (window.confirm('Remove this local family profile from this device?')) {
+    if (window.confirm(t.settings.removeConfirm)) {
       localStorage.removeItem(PROFILE_KEY);
       localStorage.removeItem('amparo-location-sharing');
       setLocation('/');
@@ -464,17 +664,17 @@ function SettingsPage() {
   }
   return (
     <>
-      <PageIntro eyebrow="04 / settings" title="Your space, your say." description="See and change the profile and device permissions that shape this Amparo space." />
+      <PageIntro eyebrow={t.settings.eyebrow} title={t.settings.title} description={t.settings.description} />
       <div className="grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
         <form onSubmit={saveSettings} className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
-          <div className="flex items-center gap-4 border-b border-[hsl(var(--border))] pb-6"><Avatar name={name} /><div><h2 className="text-lg font-extrabold">Family profile</h2><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Stored on this device only</p></div></div>
-          <div className="mt-7 space-y-5"><Field label="Your name" value={name} onChange={setName} placeholder="Type your name" testId="input-settings-name" /><Field label="Family space name" value={family} onChange={setFamily} placeholder="Give your space a name" testId="input-settings-family" /></div>
-          <div className="mt-7 flex flex-wrap items-center gap-4"><Button type="submit" testId="button-save-settings">Save changes <Check size={16} /></Button>{saved && <span className="text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-settings-saved">Saved on this device.</span>}</div>
+          <div className="flex items-center gap-4 border-b border-[hsl(var(--border))] pb-6"><Avatar name={name} /><div><h2 className="text-lg font-extrabold">{t.settings.profile}</h2><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{t.settings.stored}</p></div></div>
+          <div className="mt-7 space-y-5"><Field label={t.onboarding.yourName} value={name} onChange={setName} placeholder={t.onboarding.yourNamePlaceholder} testId="input-settings-name" /><Field label={t.onboarding.familyName} value={family} onChange={setFamily} placeholder={t.onboarding.familyNamePlaceholder} testId="input-settings-family" /></div>
+          <div className="mt-7 flex flex-wrap items-center gap-4"><Button type="submit" testId="button-save-settings">{t.settings.save} <Check size={16} /></Button>{saved && <span className="text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-settings-saved">{t.settings.saved}</span>}</div>
         </form>
         <div className="space-y-5">
-          <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Bell} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">Notifications</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">A local preference for future approved updates.</p></div><button role="switch" aria-checked={notifications} onClick={() => { const next = !notifications; setNotifications(next); localStorage.setItem('amparo-notifications', String(next)); }} data-testid="switch-notifications" className={`relative h-7 w-12 rounded-full transition-colors ${notifications ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${notifications ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></section>
-          <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Smartphone} tone="teal" /><div><h2 className="text-lg font-extrabold">This device</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Amparo is running in local mode. There is no account sync or background collection.</p></div></div><div className="mt-5 flex items-center gap-2 border-t border-[hsl(var(--border))] pt-4 text-xs font-bold text-[hsl(var(--primary))]"><Check size={14} /> Data stays in your browser</div></section>
-          <section className="rounded-[26px] border border-[hsl(var(--destructive)/.2)] bg-[hsl(var(--destructive)/.04)] p-6 sm:p-7"><h2 className="text-sm font-extrabold text-[hsl(var(--destructive))]">Remove local profile</h2><p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">This clears your profile and local sharing choices from this device.</p><button type="button" onClick={deleteProfile} data-testid="button-delete-profile" className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full border border-[hsl(var(--destructive)/.3)] px-4 text-xs font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)]">Remove profile <X size={14} /></button></section>
+          <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Bell} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.notifications}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.notificationsText}</p></div><button role="switch" aria-checked={notifications} onClick={() => { const next = !notifications; setNotifications(next); localStorage.setItem('amparo-notifications', String(next)); }} data-testid="switch-notifications" className={`relative h-7 w-12 rounded-full transition-colors ${notifications ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${notifications ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></section>
+          <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Smartphone} tone="teal" /><div><h2 className="text-lg font-extrabold">{t.settings.device}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.deviceText}</p></div></div><div className="mt-5 flex items-center gap-2 border-t border-[hsl(var(--border))] pt-4 text-xs font-bold text-[hsl(var(--primary))]"><Check size={14} /> {t.settings.browserData}</div></section>
+          <section className="rounded-[26px] border border-[hsl(var(--destructive)/.2)] bg-[hsl(var(--destructive)/.04)] p-6 sm:p-7"><h2 className="text-sm font-extrabold text-[hsl(var(--destructive))]">{t.settings.remove}</h2><p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.removeText}</p><button type="button" onClick={deleteProfile} data-testid="button-delete-profile" className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full border border-[hsl(var(--destructive)/.3)] px-4 text-xs font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)]">{t.settings.removeButton} <X size={14} /></button></section>
         </div>
       </div>
     </>
@@ -491,14 +691,17 @@ function LocationRoute() { return <AppShell><LocationPage /></AppShell>; }
 function SettingsRoute() { return <AppShell><SettingsPage /></AppShell>; }
 
 function NotFound() {
-  return <main className="grid min-h-[100dvh] place-items-center bg-[hsl(var(--background))] p-6"><div className="max-w-md text-center"><span className="mx-auto grid size-16 place-items-center rounded-2xl bg-[hsl(var(--muted))] text-[hsl(var(--primary))]"><RefreshCw size={26} /></span><h1 className="mt-6 font-display text-5xl tracking-[-.05em]">This page is not here.</h1><p className="mt-3 text-sm text-[hsl(var(--muted-foreground))]">The Amparo space you asked for does not exist.</p><Link href="/" data-testid="link-not-found-home" className="mt-7 inline-flex min-h-11 items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-5 text-sm font-bold text-[hsl(var(--primary-foreground))]">Back to Amparo <ArrowRight size={16} /></Link></div></main>;
+  const { t } = useLanguage();
+  return <main className="grid min-h-[100dvh] place-items-center bg-[hsl(var(--background))] p-6"><div className="max-w-md text-center"><span className="mx-auto grid size-16 place-items-center rounded-2xl bg-[hsl(var(--muted))] text-[hsl(var(--primary))]"><RefreshCw size={26} /></span><h1 className="mt-6 font-display text-5xl tracking-[-.05em]">{t.notFound.title}</h1><p className="mt-3 text-sm text-[hsl(var(--muted-foreground))]">{t.notFound.text}</p><Link href="/" data-testid="link-not-found-home" className="mt-7 inline-flex min-h-11 items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-5 text-sm font-bold text-[hsl(var(--primary-foreground))]">{t.notFound.back} <ArrowRight size={16} /></Link></div></main>;
 }
 
 function App() {
   useEffect(() => {
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?v=2`, { updateViaCache: 'none' }).catch(() => undefined);
+    }
   }, []);
-  return <QueryClientProvider client={queryClient}><TooltipProvider><SwitchRouter /><Toaster /></TooltipProvider></QueryClientProvider>;
+  return <QueryClientProvider client={queryClient}><TooltipProvider><LanguageProvider><SwitchRouter /><Toaster /></LanguageProvider></TooltipProvider></QueryClientProvider>;
 }
 
 function SwitchRouter() {
