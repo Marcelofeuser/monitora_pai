@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Controle Parental",
-    "slug": "controle-parental",
+    "name": "Controla Pai",
+    "slug": "controlapai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "controle-parental",
+    "scheme": "controlapai",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -14,9 +14,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.controlapai.app"
     },
-    "android": {},
+    "android": {
+      "package": "com.controlapai.app"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
