@@ -1,0 +1,108 @@
+# Prompt: App de Controle Parental (Pai ↔ Criança)
+
+## Objetivo
+Construir um app mobile (ou PWA) com dois papéis de usuário — **Responsável** e **Criança** — onde toda comunicação da criança com terceiros é monitorada e espelhada em tempo real para o Responsável, exceto a conversa direta entre Responsável e Criança dentro do próprio app.
+
+---
+
+## 1. Papéis de usuário
+
+### Responsável (Pai/Mãe)
+- Cria a conta principal e vincula 1+ contas de Criança.
+- Aprova ou nega qualquer contato novo antes que a Criança consiga conversar com ele.
+- Vê espelhamento completo de todas as conversas da Criança (texto, áudio, vídeo, fotos).
+- Define regras de tempo de uso (limites diários, horários bloqueados, pausas).
+- Recebe localização em tempo real e histórico de rotas da Criança.
+- Tem um chat privado com a Criança que **não é espelhado nem auditado**.
+
+### Criança
+- Só pode iniciar ou receber conversa com contatos aprovados pelo Responsável.
+- Não pode adicionar, aceitar ou remover contatos sem aprovação prévia.
+- Usa chat (texto/áudio/vídeo/fotos) normalmente com contatos liberados.
+- Tem acesso ao chat privado com o Responsável (não espelhado).
+- Vê (opcional, configurável) o tempo de uso restante do dia.
+
+---
+
+## 2. Regra de negócio crítica: espelhamento seletivo
+
+- **Toda mensagem, chamada, foto, vídeo ou áudio trocado entre a Criança e qualquer contato aprovado** deve ser copiada (espelhada) em tempo real para uma visão exclusiva do Responsável.
+- **A conversa entre Responsável e Criança é a única exceção**: não é espelhada, não é auditada, não aparece em nenhum painel de monitoramento — é tratada como canal privado entre os dois.
+- O espelhamento deve incluir metadados (timestamp, remetente, tipo de mídia) e o conteúdo em si, armazenado de forma segura e vinculado ao par (Criança → Contato).
+
+---
+
+## 3. Fluxo de aprovação de contato
+
+1. Criança tenta adicionar/aceitar um contato → pedido vai para fila de aprovação do Responsável (push notification).
+2. Responsável vê perfil do solicitante (nome, foto, telefone/ID) e decide: **Aprovar** / **Negar** / **Aprovar com restrições** (ex: só texto, sem chamada de vídeo).
+3. Só após aprovação o canal de comunicação Criança↔Contato é liberado e passa a ser espelhado automaticamente.
+4. Responsável pode revogar acesso a qualquer momento, encerrando o canal.
+
+---
+
+## 4. Funcionalidades principais
+
+| Módulo | Descrição |
+|---|---|
+| Chat texto | 1:1 e possivelmente grupos aprovados; espelhado |
+| Áudio | Chamadas de voz e áudios gravados; espelhado (gravação ou log de metadados + replay) |
+| Vídeo | Chamadas de vídeo; espelhado (gravação do stream ou snapshot periódico, decidir por custo) |
+| Fotos | Envio/recebimento de imagens; espelhado com armazenamento da mídia original |
+| Localização | GPS em tempo real + histórico de trajeto + geofencing (alertas de entrada/saída de áreas) |
+| Controle de tempo | Limite diário de uso por app/geral, agenda de bloqueio (ex: horário escolar, dormir), botão de pausa remota pelo Responsável |
+| Gestão de contatos | Lista de contatos aprovados, pendentes, negados; ação de aprovar/revogar |
+| Chat privado Pai↔Filho | Canal não espelhado, não auditado |
+| Painel do Responsável | Dashboard com atividade recente, alertas, uso de tempo, localização, conversas espelhadas por contato |
+
+---
+
+## 5. Modelo de dados (sugestão)
+
+```
+users (id, role[parent|child], name, phone, parent_id[nullable])
+contacts (id, child_id, contact_user_id, status[pending|approved|denied|revoked], restrictions jsonb)
+conversations (id, participant_a_id, participant_b_id, is_mirrored boolean, is_parent_child_private boolean)
+messages (id, conversation_id, sender_id, type[text|audio|video|photo], content_url, text_content, created_at)
+mirror_log (id, message_id, mirrored_to_parent_id, mirrored_at)
+locations (id, child_id, lat, lng, captured_at)
+geofences (id, child_id, name, polygon/radius, alert_on[enter|exit])
+usage_limits (id, child_id, daily_minutes, blocked_windows jsonb)
+usage_sessions (id, child_id, app_context, started_at, ended_at)
+```
+
+Regra de gravação: ao inserir em `messages`, se `conversation.is_parent_child_private = false`, disparar trigger/job que replica o registro para a visão do Responsável (`mirror_log` ou índice direto por `parent_id`).
+
+---
+
+## 6. Requisitos técnicos sugeridos
+
+- **Frontend**: React Native (Expo) para mobile nativo (necessário para GPS em background, notificações push e controle de uso real); alternativa PWA é limitada para localização em background e chamadas de vídeo nativas.
+- **Backend**: Supabase (Postgres + Realtime + Storage) — Realtime resolve o espelhamento ao vivo via subscriptions nas tabelas `messages`/`locations`.
+- **Mídia**: Supabase Storage ou S3-compatible para fotos/áudios/vídeos.
+- **Chamadas de voz/vídeo**: WebRTC via provedor (Agora, Twilio Video, ou Daily.co) com gravação server-side habilitada para conversas espelhadas.
+- **Localização em background**: exige app nativo — usar `expo-location` com background tracking + permissões explícitas.
+- **Push notifications**: Expo Notifications ou Firebase Cloud Messaging (aprovação de contato, alertas de geofence, fim de tempo de uso).
+- **Autenticação**: vínculo Responsável↔Criança via convite (código/QR) na criação da conta da Criança.
+
+---
+
+## 7. Considerações legais/privacidade (não pular)
+
+- Definir idade mínima da Criança e adequação ao ECA (Brasil) e à LGPD — dados de menores exigem consentimento do responsável legal, que já é o próprio usuário Responsável aqui.
+- Deixar explícito nos termos de uso que a conta da Criança é monitorada (transparência, mesmo que a Criança não possa desativar).
+- Retenção de dados: definir por quanto tempo mídias espelhadas ficam armazenadas.
+- Criptografia em trânsito (TLS) obrigatória; considerar criptografia em repouso para mídias sensíveis.
+
+---
+
+## 8. MVP sugerido (ordem de construção)
+
+1. Auth + vínculo Responsável↔Criança
+2. Gestão de contatos (fluxo de aprovação)
+3. Chat texto com espelhamento em tempo real
+4. Chat privado Pai↔Filho (não espelhado)
+5. Envio de fotos com espelhamento
+6. Localização + geofencing
+7. Controle de tempo de uso
+8. Áudio/vídeo (chamadas) com espelhamento — módulo mais caro/complexo, deixar por último
