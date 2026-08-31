@@ -1,0 +1,1 @@
+- [PWA service worker cache](pwa-service-worker-cache.md) — version the worker URL and cache when updating the app shell, or previews can keep serving stale UI.
