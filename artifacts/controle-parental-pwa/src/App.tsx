@@ -1233,10 +1233,14 @@ function RequireSignedIn({ children }: { children: ReactNode }) {
 }
 
 function PairingRoute() { return <RequireSignedIn><AppShell><PairingGenerate /></AppShell></RequireSignedIn>; }
-function DashboardRoute() { return <AppShell><Dashboard /></AppShell>; }
-function ConversationsRoute() { return <AppShell><Conversations /></AppShell>; }
-function LocationRoute() { return <AppShell><LocationPage /></AppShell>; }
-function SettingsRoute() { return <AppShell><SettingsPage /></AppShell>; }
+// Dashboard, Conversas, Localização e Configurações também dependem do
+// Responsável autenticado (chamam a API com o token do Clerk) — sem esse
+// guard, uma sessão expirada nessas telas caía no mesmo erro genérico que
+// o /pair tinha antes, em vez de mandar pro login.
+function DashboardRoute() { return <RequireSignedIn><AppShell><Dashboard /></AppShell></RequireSignedIn>; }
+function ConversationsRoute() { return <RequireSignedIn><AppShell><Conversations /></AppShell></RequireSignedIn>; }
+function LocationRoute() { return <RequireSignedIn><AppShell><LocationPage /></AppShell></RequireSignedIn>; }
+function SettingsRoute() { return <RequireSignedIn><AppShell><SettingsPage /></AppShell></RequireSignedIn>; }
 
 function NotFound() {
   const { t } = useLanguage();
@@ -1270,7 +1274,7 @@ function ClerkApp() {
 function App() {
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?v=2`, { updateViaCache: 'none' }).catch(() => undefined);
+      navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?v=3`, { updateViaCache: 'none' }).catch(() => undefined);
     }
   }, []);
   if (!clerkPubKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY');
