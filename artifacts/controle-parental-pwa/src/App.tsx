@@ -27,6 +27,10 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
+import { ClerkProvider, SignIn, SignUp, useClerk, useAuth } from '@clerk/react';
+import { publishableKeyFromHost } from '@clerk/react/internal';
+import { shadcn } from '@clerk/themes';
+import '@clerk/themes/shadcn.css';
 import { Link, Route, Switch, useLocation } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -42,6 +46,10 @@ const queryClient = new QueryClient();
 const PROFILE_KEY = 'amparo-profile';
 const CONTACTS_KEY = 'amparo-contacts';
 const LANGUAGE_KEY = 'amparo-language';
+const TOUR_KEY_PREFIX = 'amparo-onboarding-completed';
+const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
+const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 const pt = {
   language: { brazil: 'Português do Brasil', english: 'English', switcher: 'Idioma' },
@@ -57,6 +65,10 @@ const pt = {
     localNote: 'Por enquanto, isso fica neste dispositivo. O Amparo nunca inventa uma pessoa, mensagem ou localização.',
     error: 'Escolha um papel e preencha os dois campos para continuar.', create: 'Criar meu espaço de família',
     footer: 'Amparo / um espaço claro para cuidar', help: 'Precisa de ajuda? Peça para sua família configurar junto.',
+  },
+  auth: {
+    title: 'Conta do Responsável', description: 'Entre para manter seu espaço seguro entre dispositivos. Crianças entram apenas pelo pareamento da família.',
+    signIn: 'Entrar', signUp: 'Criar conta', signedIn: 'Conta conectada', signedOut: 'Ainda sem uma conta?', signOut: 'Sair',
   },
   nav: { overview: 'Visão geral', conversations: 'Conversas', location: 'Localização', settings: 'Configurações' },
   shell: {
@@ -97,6 +109,22 @@ const pt = {
     statusLabel: 'status', identifierMissing: 'sem identificador adicional',
     approveAlert: 'A aprovação foi salva somente neste dispositivo.', denyAlert: 'A decisão foi salva somente neste dispositivo.', revokeAlert: 'O contato foi revogado neste dispositivo.',
   },
+  tutorial: {
+    skip: 'Pular tutorial', back: 'Voltar', next: 'Próximo', finish: 'Ir para o painel', stepOf: 'passo {current} de {total}',
+    parent: [
+      { title: 'Bem-vindo ao Amparo', text: 'Este é um espaço claro para cuidar, conversar e compartilhar somente o que sua família escolher.', target: 'dashboard' },
+      { title: 'Perfil da criança', text: 'Confira o perfil da criança e mantenha os dados reais da família neste espaço.', target: 'child-profile' },
+      { title: 'Atividade compartilhada', text: 'Conversas aprovadas e localização aparecem no painel quando forem compartilhadas de verdade.', target: 'activity' },
+      { title: 'Aprove contatos', text: 'Antes de conversar, revise cada pedido e escolha entre aprovar, limitar a texto, negar ou revogar.', target: 'approved-contacts' },
+      { title: 'Chat privado', text: 'A conversa entre Responsável e Criança fica separada e nunca é espelhada.', target: 'private-channel' },
+    ],
+    child: [
+      { title: 'Seu espaço de segurança', text: 'Aqui você participa das escolhas e sempre sabe o que está sendo compartilhado.', target: 'dashboard' },
+      { title: 'Contatos aprovados', text: 'Peça um contato usando uma referência que sua família reconheça. Só será possível conversar depois da aprovação.', target: 'approved-contacts' },
+      { title: 'Chat privado', text: 'O canal com o Responsável é privado e não aparece no monitoramento de conversas aprovadas.', target: 'private-channel' },
+      { title: 'Localização com escolha', text: 'Você decide quando compartilhar sua localização e vê claramente quando a permissão está ativa.', target: 'activity' },
+    ],
+  },
   conversations: {
     eyebrow: '02 / conversas', title: 'Converse onde mora a confiança.',
     description: 'Somente conversas aprovadas ficam aqui. O canal privado da família é identificado com clareza e nunca é compartilhado em silêncio.',
@@ -131,7 +159,7 @@ const pt = {
     notifications: 'Notificações', notificationsText: 'Uma preferência local para futuras atualizações aprovadas.',
     device: 'Este dispositivo', deviceText: 'O Amparo está rodando em modo local. Não há sincronização de conta nem coleta em segundo plano.',
     browserData: 'Os dados ficam no seu navegador', remove: 'Remover perfil local', removeText: 'Isso limpa seu perfil e as escolhas locais de compartilhamento deste dispositivo.',
-    removeButton: 'Remover perfil', removeConfirm: 'Remover este perfil local de família deste dispositivo?',
+    removeButton: 'Remover perfil', removeConfirm: 'Remover este perfil local de família deste dispositivo?', tutorialTitle: 'Tutorial guiado', tutorialText: 'Revise os passos principais do Amparo sempre que quiser.', tutorialAction: 'Ver tutorial novamente',
   },
   notFound: { title: 'Esta página não está aqui.', text: 'O espaço do Amparo que você pediu não existe.', back: 'Voltar ao Amparo' },
   metadata: { title: 'Amparo — um espaço claro para cuidar', description: 'Um espaço transparente de segurança familiar para adultos responsáveis e crianças.' },
@@ -151,6 +179,10 @@ const en = {
     localNote: 'This stays on this device for now. Amparo will never make up a person, message, or location.',
     error: 'Choose a role and complete both fields to continue.', create: 'Create my family space',
     footer: 'Amparo / a clear space for care', help: 'Need help? Ask your family to set this up together.',
+  },
+  auth: {
+    title: 'Responsible adult account', description: 'Sign in to keep your family space safe across devices. Children join only through family pairing.',
+    signIn: 'Sign in', signUp: 'Create account', signedIn: 'Account connected', signedOut: 'No account yet?', signOut: 'Sign out',
   },
   nav: { overview: 'Overview', conversations: 'Conversations', location: 'Location', settings: 'Settings' },
   shell: {
@@ -191,6 +223,22 @@ const en = {
     statusLabel: 'status', identifierMissing: 'no additional identifier',
     approveAlert: 'Approval was saved on this device only.', denyAlert: 'The decision was saved on this device only.', revokeAlert: 'The contact was revoked on this device.',
   },
+  tutorial: {
+    skip: 'Skip tutorial', back: 'Back', next: 'Next', finish: 'Go to dashboard', stepOf: 'step {current} of {total}',
+    parent: [
+      { title: 'Welcome to Amparo', text: 'This is a clear place to care, talk, and share only what your family chooses.', target: 'dashboard' },
+      { title: 'Child profile', text: 'Review the child profile and keep real family details in this space.', target: 'child-profile' },
+      { title: 'Shared activity', text: 'Approved conversations and location appear on the dashboard when they are truly shared.', target: 'activity' },
+      { title: 'Approve contacts', text: 'Before anyone talks, review each request and choose approve, text-only, deny, or revoke.', target: 'approved-contacts' },
+      { title: 'Private chat', text: 'The conversation between the responsible adult and child stays separate and is never mirrored.', target: 'private-channel' },
+    ],
+    child: [
+      { title: 'Your safety space', text: 'You take part in the choices here and always know what is being shared.', target: 'dashboard' },
+      { title: 'Approved contacts', text: 'Request a contact using a reference your family recognizes. You can talk only after approval.', target: 'approved-contacts' },
+      { title: 'Private chat', text: 'The channel with the responsible adult is private and does not appear in approved conversation monitoring.', target: 'private-channel' },
+      { title: 'Location by choice', text: 'You decide when to share your location and can clearly see when permission is active.', target: 'activity' },
+    ],
+  },
   conversations: {
     eyebrow: '02 / conversations', title: 'Talk where trust lives.',
     description: 'Only approved conversations belong here. The private family channel is clearly marked and never silently shared.',
@@ -225,7 +273,7 @@ const en = {
     notifications: 'Notifications', notificationsText: 'A local preference for future approved updates.',
     device: 'This device', deviceText: 'Amparo is running in local mode. There is no account sync or background collection.',
     browserData: 'Data stays in your browser', remove: 'Remove local profile', removeText: 'This clears your profile and local sharing choices from this device.',
-    removeButton: 'Remove profile', removeConfirm: 'Remove this local family profile from this device?',
+    removeButton: 'Remove profile', removeConfirm: 'Remove this local family profile from this device?', tutorialTitle: 'Guided tutorial', tutorialText: 'Review the main Amparo steps whenever you want.', tutorialAction: 'View tutorial again',
   },
   notFound: { title: 'This page is not here.', text: 'The Amparo space you asked for does not exist.', back: 'Back to Amparo' },
   metadata: { title: 'Amparo — a clear space for care', description: 'A transparent family safety space for responsible adults and children.' },
@@ -427,6 +475,7 @@ function Onboarding() {
               <RoleChoice selected={role === 'responsible'} onClick={() => { setRole('responsible'); setError(''); }} icon={HeartHandshake} title={t.onboarding.adult} text={t.onboarding.adultDescription} testId="button-role-responsible" />
               <RoleChoice selected={role === 'child'} onClick={() => { setRole('child'); setError(''); }} icon={Baby} title={t.onboarding.child} text={t.onboarding.childDescription} testId="button-role-child" />
             </div>
+            {role === 'responsible' && <AuthPrompt />}
             <form onSubmit={finish} className="mt-8 space-y-5">
               <Field label={t.onboarding.yourName} value={displayName} onChange={setDisplayName} placeholder={t.onboarding.yourNamePlaceholder} testId="input-profile-name" />
               <Field label={t.onboarding.familyName} value={familyName} onChange={setFamilyName} placeholder={t.onboarding.familyNamePlaceholder} testId="input-family-name" />
@@ -465,6 +514,31 @@ function RoleChoice({ selected, onClick, icon: Icon, title, text, testId }: { se
       <span className="block text-sm font-extrabold">{title}</span>
       <span className="mt-1 block text-xs leading-5 text-[hsl(var(--muted-foreground))]">{text}</span>
     </button>
+  );
+}
+
+function AuthPrompt() {
+  const { t } = useLanguage();
+  const { isLoaded, isSignedIn } = useAuth();
+  const { signOut } = useClerk();
+  if (!isLoaded) return null;
+  return (
+    <div className="mt-5 rounded-2xl border border-[hsl(var(--primary)/.2)] bg-[hsl(var(--primary)/.06)] p-4" data-testid="auth-prompt">
+      <p className="text-sm font-extrabold">{t.auth.title}</p>
+      <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.auth.description}</p>
+      {isSignedIn ? (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <span className="text-xs font-bold text-[hsl(var(--primary))]"><Check size={14} className="mr-1 inline-block align-[-2px]" /> {t.auth.signedIn}</span>
+          <button type="button" onClick={() => void signOut()} className="text-xs font-bold text-[hsl(var(--muted-foreground))] underline underline-offset-4" data-testid="button-auth-sign-out">{t.auth.signOut}</button>
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <span className="text-xs font-bold text-[hsl(var(--muted-foreground))]">{t.auth.signedOut}</span>
+          <Link href="/sign-in" className="rounded-full bg-[hsl(var(--primary))] px-4 py-2 text-xs font-bold text-[hsl(var(--primary-foreground))]" data-testid="link-auth-sign-in">{t.auth.signIn}</Link>
+          <Link href="/sign-up" className="rounded-full border border-[hsl(var(--border))] px-4 py-2 text-xs font-bold" data-testid="link-auth-sign-up">{t.auth.signUp}</Link>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -540,6 +614,71 @@ function AppShell({ children }: { children: ReactNode }) {
       <nav className="fixed inset-x-3 bottom-3 z-20 flex h-[70px] items-center justify-around rounded-[22px] border border-[hsl(var(--border))] bg-[hsl(var(--card)/.94)] px-1 shadow-[0_12px_40px_rgba(24,48,48,.12)] backdrop-blur lg:hidden" aria-label={t.shell.bottomNav}>
         {navItems.map((item) => <NavItem key={item.href} item={item} active={location === item.href} mobile />)}
       </nav>
+      <GuidedTour profile={profile} />
+    </div>
+  );
+}
+
+type TourStep = { title: string; text: string; target: string };
+
+function GuidedTour({ profile }: { profile: Profile | null }) {
+  const { t } = useLanguage();
+  const [stepIndex, setStepIndex] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [spotlight, setSpotlight] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const steps: readonly TourStep[] = profile?.role === 'child' ? t.tutorial.child : t.tutorial.parent;
+  const profileKey = profile ? `${TOUR_KEY_PREFIX}-${profile.role}-${profile.displayName.trim().toLowerCase()}` : '';
+
+  useEffect(() => {
+    if (!profileKey) return;
+    setOpen(localStorage.getItem(profileKey) !== 'true');
+    setStepIndex(0);
+  }, [profileKey]);
+
+  useEffect(() => {
+    const restart = () => {
+      if (!profileKey) return;
+      localStorage.removeItem(profileKey);
+      setStepIndex(0);
+      setOpen(true);
+    };
+    window.addEventListener('amparo:start-tour', restart);
+    return () => window.removeEventListener('amparo:start-tour', restart);
+  }, [profileKey]);
+
+  useEffect(() => {
+    if (!open) return;
+    const target = document.querySelector(`[data-tour="${steps[stepIndex]?.target}"]`);
+    if (!(target instanceof HTMLElement)) {
+      setSpotlight(null);
+      return;
+    }
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const rect = target.getBoundingClientRect();
+    setSpotlight({ top: rect.top - 8, left: rect.left - 8, width: rect.width + 16, height: rect.height + 16 });
+  }, [open, stepIndex, steps]);
+
+  if (!profile || !open || steps.length === 0) return null;
+  const current = steps[stepIndex];
+  const complete = () => {
+    localStorage.setItem(profileKey, 'true');
+    setOpen(false);
+  };
+  return (
+    <div className="fixed inset-0 z-[60] pointer-events-none" aria-label="Tutorial guiado" data-testid="guided-tour">
+      {spotlight && <div className="pointer-events-none fixed rounded-2xl border-2 border-[hsl(var(--accent))] transition-all duration-300" style={{ top: spotlight.top, left: spotlight.left, width: spotlight.width, height: spotlight.height, boxShadow: '0 0 0 9999px rgba(18, 35, 35, .58)' }} />}
+      <section className="pointer-events-auto fixed bottom-5 left-5 right-5 mx-auto max-w-[460px] rounded-[24px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-5 shadow-[0_24px_70px_rgba(18,35,35,.25)] sm:bottom-8 sm:left-auto sm:right-8 sm:p-6">
+        <div className="flex items-center justify-between gap-4">
+          <span className="font-mono-app text-[10px] uppercase tracking-[.16em] text-[hsl(var(--primary))]">{t.tutorial.stepOf.replace('{current}', String(stepIndex + 1)).replace('{total}', String(steps.length))}</span>
+          <button type="button" onClick={complete} className="text-xs font-bold text-[hsl(var(--muted-foreground))] underline underline-offset-4" data-testid="button-skip-tour">{t.tutorial.skip}</button>
+        </div>
+        <h2 className="mt-3 font-display text-3xl tracking-[-.045em]">{current.title}</h2>
+        <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{current.text}</p>
+        <div className="mt-5 flex items-center justify-between gap-3">
+          <button type="button" disabled={stepIndex === 0} onClick={() => setStepIndex((index) => Math.max(0, index - 1))} className="min-h-10 rounded-full px-4 text-xs font-bold text-[hsl(var(--muted-foreground))] disabled:opacity-35" data-testid="button-tour-back">{t.tutorial.back}</button>
+          <button type="button" onClick={() => stepIndex === steps.length - 1 ? complete() : setStepIndex((index) => index + 1)} className="min-h-10 rounded-full bg-[hsl(var(--primary))] px-5 text-xs font-bold text-[hsl(var(--primary-foreground))]" data-testid="button-tour-next">{stepIndex === steps.length - 1 ? t.tutorial.finish : t.tutorial.next} <ArrowRight size={14} className="ml-1 inline-block align-[-2px]" /></button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -595,8 +734,8 @@ function Dashboard() {
     <>
       <PageIntro eyebrow={t.dashboard.eyebrow} title={profile ? t.dashboard.greeting.replace('{name}', profile.displayName) : t.dashboard.title} description={profile ? t.dashboard.description : t.dashboard.noProfileDescription} />
       <SetupNotice />
-      <section className="grid gap-5 lg:grid-cols-[1.25fr_.75fr]">
-        <div className="relative min-h-[330px] overflow-hidden rounded-[26px] bg-[hsl(var(--primary))] p-7 text-[hsl(var(--primary-foreground))] sm:p-9">
+      <section className="grid gap-5 lg:grid-cols-[1.25fr_.75fr]" data-tour="activity">
+        <div className="relative min-h-[330px] overflow-hidden rounded-[26px] bg-[hsl(var(--primary))] p-7 text-[hsl(var(--primary-foreground))]" data-tour="child-profile">
           <div className="absolute -right-16 -top-16 size-64 rounded-full border border-[hsl(var(--accent)/.25)]" /><div className="absolute -right-5 top-[-5px] size-44 rounded-full border border-[hsl(var(--accent)/.2)]" />
           <div className="relative flex h-full flex-col justify-between">
             <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.15em] text-[hsl(var(--primary-foreground)/.65)]"><span className="size-2 rounded-full bg-[hsl(var(--accent))]" /> {t.dashboard.sharedTruth}</span><ShieldCheck size={24} className="text-[hsl(var(--accent))]" /></div>
@@ -613,7 +752,7 @@ function Dashboard() {
           <p className="mt-7 border-t border-[hsl(var(--border))] pt-5 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.dashboard.onlyShows}</p>
         </div>
       </section>
-      <section className="mt-5 grid gap-5 md:grid-cols-2">
+      <section className="mt-5 grid gap-5 md:grid-cols-2" data-tour="dashboard">
         <ActionCard icon={MessageCircle} tone="gold" eyebrow={t.dashboard.connectEyebrow} title={t.dashboard.connectTitle} text={t.dashboard.connectText} href="/conversations" action={t.dashboard.connectAction} />
         <ActionCard icon={Navigation} tone="teal" eyebrow={t.dashboard.locationEyebrow} title={t.dashboard.locationTitle} text={t.dashboard.locationText} href="/location" action={t.dashboard.locationAction} />
       </section>
@@ -643,7 +782,7 @@ function Conversations() {
       {!privateOpen ? (
         <EmptyState icon={MessageCircle} eyebrow={t.conversations.emptyEyebrow} title={t.conversations.emptyTitle} text={t.conversations.emptyText} actionLabel={t.conversations.learnPrivate} onAction={() => setPrivateOpen(true)} testId="button-empty-private" />
       ) : (
-        <section className="overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] shadow-card">
+           <section className="overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] shadow-card" data-tour="private-channel">
           <div className="flex flex-col gap-4 border-b border-[hsl(var(--border))] p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8"><div className="flex items-start gap-4"><IconBox icon={LockKeyhole} tone="teal" /><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-extrabold">{t.conversations.privateTitle}</h2><span className="rounded-full bg-[hsl(var(--primary)/.1)] px-2.5 py-1 font-mono-app text-[10px] font-medium uppercase tracking-[.08em] text-[hsl(var(--primary))]">{t.conversations.privateBadge}</span></div><p className="mt-2 max-w-[590px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{t.conversations.privateDescription}</p></div></div><span className="flex items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))]"><EyeOff size={15} /> {t.conversations.noParticipants}</span></div>
           <div className="flex min-h-[290px] flex-col items-center justify-center px-6 py-12 text-center"><div className="relative mb-5"><span className="absolute inset-[-9px] rounded-full border border-dashed border-[hsl(var(--accent)/.65)] animate-pulse-soft" /><span className="relative grid size-16 place-items-center rounded-full bg-[hsl(var(--accent)/.24)] text-[hsl(31_55%_32%)]"><UserPlus size={25} /></span></div><h3 className="font-display text-3xl tracking-[-.04em]">{t.conversations.readyTitle}</h3><p className="mt-3 max-w-[410px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{profile ? t.conversations.readyWithProfile : t.conversations.readyWithoutProfile}</p><Button variant="soft" className="mt-6" onClick={() => window.alert(t.conversations.alert)} testId="button-prepare-channel">{t.conversations.prepare} <Plus size={16} /></Button></div>
           <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-6 py-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" /> {t.conversations.privateFooter}</div>
@@ -701,7 +840,7 @@ function ContactManagement() {
   }
 
   return (
-    <section className="mt-6 rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
+    <section className="mt-6 rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8" data-tour="approved-contacts">
       <div className="flex flex-col gap-4 border-b border-[hsl(var(--border))] pb-7 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-4"><IconBox icon={UserPlus} tone="gold" /><div><p className="font-mono-app text-[10px] uppercase tracking-[.17em] text-[hsl(var(--muted-foreground))]">{t.contacts.eyebrow}</p><h2 className="mt-2 font-display text-3xl tracking-[-.045em]">{isChild ? t.contacts.childTitle : t.contacts.adultTitle}</h2><p className="mt-2 max-w-[650px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{isChild ? t.contacts.childText : t.contacts.adultText}</p></div></div>
         <span className="flex shrink-0 items-center gap-2 rounded-full bg-[hsl(var(--muted))] px-3 py-2 font-mono-app text-[10px] uppercase tracking-[.08em] text-[hsl(var(--muted-foreground))]"><LockKeyhole size={12} /> {t.shell.localMode}</span>
@@ -818,12 +957,84 @@ function SettingsPage() {
           <div className="mt-7 flex flex-wrap items-center gap-4"><Button type="submit" testId="button-save-settings">{t.settings.save} <Check size={16} /></Button>{saved && <span className="text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-settings-saved">{t.settings.saved}</span>}</div>
         </form>
         <div className="space-y-5">
+           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={CircleHelp} tone="teal" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.tutorialTitle}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.tutorialText}</p><button type="button" onClick={() => { window.dispatchEvent(new Event('amparo:start-tour')); }} data-testid="button-restart-tour" className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-4 text-xs font-bold text-[hsl(var(--primary-foreground))]">{t.settings.tutorialAction} <ArrowRight size={14} /></button></div></div></section>
           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Bell} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.notifications}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.notificationsText}</p></div><button role="switch" aria-checked={notifications} onClick={() => { const next = !notifications; setNotifications(next); localStorage.setItem('amparo-notifications', String(next)); }} data-testid="switch-notifications" className={`relative h-7 w-12 rounded-full transition-colors ${notifications ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${notifications ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></section>
           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Smartphone} tone="teal" /><div><h2 className="text-lg font-extrabold">{t.settings.device}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.deviceText}</p></div></div><div className="mt-5 flex items-center gap-2 border-t border-[hsl(var(--border))] pt-4 text-xs font-bold text-[hsl(var(--primary))]"><Check size={14} /> {t.settings.browserData}</div></section>
           <section className="rounded-[26px] border border-[hsl(var(--destructive)/.2)] bg-[hsl(var(--destructive)/.04)] p-6 sm:p-7"><h2 className="text-sm font-extrabold text-[hsl(var(--destructive))]">{t.settings.remove}</h2><p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.removeText}</p><button type="button" onClick={deleteProfile} data-testid="button-delete-profile" className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full border border-[hsl(var(--destructive)/.3)] px-4 text-xs font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)]">{t.settings.removeButton} <X size={14} /></button></section>
         </div>
       </div>
     </>
+  );
+}
+
+const clerkAppearance = {
+  theme: shadcn,
+  cssLayerName: 'clerk',
+  options: {
+    logoPlacement: 'inside' as const,
+    logoLinkUrl: basePath || '/',
+    logoImageUrl: `${window.location.origin}${basePath}/favicon.svg`,
+    socialButtonsPlacement: 'top' as const,
+    socialButtonsVariant: 'blockButton' as const,
+  },
+  variables: {
+    colorPrimary: '#2f6f6c',
+    colorForeground: '#243245',
+    colorMutedForeground: '#6d7378',
+    colorDanger: '#b8423a',
+    colorBackground: '#fbfaf7',
+    colorInput: '#f4f0e8',
+    colorInputForeground: '#243245',
+    colorNeutral: '#ddd5c7',
+    fontFamily: 'Manrope, sans-serif',
+    borderRadius: '1rem',
+  },
+  elements: {
+    rootBox: 'w-full flex justify-center',
+    cardBox: 'bg-[#fbfaf7] rounded-[24px] w-[440px] max-w-full overflow-hidden shadow-card',
+    card: '!shadow-none !border-0 !bg-transparent !rounded-none',
+    footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
+    headerTitle: 'font-display text-3xl text-[#243245]',
+    headerSubtitle: 'text-[#6d7378]',
+    socialButtonsBlockButtonText: 'text-[#243245] font-bold',
+    formFieldLabel: 'text-[#243245] font-bold',
+    footerActionLink: 'text-[#2f6f6c] font-bold',
+    footerActionText: 'text-[#6d7378]',
+    dividerText: 'text-[#6d7378]',
+    identityPreviewEditButton: 'text-[#2f6f6c]',
+    formFieldSuccessText: 'text-[#2f6f6c]',
+    alertText: 'text-[#b8423a]',
+    logoBox: 'rounded-xl',
+    logoImage: 'rounded-xl',
+    socialButtonsBlockButton: 'border-[#ddd5c7] bg-[#f4f0e8] hover:bg-[#eee8dc]',
+    formButtonPrimary: 'bg-[#2f6f6c] hover:bg-[#285d5a] text-[#fbfaf7]',
+    formFieldInput: 'border-[#ddd5c7] bg-[#f4f0e8] text-[#243245]',
+    footerAction: 'bg-transparent',
+    dividerLine: 'bg-[#ddd5c7]',
+    alert: 'bg-[#b8423a]/10',
+    otpCodeFieldInput: 'border-[#ddd5c7] bg-[#f4f0e8]',
+    formFieldRow: 'gap-2',
+    main: 'bg-transparent',
+  },
+};
+
+function SignInPage() {
+  const { t } = useLanguage();
+  return (
+    <main className="grid min-h-[100dvh] place-items-center bg-[hsl(var(--background))] px-4 py-8">
+      <div>
+        <p className="mb-4 text-center font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--primary))]">{t.auth.title}</p>
+        <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
+      </div>
+    </main>
+  );
+}
+
+function SignUpPage() {
+  return (
+    <main className="grid min-h-[100dvh] place-items-center bg-[hsl(var(--background))] px-4 py-8">
+      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
+    </main>
   );
 }
 
@@ -841,13 +1052,38 @@ function NotFound() {
   return <main className="grid min-h-[100dvh] place-items-center bg-[hsl(var(--background))] p-6"><div className="max-w-md text-center"><span className="mx-auto grid size-16 place-items-center rounded-2xl bg-[hsl(var(--muted))] text-[hsl(var(--primary))]"><RefreshCw size={26} /></span><h1 className="mt-6 font-display text-5xl tracking-[-.05em]">{t.notFound.title}</h1><p className="mt-3 text-sm text-[hsl(var(--muted-foreground))]">{t.notFound.text}</p><Link href="/" data-testid="link-not-found-home" className="mt-7 inline-flex min-h-11 items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-5 text-sm font-bold text-[hsl(var(--primary-foreground))]">{t.notFound.back} <ArrowRight size={16} /></Link></div></main>;
 }
 
+function ClerkApp() {
+  const [, setLocation] = useLocation();
+  const stripBase = (path: string) => basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
+  return (
+    <ClerkProvider
+      publishableKey={clerkPubKey}
+      proxyUrl={clerkProxyUrl}
+      appearance={clerkAppearance}
+      signInUrl={`${basePath}/sign-in`}
+      signUpUrl={`${basePath}/sign-up`}
+      routerPush={(to) => setLocation(stripBase(to))}
+      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
+      localization={{ signIn: { start: { title: 'Entre no Amparo', subtitle: 'Acesse seu espaço da família' } }, signUp: { start: { title: 'Crie sua conta', subtitle: 'Comece seu espaço de cuidado' } } }}
+    >
+      <Switch>
+        <Route path="/sign-in/*?" component={SignInPage} />
+        <Route path="/sign-up/*?" component={SignUpPage} />
+        <Route component={SwitchRouter} />
+      </Switch>
+      <Toaster />
+    </ClerkProvider>
+  );
+}
+
 function App() {
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?v=2`, { updateViaCache: 'none' }).catch(() => undefined);
     }
   }, []);
-  return <QueryClientProvider client={queryClient}><TooltipProvider><LanguageProvider><SwitchRouter /><Toaster /></LanguageProvider></TooltipProvider></QueryClientProvider>;
+  if (!clerkPubKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY');
+  return <QueryClientProvider client={queryClient}><TooltipProvider><LanguageProvider><ClerkApp /></LanguageProvider></TooltipProvider></QueryClientProvider>;
 }
 
 function SwitchRouter() {

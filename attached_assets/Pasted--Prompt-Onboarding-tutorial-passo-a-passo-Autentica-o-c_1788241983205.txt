@@ -1,0 +1,67 @@
+# Prompt: Onboarding (tutorial passo a passo) + Autenticação com login social
+
+Este prompt complementa o prompt principal do app de controle parental (Amparo). Cobre duas lacunas identificadas: falta de um tutorial guiado dentro do app e falta de cadastro/login com credenciais robustas (e-mail+senha, Google, Apple).
+
+---
+
+## 1. Autenticação — métodos de cadastro/login
+
+O app hoje não tem um sistema de autenticação real. Implemente:
+
+| Método | Uso |
+|---|---|
+| E-mail + senha | Cadastro tradicional do Responsável |
+| Login com Google (OAuth) | Cadastro/login rápido do Responsável |
+| Login com Apple (Sign in with Apple) | **Obrigatório se o app for publicado na App Store** (exigência da Apple sempre que há login social com outro provedor) |
+| Recuperação de senha | Fluxo de "esqueci minha senha" via e-mail |
+| Verificação de e-mail | Confirmar e-mail no cadastro tradicional (link de confirmação) |
+
+**Regras importantes:**
+
+- **Só o Responsável faz login com essas credenciais.** A Criança nunca cadastra e-mail/senha nem faz login social — o acesso dela é só via o pareamento por QR code (ver prompt anterior, seção 6). Isso evita criar conta de menor com dado pessoal desnecessário (e-mail, senha) e simplifica a experiência dela.
+- Ao logar com Google/Apple, capturar apenas nome e e-mail — não pedir permissões além do necessário.
+- Sign in with Apple deve suportar a opção "Esconder meu e-mail" (relay do Apple) sem quebrar o envio de notificações/e-mails transacionais do app.
+- Sessão do Responsável deve persistir (não pedir login toda vez que abrir o app) usando token de sessão seguro (ex: Supabase Auth já resolve isso nativamente).
+
+**Stack sugerida:** Supabase Auth cobre e-mail/senha, Google OAuth e Apple Sign In nativamente — evita implementar do zero.
+
+---
+
+## 2. Tutorial passo a passo (onboarding guiado)
+
+O app precisa de um tutorial na primeira abertura, **diferente para cada papel** (Responsável vs Criança), que guia o usuário pelas telas principais antes de soltá-lo no app sozinho.
+
+### Onboarding do Responsável (primeira abertura, após cadastro)
+
+1. Tela de boas-vindas explicando o propósito do app em 1-2 frases.
+2. Passo: "Cadastre o perfil da sua criança" (nome, idade) — leva direto pro formulário.
+3. Passo: "Gere o QR code de vínculo" — mostra onde fica o botão, explica que a criança vai escanear.
+4. Passo: "Veja o painel de atividade" — aponta pra localização, tempo de uso, conversas espelhadas (mesmo vazios, mostrar onde cada coisa vai aparecer).
+5. Passo: "Aprove contatos" — explica o fluxo de aprovação antes que a criança possa falar com alguém.
+6. Passo: "Seu chat privado com a criança" — deixa claro que essa conversa específica não é monitorada nem espelhada.
+7. Tela final: "Tudo pronto" com botão pra ir direto ao painel.
+
+### Onboarding da Criança (primeira abertura, após escanear o QR code)
+
+1. Tela de boas-vindas simples e acolhedora (linguagem adequada pra idade, sem termos técnicos).
+2. Passo: explicar que os contatos precisam ser aprovados pelo Responsável antes de poder conversar.
+3. Passo: mostrar onde fica o chat privado com o Responsável.
+4. Passo: mostrar o indicador de tempo de uso restante, se ativado.
+5. Tela final: liberar o uso normal do app.
+
+**Requisitos de implementação:**
+
+- Onboarding deve poder ser pulado (botão "Pular") mas reaparecer em `Configurações → Ver tutorial novamente` a qualquer momento.
+- Usar overlay/spotlight nos elementos reais da tela (não telas estáticas separadas) sempre que possível, pra ensinar no contexto real da interface.
+- Salvar estado `onboarding_completed: boolean` por usuário, pra não repetir toda vez que abrir o app.
+- Onboarding não deve bloquear a auditoria de rotas do prompt anterior (seção 11) — ou seja, cada passo do tutorial precisa apontar pra uma tela que realmente existe e funciona.
+
+---
+
+## 3. Modelo de dados (adição)
+
+```
+users (..., onboarding_completed boolean default false, auth_provider[email|google|apple])
+```
+
+Nenhuma tabela nova necessária além do campo acima — reaproveitar a tabela `users` já existente no schema principal.
