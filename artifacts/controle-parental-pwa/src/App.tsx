@@ -782,6 +782,7 @@ function Conversations() {
   const { getToken } = useAuth();
   const profile = readProfile();
   const [children, setChildren] = useState<ChildUser[] | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [approvedContacts, setApprovedContacts] = useState<ApprovedContact[]>([]);
   const [mirroredMessages, setMirroredMessages] = useState<MirroredMessage[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -794,15 +795,9 @@ function Conversations() {
         const kids = await fetchChildren(token);
         if (cancelled) return;
         setChildren(kids);
-        if (kids.length > 0) {
-          const [contacts, mirrored] = await Promise.all([
-            fetchApprovedContacts(kids[0].id, token),
-            fetchMirroredMessages(token),
-          ]);
-          if (cancelled) return;
-          setApprovedContacts(contacts);
-          setMirroredMessages(mirrored);
-        }
+        setSelectedChildId((current) => current ?? kids[0]?.id ?? null);
+        const mirrored = await fetchMirroredMessages(token);
+        if (!cancelled) setMirroredMessages(mirrored);
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar conversas.');
       }
@@ -813,11 +808,48 @@ function Conversations() {
     };
   }, [getToken]);
 
+  // Antes: contatos aprovados eram sempre buscados só pra children[0] — com
+  // mais de uma criança vinculada, os contatos da segunda nunca apareciam
+  // aqui, mesmo já aprovados. Agora refaz a busca sempre que a criança
+  // selecionada muda.
+  useEffect(() => {
+    if (!selectedChildId) return;
+    let cancelled = false;
+    async function loadContacts() {
+      try {
+        const token = await getToken();
+        const contacts = await fetchApprovedContacts(selectedChildId!, token);
+        if (!cancelled) setApprovedContacts(contacts);
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar conversas.');
+      }
+    }
+    loadContacts();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedChildId, getToken]);
+
   const hasChild = (children?.length ?? 0) > 0;
 
   return (
     <>
       <PageIntro eyebrow={t.conversations.eyebrow} title={t.conversations.title} description={t.conversations.description} action={<Button variant="outline" onClick={() => setPrivateOpen(true)} testId="button-open-channel-info"><Info size={16} /> {t.conversations.privacy}</Button>} />
+      {children && children.length > 1 && (
+        <div className="mb-6 flex flex-wrap items-center gap-1 rounded-2xl bg-[hsl(var(--muted)/.65)] p-1 sm:w-fit" data-testid="selector-conversations-child">
+          {children.map((child) => (
+            <button
+              key={child.id}
+              type="button"
+              onClick={() => setSelectedChildId(child.id)}
+              data-testid={`button-select-conversations-child-${child.id}`}
+              className={`min-h-10 rounded-xl px-4 text-xs font-extrabold transition-colors ${selectedChildId === child.id ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]'}`}
+            >
+              {child.name}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="mb-6 flex items-center gap-1 rounded-2xl bg-[hsl(var(--muted)/.65)] p-1 sm:w-fit">
         <button onClick={() => setPrivateOpen(false)} data-testid="button-tab-approved" className={`min-h-10 rounded-xl px-4 text-xs font-extrabold transition-colors ${!privateOpen ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]'}`}>{t.conversations.approvedTab}</button>
         <button onClick={() => setPrivateOpen(true)} data-testid="button-tab-private" className={`min-h-10 rounded-xl px-4 text-xs font-extrabold transition-colors ${privateOpen ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]'}`}>{t.conversations.privateTab}</button>
@@ -968,10 +1000,19 @@ function LocationPage() {
 
 // Tela real: busca as crianças vinculadas e a última localização reportada
 // por elas, igual ao padrão usado em Conversations() (getToken + fetch*).
+//
+// Antes: sempre mostrava children[0], sem seletor nenhum. Com mais de uma
+// criança vinculada (ex.: Rafaella e Mariana), a localização compartilhada
+// por uma delas podia nunca aparecer — a tela ficava presa mostrando
+// sempre a mesma criança, mesmo com a outra tendo compartilhado a posição
+// dela com sucesso (confirmado nos logs do Railway: POST /api/location
+// 201 pra uma criança enquanto a tela mostrava "ainda não compartilhou"
+// pra outra). Agora tem um seletor quando há mais de uma criança.
 function ResponsibleLocationPage() {
   const { t } = useLanguage();
   const { getToken } = useAuth();
   const [children, setChildren] = useState<ChildUser[] | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [location, setLocation] = useState<ChildLocation | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -983,10 +1024,7 @@ function ResponsibleLocationPage() {
         const kids = await fetchChildren(token);
         if (cancelled) return;
         setChildren(kids);
-        if (kids.length > 0) {
-          const loc = await fetchChildLocation(kids[0].id, token);
-          if (!cancelled) setLocation(loc);
-        }
+        setSelectedChildId((current) => current ?? kids[0]?.id ?? null);
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar localização.');
       }
@@ -997,7 +1035,26 @@ function ResponsibleLocationPage() {
     };
   }, [getToken]);
 
+  useEffect(() => {
+    if (!selectedChildId) return;
+    let cancelled = false;
+    async function loadLocation() {
+      try {
+        const token = await getToken();
+        const loc = await fetchChildLocation(selectedChildId!, token);
+        if (!cancelled) setLocation(loc);
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar localização.');
+      }
+    }
+    loadLocation();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedChildId, getToken]);
+
   const hasChild = (children?.length ?? 0) > 0;
+  const selectedChild = children?.find((child) => child.id === selectedChildId) ?? children?.[0] ?? null;
   const recordedLabel = location ? new Date(location.recordedAt).toLocaleString('pt-BR') : null;
   // Bounding box pequeno ao redor do ponto, só pra enquadrar o mapa embutido
   // do OpenStreetMap (sem precisar adicionar leaflet como dependência).
@@ -1008,6 +1065,21 @@ function ResponsibleLocationPage() {
   return (
     <>
       <PageIntro eyebrow={t.location.eyebrow} title={t.location.title} description={t.location.description} />
+      {children && children.length > 1 && (
+        <div className="mb-6 flex flex-wrap items-center gap-1 rounded-2xl bg-[hsl(var(--muted)/.65)] p-1 sm:w-fit" data-testid="selector-location-child">
+          {children.map((child) => (
+            <button
+              key={child.id}
+              type="button"
+              onClick={() => { setSelectedChildId(child.id); setLocation(null); }}
+              data-testid={`button-select-child-${child.id}`}
+              className={`min-h-10 rounded-xl px-4 text-xs font-extrabold transition-colors ${selectedChildId === child.id ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]'}`}
+            >
+              {child.name}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="grid gap-5 lg:grid-cols-[.82fr_1.18fr]">
         <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
           <div className="flex items-start justify-between"><IconBox icon={MapPin} tone="gold" /></div>
@@ -1017,10 +1089,10 @@ function ResponsibleLocationPage() {
           ) : !hasChild ? (
             <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">Nenhuma criança vinculada ainda. Vá em "Vincular criança" para gerar o QR code de pareamento.</p>
           ) : !location ? (
-            <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{children?.[0]?.name ?? 'A criança'} ainda não compartilhou a localização. Isso só acontece quando ela toca em "Compartilhar minha localização" no aparelho dela.</p>
+            <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{selectedChild?.name ?? 'A criança'} ainda não compartilhou a localização. Isso só acontece quando ela toca em "Compartilhar minha localização" no aparelho dela.</p>
           ) : (
             <div className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-              <p>Última localização de {children?.[0]?.name}:</p>
+              <p>Última localização de {selectedChild?.name}:</p>
               <p className="mt-2 font-mono-app text-xs">{location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}</p>
               <p className="mt-1 text-xs">Registrada em {recordedLabel}{location.accuracyMeters ? ` · precisão de ~${Math.round(location.accuracyMeters)}m` : ''}</p>
             </div>

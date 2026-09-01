@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { db, contactsTable, usersTable } from "@workspace/db";
 import { z } from "zod/v4";
 
@@ -24,10 +24,15 @@ router.get("/children", async (req, res) => {
   const auth = getAuth(req);
   if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
 
+  // ORDER BY createdAt: sem isso a ordem não era garantida — com mais de
+  // uma criança vinculada, o frontend (que sempre olha children[0]) podia
+  // mostrar dados da criança "errada" de forma inconsistente entre
+  // requisições.
   const children = await db
     .select()
     .from(usersTable)
-    .where(and(eq(usersTable.role, "child"), eq(usersTable.parentId, auth.userId)));
+    .where(and(eq(usersTable.role, "child"), eq(usersTable.parentId, auth.userId)))
+    .orderBy(asc(usersTable.createdAt));
 
   return res.json(children);
 });
