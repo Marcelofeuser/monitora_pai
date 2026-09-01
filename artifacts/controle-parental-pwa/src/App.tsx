@@ -1212,7 +1212,27 @@ function Router() {
 // /join não exige o Responsável logado — é a rota que o QR code abre no
 // aparelho da Criança, que ainda não tem conta. /pair é o gerador do QR,
 // usado pelo Responsável já autenticado.
-function PairingRoute() { return <AppShell><PairingGenerate /></AppShell>; }
+//
+// Antes desta correção, /pair não conferia login nenhum: um Responsável
+// deslogado (sessão expirada, aba nova, etc.) conseguia preencher o
+// formulário e só descobria o problema com um erro genérico
+// "not_authenticated" vindo do servidor. Agora, se não tem sessão ativa,
+// manda direto pra tela de login em vez de deixar tentar e falhar.
+function RequireSignedIn({ children }: { children: ReactNode }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      setLocation('/sign-in');
+    }
+  }, [isLoaded, isSignedIn, setLocation]);
+
+  if (!isLoaded || !isSignedIn) return null;
+  return <>{children}</>;
+}
+
+function PairingRoute() { return <RequireSignedIn><AppShell><PairingGenerate /></AppShell></RequireSignedIn>; }
 function DashboardRoute() { return <AppShell><Dashboard /></AppShell>; }
 function ConversationsRoute() { return <AppShell><Conversations /></AppShell>; }
 function LocationRoute() { return <AppShell><LocationPage /></AppShell>; }
