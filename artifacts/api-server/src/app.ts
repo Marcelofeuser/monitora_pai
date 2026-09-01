@@ -38,6 +38,12 @@ app.use(
   clerkMiddleware({
     publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
     secretKey: process.env.CLERK_SECRET_KEY,
+    // PWA e api-server ficam em domínios diferentes no Railway — sem isso,
+    // o Clerk pode rejeitar o token por não reconhecer o domínio de origem.
+    authorizedParties: [
+      "https://pwa-production-336a.up.railway.app",
+      "https://api-server-production-c955.up.railway.app",
+    ],
   }),
 );
 
