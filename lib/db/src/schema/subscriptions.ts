@@ -17,7 +17,8 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
 // a tabela contacts ou conversations.
 export const subscriptionsTable = pgTable("subscriptions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  parentUserId: uuid("parent_user_id")
+  // TEXT: referencia usersTable.id (text). Ver comentário em schema/users.ts.
+  parentUserId: text("parent_user_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
   plan: planEnum("plan").notNull().default("free"),

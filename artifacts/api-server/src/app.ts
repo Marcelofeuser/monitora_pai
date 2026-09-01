@@ -90,4 +90,29 @@ app.use((req, _res, next) => {
 
 app.use("/api", router);
 
+// Handler de erro global: sem isso, um erro não tratado numa rota async
+// (ex: uma query do Drizzle que falha) só aparecia nos logs como um
+// stack trace cru do finalhandler do Express — sem contexto estruturado,
+// sem err.cause (onde o driver do Postgres bota a mensagem real, tipo
+// "invalid input syntax for type uuid"), e o cliente só via um 500 vazio.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const e = err as { message?: string; cause?: { message?: string; code?: string }; stack?: string };
+  logger.error(
+    {
+      err: {
+        message: e?.message,
+        causeMessage: e?.cause?.message,
+        causeCode: e?.cause?.code,
+        stack: e?.stack,
+      },
+      path: req.path,
+      method: req.method,
+    },
+    "unhandled_request_error",
+  );
+  if (res.headersSent) return;
+  res.status(500).json({ error: "internal_error" });
+});
+
 export default app;

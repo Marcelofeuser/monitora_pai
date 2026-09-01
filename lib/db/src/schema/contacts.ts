@@ -14,10 +14,11 @@ export const contactStatusEnum = pgEnum("contact_status", [
 // Regra crítica: billing NUNCA consulta esta tabela — ver subscriptions.ts.
 export const contactsTable = pgTable("contacts", {
   id: uuid("id").primaryKey().defaultRandom(),
-  childId: uuid("child_id")
+  // TEXT: referencia usersTable.id (text). Ver comentário em schema/users.ts.
+  childId: text("child_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
-  contactUserId: uuid("contact_user_id").references(() => usersTable.id),
+  contactUserId: text("contact_user_id").references(() => usersTable.id),
   contactName: text("contact_name").notNull(),
   contactPhone: text("contact_phone"),
   status: contactStatusEnum("status").notNull().default("pending"),

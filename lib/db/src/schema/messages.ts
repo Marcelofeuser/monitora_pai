@@ -7,10 +7,11 @@ export const messageTypeEnum = pgEnum("message_type", ["text", "audio", "video",
 
 export const conversationsTable = pgTable("conversations", {
   id: uuid("id").primaryKey().defaultRandom(),
-  participantAId: uuid("participant_a_id")
+  // TEXT: referencia usersTable.id (text). Ver comentário em schema/users.ts.
+  participantAId: text("participant_a_id")
     .notNull()
     .references(() => usersTable.id),
-  participantBId: uuid("participant_b_id")
+  participantBId: text("participant_b_id")
     .notNull()
     .references(() => usersTable.id),
   // Regra central do produto: só é espelhada se NÃO for a conversa
@@ -24,7 +25,8 @@ export const messagesTable = pgTable("messages", {
   conversationId: uuid("conversation_id")
     .notNull()
     .references(() => conversationsTable.id, { onDelete: "cascade" }),
-  senderId: uuid("sender_id")
+  // TEXT: referencia usersTable.id (text). Ver comentário em schema/users.ts.
+  senderId: text("sender_id")
     .notNull()
     .references(() => usersTable.id),
   type: messageTypeEnum("type").notNull(),
@@ -39,7 +41,8 @@ export const mirrorLogTable = pgTable("mirror_log", {
   messageId: uuid("message_id")
     .notNull()
     .references(() => messagesTable.id, { onDelete: "cascade" }),
-  mirroredToParentId: uuid("mirrored_to_parent_id")
+  // TEXT: referencia usersTable.id (text). Ver comentário em schema/users.ts.
+  mirroredToParentId: text("mirrored_to_parent_id")
     .notNull()
     .references(() => usersTable.id),
   mirroredAt: timestamp("mirrored_at").defaultNow().notNull(),

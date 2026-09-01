@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { eq, and, isNull, gt } from "drizzle-orm";
 import { db, pairingTokensTable, usersTable } from "@workspace/db";
 import { z } from "zod/v4";
@@ -105,6 +105,10 @@ router.post("/pairing/confirm", async (req, res) => {
   const [childUser] = await db
     .insert(usersTable)
     .values({
+      // usersTable.id agora é TEXT (sem default no banco — ver
+      // schema/users.ts), porque pra role='parent' o id precisa ser
+      // exatamente o Clerk userId. Pra role='child' geramos o id aqui.
+      id: randomUUID(),
       role: "child",
       name: pairing.childName,
       parentId: pairing.parentId,

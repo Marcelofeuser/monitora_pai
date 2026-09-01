@@ -9,7 +9,9 @@ import { usersTable } from "./users";
 export const pairingTokensTable = pgTable("pairing_tokens", {
   id: uuid("id").primaryKey().defaultRandom(),
   token: text("token").notNull().unique(),
-  parentId: uuid("parent_id")
+  // TEXT: referencia usersTable.id, que agora é text (Clerk userId pro
+  // Responsável). Ver comentário em schema/users.ts.
+  parentId: text("parent_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
   childName: text("child_name").notNull(),
@@ -17,7 +19,7 @@ export const pairingTokensTable = pgTable("pairing_tokens", {
   expiresAt: timestamp("expires_at").notNull(),
   usedAt: timestamp("used_at"),
   // Preenchido depois que a Criança escaneia e confirma o vínculo.
-  resultingChildUserId: uuid("resulting_child_user_id").references(() => usersTable.id),
+  resultingChildUserId: text("resulting_child_user_id").references(() => usersTable.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
