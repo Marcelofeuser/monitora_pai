@@ -4,6 +4,7 @@ import { randomBytes, randomUUID, createHash } from "crypto";
 import { eq, and, isNull, gt } from "drizzle-orm";
 import { db, pairingTokensTable, usersTable, childDeviceTokensTable } from "@workspace/db";
 import { z } from "zod/v4";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -29,6 +30,16 @@ const createPairingSchema = z.object({
 router.post("/pairing", async (req, res) => {
   const auth = getAuth(req);
   if (!auth.userId) {
+    // DIAGNÓSTICO TEMPORÁRIO — mesmo padrão usado pra achar a causa do 401
+    // original (chave do Clerk inválida). Loga o motivo real do Clerk ter
+    // rejeitado a requisição, sem expor isso na resposta HTTP. Remover
+    // depois de identificar a causa.
+    try {
+      const debugInfo = auth.debug();
+      logger.warn({ pairingAuthDebug: debugInfo, origin: req.headers.origin, hasAuthHeader: Boolean(req.headers.authorization) }, "pairing_not_authenticated_debug");
+    } catch (debugErr) {
+      logger.warn({ debugErr }, "pairing_not_authenticated_debug_failed");
+    }
     return res.status(401).json({ error: "not_authenticated" });
   }
 
