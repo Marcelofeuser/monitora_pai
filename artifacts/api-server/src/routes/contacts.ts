@@ -15,6 +15,51 @@ async function assertIsParentOfChild(parentId: string, childId: string) {
   return Boolean(child);
 }
 
+/**
+ * GET /api/children
+ * Lista as crianças vinculadas ao Responsável autenticado — usado pelo
+ * frontend para saber qual childId consultar nas telas de Conversas/Localização.
+ */
+router.get("/children", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const children = await db
+    .select()
+    .from(usersTable)
+    .where(and(eq(usersTable.role, "child"), eq(usersTable.parentId, auth.userId)));
+
+  return res.json(children);
+});
+
+const contactStatusFilter = z.enum(["pending", "approved", "denied", "revoked"]).optional();
+
+/**
+ * GET /api/contacts?childId=...&status=approved
+ * Lista contatos de uma criança, com filtro opcional de status.
+ * Substitui a antiga rota fixa /contacts/pending por algo mais geral.
+ */
+router.get("/contacts", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const childId = String(req.query.childId ?? "");
+  if (!childId) return res.status(400).json({ error: "missing_child_id" });
+
+  const statusParsed = contactStatusFilter.safeParse(req.query.status);
+  if (!statusParsed.success) return res.status(400).json({ error: "invalid_status" });
+
+  const isParent = await assertIsParentOfChild(auth.userId, childId);
+  if (!isParent) return res.status(403).json({ error: "not_the_parent_of_this_child" });
+
+  const conditions = statusParsed.data
+    ? and(eq(contactsTable.childId, childId), eq(contactsTable.status, statusParsed.data))
+    : eq(contactsTable.childId, childId);
+
+  const contacts = await db.select().from(contactsTable).where(conditions);
+  return res.json(contacts);
+});
+
 const requestContactSchema = z.object({
   childId: z.string().uuid(),
   contactName: z.string().min(1).max(120),
