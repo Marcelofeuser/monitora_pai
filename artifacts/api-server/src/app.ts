@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import { clerkMiddleware } from "@clerk/express";
+import { clerkMiddleware, getAuth } from "@clerk/express";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import {
@@ -46,6 +46,27 @@ app.use(
     ],
   }),
 );
+
+// DIAGNÓSTICO TEMPORÁRIO: loga por que a autenticação está falhando.
+// Remover depois de descobrir a causa raiz do 401.
+app.use((req, _res, next) => {
+  if (req.path.startsWith("/api/pairing") || req.path.startsWith("/api/children")) {
+    const authHeader = req.headers.authorization;
+    const auth = getAuth(req);
+    logger.info(
+      {
+        hasAuthHeader: Boolean(authHeader),
+        authHeaderLength: authHeader?.length ?? 0,
+        authHeaderPrefix: authHeader?.slice(0, 20),
+        userId: auth?.userId ?? null,
+        authReason: (auth as { reason?: string })?.reason ?? null,
+        authMessage: (auth as { message?: string })?.message ?? null,
+      },
+      "clerk_auth_debug",
+    );
+  }
+  next();
+});
 
 app.use("/api", router);
 
