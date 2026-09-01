@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { randomBytes, randomUUID } from "crypto";
+import { randomBytes, randomUUID, createHash } from "crypto";
 import { eq, and, isNull, gt } from "drizzle-orm";
-import { db, pairingTokensTable, usersTable } from "@workspace/db";
+import { db, pairingTokensTable, usersTable, childDeviceTokensTable } from "@workspace/db";
 import { z } from "zod/v4";
 
 const router: IRouter = Router();
@@ -120,10 +120,21 @@ router.post("/pairing/confirm", async (req, res) => {
     .set({ usedAt: new Date(), resultingChildUserId: childUser.id })
     .where(eq(pairingTokensTable.id, pairing.id));
 
+  // A Criança não tem conta Clerk — este é o único momento em que ela
+  // recebe uma credencial. O aparelho dela guarda o token bruto (nunca
+  // reemitido); o servidor só guarda o hash. Ver middlewares/childAuth.ts.
+  const rawDeviceToken = randomBytes(32).toString("base64url");
+  const deviceTokenHash = createHash("sha256").update(rawDeviceToken).digest("hex");
+  await db.insert(childDeviceTokensTable).values({
+    childId: childUser.id,
+    tokenHash: deviceTokenHash,
+  });
+
   return res.status(200).json({
     childUserId: childUser.id,
     parentId: pairing.parentId,
     childName: childUser.name,
+    deviceToken: rawDeviceToken,
   });
 });
 

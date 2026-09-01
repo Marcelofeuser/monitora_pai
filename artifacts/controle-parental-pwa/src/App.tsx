@@ -38,6 +38,8 @@ import { PairingGenerate } from '@/pages/PairingGenerate';
 import { PairingJoin } from '@/pages/PairingJoin';
 import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, MirroredMessage } from '@/lib/conversations-api';
+import { fetchChildLocation } from '@/lib/location-api';
+import type { ChildLocation } from '@/lib/location-api';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -955,8 +957,103 @@ function EmptyState({ icon: Icon, eyebrow, title, text, actionLabel, onAction, t
 }
 
 function LocationPage() {
-  const { t } = useLanguage();
   const profile = readProfile();
+  // O Responsável vê localização real (backend); a Criança continua com a
+  // tela local de permissão/compartilhamento que já existia.
+  if (profile?.role !== 'child') {
+    return <ResponsibleLocationPage />;
+  }
+  return <ChildLocationPage />;
+}
+
+// Tela real: busca as crianças vinculadas e a última localização reportada
+// por elas, igual ao padrão usado em Conversations() (getToken + fetch*).
+function ResponsibleLocationPage() {
+  const { t } = useLanguage();
+  const { getToken } = useAuth();
+  const [children, setChildren] = useState<ChildUser[] | null>(null);
+  const [location, setLocation] = useState<ChildLocation | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const token = await getToken();
+        const kids = await fetchChildren(token);
+        if (cancelled) return;
+        setChildren(kids);
+        if (kids.length > 0) {
+          const loc = await fetchChildLocation(kids[0].id, token);
+          if (!cancelled) setLocation(loc);
+        }
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar localização.');
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+
+  const hasChild = (children?.length ?? 0) > 0;
+  const recordedLabel = location ? new Date(location.recordedAt).toLocaleString('pt-BR') : null;
+  // Bounding box pequeno ao redor do ponto, só pra enquadrar o mapa embutido
+  // do OpenStreetMap (sem precisar adicionar leaflet como dependência).
+  const bbox = location
+    ? `${location.longitude - 0.01},${location.latitude - 0.01},${location.longitude + 0.01},${location.latitude + 0.01}`
+    : null;
+
+  return (
+    <>
+      <PageIntro eyebrow={t.location.eyebrow} title={t.location.title} description={t.location.description} />
+      <div className="grid gap-5 lg:grid-cols-[.82fr_1.18fr]">
+        <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
+          <div className="flex items-start justify-between"><IconBox icon={MapPin} tone="gold" /></div>
+          <h2 className="mt-8 font-display text-4xl tracking-[-.05em]">{t.location.title}</h2>
+          {loadError ? (
+            <p className="mt-3 text-xs font-semibold leading-5 text-[hsl(var(--destructive))]" role="alert" data-testid="status-location-error">{loadError}</p>
+          ) : !hasChild ? (
+            <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">Nenhuma criança vinculada ainda. Vá em "Vincular criança" para gerar o QR code de pareamento.</p>
+          ) : !location ? (
+            <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{children?.[0]?.name ?? 'A criança'} ainda não compartilhou a localização. Isso só acontece quando ela toca em "Compartilhar minha localização" no aparelho dela.</p>
+          ) : (
+            <div className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+              <p>Última localização de {children?.[0]?.name}:</p>
+              <p className="mt-2 font-mono-app text-xs">{location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}</p>
+              <p className="mt-1 text-xs">Registrada em {recordedLabel}{location.accuracyMeters ? ` · precisão de ~${Math.round(location.accuracyMeters)}m` : ''}</p>
+            </div>
+          )}
+        </section>
+        <section className="relative min-h-[430px] overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(191_25%_25%)] text-[hsl(var(--card))]">
+          {bbox ? (
+            <iframe
+              title="Mapa de localização"
+              className="size-full min-h-[430px] border-0"
+              src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&marker=${location!.latitude},${location!.longitude}`}
+              data-testid="iframe-location-map"
+            />
+          ) : (
+            <div className="relative flex h-full min-h-[430px] flex-col items-center justify-center p-6 text-center sm:p-8">
+              <div className="absolute inset-0 opacity-25" style={{ backgroundImage: 'linear-gradient(32deg, transparent 48%, hsl(38 77% 65% / .18) 49%, transparent 50%), linear-gradient(118deg, transparent 48%, hsl(42 32% 95% / .12) 49%, transparent 50%)', backgroundSize: '78px 78px' }} />
+              <span className="relative mb-6 grid size-20 place-items-center rounded-full border border-[hsl(var(--accent)/.45)] bg-[hsl(var(--accent)/.13)] text-[hsl(var(--accent))]"><MapPin size={31} strokeWidth={1.4} /></span>
+              <h2 className="relative font-display text-4xl tracking-[-.05em]">{t.location.noLocation}</h2>
+              <p className="relative mt-3 max-w-[330px] text-sm leading-6 text-[hsl(var(--card)/.65)]">{t.location.mapEmpty}</p>
+            </div>
+          )}
+        </section>
+      </div>
+    </>
+  );
+}
+
+// Mantida como estava: fluxo local de permissão/compartilhamento do lado da
+// Criança dentro do app principal (a tela real de compartilhamento fica em
+// PairingJoin.tsx, mas esta continua existindo pra quem navega direto pra
+// /location no papel de Criança).
+function ChildLocationPage() {
+  const { t } = useLanguage();
   const [permission, setPermission] = useState<'unknown' | 'asking' | 'granted' | 'denied'>('unknown');
   const [sharing, setSharing] = useState(() => localStorage.getItem('amparo-location-sharing') === 'true');
   const [error, setError] = useState('');
@@ -981,11 +1078,11 @@ function LocationPage() {
           <h2 className="mt-8 font-display text-4xl tracking-[-.05em]">{t.location.permission}</h2><p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{t.location.permissionText}</p>
           <Button className="mt-7 w-full" onClick={requestPermission} disabled={permission === 'asking'} testId="button-request-location">{permission === 'asking' ? t.location.waiting : permission === 'granted' ? t.location.granted : t.location.ask} <Navigation size={16} /></Button>
           {error && <p className="mt-3 text-xs font-semibold leading-5 text-[hsl(var(--destructive))]" role="alert" data-testid="status-location-error">{error}</p>}
-          {profile?.role === 'child' && <div className="mt-8 border-t border-[hsl(var(--border))] pt-6"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-extrabold">{t.location.share}</p><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{sharing ? t.location.sharedChoice : t.location.privateChoice}</p></div><button role="switch" aria-checked={sharing} onClick={toggleSharing} data-testid="switch-location-sharing" className={`relative h-7 w-12 rounded-full transition-colors ${sharing ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${sharing ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></div>}
+          <div className="mt-8 border-t border-[hsl(var(--border))] pt-6"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-extrabold">{t.location.share}</p><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{sharing ? t.location.sharedChoice : t.location.privateChoice}</p></div><button role="switch" aria-checked={sharing} onClick={toggleSharing} data-testid="switch-location-sharing" className={`relative h-7 w-12 rounded-full transition-colors ${sharing ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${sharing ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></div>
         </section>
         <section className="relative min-h-[430px] overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(191_25%_25%)] p-6 text-[hsl(var(--card))] sm:p-8">
           <div className="absolute inset-0 opacity-25" style={{ backgroundImage: 'linear-gradient(32deg, transparent 48%, hsl(38 77% 65% / .18) 49%, transparent 50%), linear-gradient(118deg, transparent 48%, hsl(42 32% 95% / .12) 49%, transparent 50%)', backgroundSize: '78px 78px' }} />
-          <div className="relative flex h-full flex-col justify-between"><div className="flex items-center justify-between"><span className="font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--accent))]">{t.location.map}</span><span className="flex items-center gap-2 rounded-full border border-[hsl(var(--card)/.2)] px-3 py-1.5 text-[10px] font-bold text-[hsl(var(--card)/.65)]"><LockKeyhole size={12} /> {t.location.consent}</span></div><div className="flex flex-1 flex-col items-center justify-center text-center"><span className="mb-6 grid size-20 place-items-center rounded-full border border-[hsl(var(--accent)/.45)] bg-[hsl(var(--accent)/.13)] text-[hsl(var(--accent))]"><MapPin size={31} strokeWidth={1.4} /></span><h2 className="font-display text-4xl tracking-[-.05em]">{t.location.noLocation}</h2><p className="mt-3 max-w-[330px] text-sm leading-6 text-[hsl(var(--card)/.65)]">{profile?.role === 'child' && sharing ? t.location.sharingOnEmpty : t.location.mapEmpty}</p></div><div className="flex items-center gap-2 border-t border-[hsl(var(--card)/.15)] pt-5 text-xs text-[hsl(var(--card)/.6)]"><EyeOff size={15} /> {t.location.noTracking}</div></div>
+          <div className="relative flex h-full flex-col justify-between"><div className="flex items-center justify-between"><span className="font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--accent))]">{t.location.map}</span><span className="flex items-center gap-2 rounded-full border border-[hsl(var(--card)/.2)] px-3 py-1.5 text-[10px] font-bold text-[hsl(var(--card)/.65)]"><LockKeyhole size={12} /> {t.location.consent}</span></div><div className="flex flex-1 flex-col items-center justify-center text-center"><span className="mb-6 grid size-20 place-items-center rounded-full border border-[hsl(var(--accent)/.45)] bg-[hsl(var(--accent)/.13)] text-[hsl(var(--accent))]"><MapPin size={31} strokeWidth={1.4} /></span><h2 className="font-display text-4xl tracking-[-.05em]">{t.location.noLocation}</h2><p className="mt-3 max-w-[330px] text-sm leading-6 text-[hsl(var(--card)/.65)]">{sharing ? t.location.sharingOnEmpty : t.location.mapEmpty}</p></div><div className="flex items-center gap-2 border-t border-[hsl(var(--card)/.15)] pt-5 text-xs text-[hsl(var(--card)/.6)]"><EyeOff size={15} /> {t.location.noTracking}</div></div>
         </section>
       </div>
     </>

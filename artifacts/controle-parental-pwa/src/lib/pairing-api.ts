@@ -44,6 +44,10 @@ export type ConfirmPairingResponse = {
   childUserId: string;
   parentId: string;
   childName: string;
+  // Credencial do aparelho da Criança — ela não tem conta Clerk, então este
+  // token (guardado no localStorage dela) é o que autentica as rotas que o
+  // aparelho dela precisa chamar (hoje: reportar localização).
+  deviceToken: string;
 };
 
 // Sem token: a Criança ainda não tem conta nesse momento, é exatamente
