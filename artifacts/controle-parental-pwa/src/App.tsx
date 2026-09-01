@@ -33,6 +33,8 @@ import { shadcn } from '@clerk/themes';
 import '@clerk/themes/shadcn.css';
 import { Link, Route, Switch, useLocation } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { PairingGenerate } from '@/pages/PairingGenerate';
+import { PairingJoin } from '@/pages/PairingJoin';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -1040,8 +1042,12 @@ function SignUpPage() {
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/location" component={LocationRoute} /><Route path="/settings" component={SettingsRoute} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/location" component={LocationRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
+// /join não exige o Responsável logado — é a rota que o QR code abre no
+// aparelho da Criança, que ainda não tem conta. /pair é o gerador do QR,
+// usado pelo Responsável já autenticado.
+function PairingRoute() { return <AppShell><PairingGenerate /></AppShell>; }
 function DashboardRoute() { return <AppShell><Dashboard /></AppShell>; }
 function ConversationsRoute() { return <AppShell><Conversations /></AppShell>; }
 function LocationRoute() { return <AppShell><LocationPage /></AppShell>; }
