@@ -1,0 +1,164 @@
+# Prompt: App de Controle Parental (Pai ↔ Criança)
+
+## Objetivo
+Construir um app mobile (ou PWA) com dois papéis de usuário — **Responsável** e **Criança** — onde toda comunicação da criança com terceiros é monitorada e espelhada em tempo real para o Responsável, exceto a conversa direta entre Responsável e Criança dentro do próprio app.
+
+---
+
+## 1. Papéis de usuário
+
+### Responsável (Pai/Mãe)
+- Cria a conta principal e vincula 1+ contas de Criança.
+- Aprova ou nega qualquer contato novo antes que a Criança consiga conversar com ele.
+- Vê espelhamento completo de todas as conversas da Criança (texto, áudio, vídeo, fotos).
+- Define regras de tempo de uso (limites diários, horários bloqueados, pausas).
+- Recebe localização em tempo real e histórico de rotas da Criança.
+- Tem um chat privado com a Criança que **não é espelhado nem auditado**.
+
+### Criança
+- Só pode iniciar ou receber conversa com contatos aprovados pelo Responsável.
+- Não pode adicionar, aceitar ou remover contatos sem aprovação prévia.
+- Usa chat (texto/áudio/vídeo/fotos) normalmente com contatos liberados.
+- Tem acesso ao chat privado com o Responsável (não espelhado).
+- Vê (opcional, configurável) o tempo de uso restante do dia.
+
+---
+
+## 2. Regra de negócio crítica: espelhamento seletivo
+
+- **Toda mensagem, chamada, foto, vídeo ou áudio trocado entre a Criança e qualquer contato aprovado** deve ser copiada (espelhada) em tempo real para uma visão exclusiva do Responsável.
+- **A conversa entre Responsável e Criança é a única exceção**: não é espelhada, não é auditada, não aparece em nenhum painel de monitoramento — é tratada como canal privado entre os dois.
+- O espelhamento deve incluir metadados (timestamp, remetente, tipo de mídia) e o conteúdo em si, armazenado de forma segura e vinculado ao par (Criança → Contato).
+
+---
+
+## 3. Fluxo de aprovação de contato
+
+1. Criança tenta adicionar/aceitar um contato → pedido vai para fila de aprovação do Responsável (push notification).
+2. Responsável vê perfil do solicitante (nome, foto, telefone/ID) e decide: **Aprovar** / **Negar** / **Aprovar com restrições** (ex: só texto, sem chamada de vídeo).
+3. Só após aprovação o canal de comunicação Criança↔Contato é liberado e passa a ser espelhado automaticamente.
+4. Responsável pode revogar acesso a qualquer momento, encerrando o canal.
+
+---
+
+## 4. Funcionalidades principais
+
+| Módulo | Descrição |
+|---|---|
+| Chat texto | 1:1 e possivelmente grupos aprovados; espelhado |
+| Áudio | Chamadas de voz e áudios gravados; espelhado (gravação ou log de metadados + replay) |
+| Vídeo | Chamadas de vídeo; espelhado (gravação do stream ou snapshot periódico, decidir por custo) |
+| Fotos | Envio/recebimento de imagens; espelhado com armazenamento da mídia original |
+| Localização | GPS em tempo real + histórico de trajeto + geofencing (alertas de entrada/saída de áreas) |
+| Controle de tempo | Limite diário de uso por app/geral, agenda de bloqueio (ex: horário escolar, dormir), botão de pausa remota pelo Responsável |
+| Gestão de contatos | Lista de contatos aprovados, pendentes, negados; ação de aprovar/revogar |
+| Chat privado Pai↔Filho | Canal não espelhado, não auditado |
+| Painel do Responsável | Dashboard com atividade recente, alertas, uso de tempo, localização, conversas espelhadas por contato |
+
+---
+
+## 5. Modelo de assinatura e monetização (crítico — define a arquitetura de billing)
+
+**Regra de ouro: a assinatura trava "quantas crianças você monitora como Responsável", nunca "quem pode falar com quem".**
+
+Cenário de referência: Responsável A tem a filha cadastrada. A filha pede pra adicionar a tia como contato. A tia pode, opcionalmente, ter sua própria conta de Responsável pra monitorar os filhos dela — isso é uma decisão e uma assinatura **totalmente separadas** da conexão dela com a sobrinha.
+
+Modelo adotado — **"família paga, rede é grátis"**:
+
+1. **Quem paga é sempre o Responsável, pelas crianças que ELE monitora.** Nunca por quantos contatos a criança tem, nem pelo status de assinatura de terceiros.
+2. **Um contato aprovado (tia, avó, amigo) nunca precisa de assinatura própria só para conversar com a criança monitorada.** A conexão Criança↔Contato pertence ao plano do Responsável que aprovou, não ao contato.
+3. **Se o contato quiser virar Responsável de outras crianças** (ex: a tia quer monitorar os próprios filhos), isso gera uma assinatura nova e independente, vinculada à conta dela como Responsável — sem qualquer relação com a assinatura de quem a convidou.
+4. **Cancelamento/inadimplência de um Responsável nunca revoga conexões já aprovadas de outro Responsável.** Se a assinatura da tia expira, isso afeta só o que ELA monitora (os filhos dela) — a conexão da sobrinha com ela, que pertence ao plano do primeiro Responsável, continua ativa.
+
+**Consequência de implementação:** a lógica de billing/paywall deve consultar exclusivamente `subscriptions` + `users.parent_id`. **Nunca** deve depender de `contacts.status` ou de qualquer coisa ligada à tabela de contatos/conversas. Misturar essas duas coisas é o erro mais provável nesse tipo de app — gera bug onde um contato perde acesso à criança por falta de pagamento de outra pessoa, o que quebra a confiança do usuário.
+
+---
+
+## 6. Fluxo de pareamento Responsável↔Criança (QR code)
+
+**Não depende de SIM/chip telefônico — só de câmera e Wi-Fi/internet no aparelho da Criança.**
+
+1. Responsável cadastra o perfil da Criança no app (nome, idade) → backend gera um **token de pareamento único e temporário** vinculado a esse perfil.
+2. App exibe um **QR code** contendo um link (ex: `https://amparo.app/join?token=XYZ123`) — não é um comando de instalação, é um link comum.
+3. Criança escaneia com a câmera nativa do aparelho (não precisa ter nada instalado ainda).
+4. O link abre no navegador e direciona conforme o tipo de app:
+   - **PWA** (fase atual do MVP): abre a página de instalação "Adicionar à tela de início" — o token já vai na URL, sem precisar de loja nem de deep linking complexo.
+   - **App nativo publicado** (fase futura): abre a App Store/Play Store; após a instalação, um **deferred deep link** (ex: Branch.io, ou App Links/Universal Links próprios) recupera o token automaticamente na primeira abertura.
+5. Na primeira abertura, o app lê o token, confirma o vínculo com o backend via Wi-Fi, e entra direto no **Modo Criança** já conectado ao perfil do Responsável — sem senha, sem digitar código manualmente.
+
+**Restrição de arquitetura:** o identificador de conta da Criança **nunca pode depender de número de telefone/SIM** — usar `user_id` interno + token de sessão. Aparelhos infantis sem chip (só Wi-Fi) são um caso de uso esperado, não uma exceção.
+
+**Sincronização contínua:** uma vez pareado, todo o espelhamento (chat, localização, fotos) depende de internet ativa no aparelho da Criança (Wi-Fi ou dados móveis, se houver). Bluetooth não sustenta sincronização em tempo real — só serviria, opcionalmente, como fallback de pareamento inicial caso não haja Wi-Fi disponível no momento do primeiro setup (não prioritário para o MVP).
+
+---
+
+## 7. Modelo de dados (sugestão)
+
+```
+users (id, role[parent|child], name, phone[nullable], parent_id[nullable])
+contacts (id, child_id, contact_user_id, status[pending|approved|denied|revoked], restrictions jsonb)
+conversations (id, participant_a_id, participant_b_id, is_mirrored boolean, is_parent_child_private boolean)
+messages (id, conversation_id, sender_id, type[text|audio|video|photo], content_url, text_content, created_at)
+mirror_log (id, message_id, mirrored_to_parent_id, mirrored_at)
+locations (id, child_id, lat, lng, captured_at)
+geofences (id, child_id, name, polygon/radius, alert_on[enter|exit])
+usage_limits (id, child_id, daily_minutes, blocked_windows jsonb)
+usage_sessions (id, child_id, app_context, started_at, ended_at)
+subscriptions (id, parent_user_id, plan[free|paid], status[active|past_due|canceled], children_limit int, current_period_end)
+pairing_tokens (id, child_profile_id, token, expires_at, used_at)
+```
+
+Regra de gravação: ao inserir em `messages`, se `conversation.is_parent_child_private = false`, disparar trigger/job que replica o registro para a visão do Responsável (`mirror_log` ou índice direto por `parent_id`).
+
+Regra de billing: toda checagem de acesso a feature paga (ex: número de crianças monitoradas, gravação de vídeo, retenção estendida) deve fazer `JOIN` em `subscriptions` via `users.parent_id` — **nunca** via `contacts` ou `conversations`.
+
+Nota: `users.phone` é **nullable** — a conta da Criança pode não ter telefone; o vínculo com o Responsável é sempre via `pairing_tokens`, nunca via telefone.
+
+---
+
+## 8. Requisitos técnicos sugeridos
+
+- **Frontend**: React Native (Expo) para mobile nativo (necessário para GPS em background, notificações push e controle de uso real); alternativa PWA é limitada para localização em background e chamadas de vídeo nativas.
+- **Backend**: Supabase (Postgres + Realtime + Storage) — Realtime resolve o espelhamento ao vivo via subscriptions nas tabelas `messages`/`locations`.
+- **Mídia**: Supabase Storage ou S3-compatible para fotos/áudios/vídeos.
+- **Chamadas de voz/vídeo**: WebRTC via provedor (Agora, Twilio Video, ou Daily.co) com gravação server-side habilitada para conversas espelhadas.
+- **Localização em background**: exige app nativo — usar `expo-location` com background tracking + permissões explícitas.
+- **Push notifications**: Expo Notifications ou Firebase Cloud Messaging (aprovação de contato, alertas de geofence, fim de tempo de uso).
+- **Autenticação**: vínculo Responsável↔Criança via QR code + token (ver seção 6) — nunca via número de telefone/SIM como identificador.
+
+---
+
+## 9. Considerações legais/privacidade (não pular)
+
+- Definir idade mínima da Criança e adequação ao ECA (Brasil) e à LGPD — dados de menores exigem consentimento do responsável legal, que já é o próprio usuário Responsável aqui.
+- Deixar explícito nos termos de uso que a conta da Criança é monitorada (transparência, mesmo que a Criança não possa desativar).
+- Retenção de dados: definir por quanto tempo mídias espelhadas ficam armazenadas.
+- Criptografia em trânsito (TLS) obrigatória; considerar criptografia em repouso para mídias sensíveis.
+
+---
+
+## 10. MVP sugerido (ordem de construção)
+
+1. Auth + vínculo Responsável↔Criança
+2. Gestão de contatos (fluxo de aprovação)
+3. Chat texto com espelhamento em tempo real
+4. Chat privado Pai↔Filho (não espelhado)
+5. Envio de fotos com espelhamento
+6. Localização + geofencing
+7. Controle de tempo de uso
+8. Modelo de assinatura (`subscriptions` + paywall por `children_limit`)
+9. Áudio/vídeo (chamadas) com espelhamento — módulo mais caro/complexo, deixar por último
+
+---
+
+## 11. Auditoria de navegação — pente-fino obrigatório antes de qualquer nova feature
+
+O app já tem várias telas construídas, mas muitos botões/links não levam a lugar nenhum (rotas quebradas, telas soltas sem destino, ações sem handler). **Antes de adicionar qualquer funcionalidade nova, faça uma varredura completa do app existente e corrija isso:**
+
+1. **Mapeie todas as rotas/telas existentes** (liste cada arquivo de rota/página do projeto).
+2. **Para cada botão, link, ou elemento clicável do app**, verifique se ele de fato navega para algum lugar ou executa uma ação real — nada de botão decorativo sem `onClick`/`onPress`, nada de link para rota inexistente.
+3. **Toda rota precisa ter um destino funcional**: nenhuma tela deve ser um "beco sem saída" (sem botão de voltar, sem próxima ação, sem conexão com o resto do fluxo).
+4. **Corrija cada quebra encontrada** — não apenas liste os problemas, implemente a correção (criar a rota faltante, conectar o handler, remover o elemento morto se não fizer sentido no fluxo, ou adicionar navegação de volta).
+5. Ao final, apresente um resumo do que foi encontrado e corrigido (rota por rota), para conferência.
+
+Essa auditoria deve ser feita **antes** de continuar implementando o modelo de assinatura, o pareamento por QR code ou qualquer item novo do MVP (seção 10) — não adianta empilhar feature nova em cima de navegação quebrada.

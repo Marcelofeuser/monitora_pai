@@ -57,7 +57,24 @@ Construir um app mobile (ou PWA) com dois papéis de usuário — **Responsável
 
 ---
 
-## 5. Modelo de dados (sugestão)
+## 5. Modelo de assinatura e monetização (crítico — define a arquitetura de billing)
+
+**Regra de ouro: a assinatura trava "quantas crianças você monitora como Responsável", nunca "quem pode falar com quem".**
+
+Cenário de referência: Responsável A tem a filha cadastrada. A filha pede pra adicionar a tia como contato. A tia pode, opcionalmente, ter sua própria conta de Responsável pra monitorar os filhos dela — isso é uma decisão e uma assinatura **totalmente separadas** da conexão dela com a sobrinha.
+
+Modelo adotado — **"família paga, rede é grátis"**:
+
+1. **Quem paga é sempre o Responsável, pelas crianças que ELE monitora.** Nunca por quantos contatos a criança tem, nem pelo status de assinatura de terceiros.
+2. **Um contato aprovado (tia, avó, amigo) nunca precisa de assinatura própria só para conversar com a criança monitorada.** A conexão Criança↔Contato pertence ao plano do Responsável que aprovou, não ao contato.
+3. **Se o contato quiser virar Responsável de outras crianças** (ex: a tia quer monitorar os próprios filhos), isso gera uma assinatura nova e independente, vinculada à conta dela como Responsável — sem qualquer relação com a assinatura de quem a convidou.
+4. **Cancelamento/inadimplência de um Responsável nunca revoga conexões já aprovadas de outro Responsável.** Se a assinatura da tia expira, isso afeta só o que ELA monitora (os filhos dela) — a conexão da sobrinha com ela, que pertence ao plano do primeiro Responsável, continua ativa.
+
+**Consequência de implementação:** a lógica de billing/paywall deve consultar exclusivamente `subscriptions` + `users.parent_id`. **Nunca** deve depender de `contacts.status` ou de qualquer coisa ligada à tabela de contatos/conversas. Misturar essas duas coisas é o erro mais provável nesse tipo de app — gera bug onde um contato perde acesso à criança por falta de pagamento de outra pessoa, o que quebra a confiança do usuário.
+
+---
+
+## 6. Modelo de dados (sugestão)
 
 ```
 users (id, role[parent|child], name, phone, parent_id[nullable])
@@ -69,13 +86,16 @@ locations (id, child_id, lat, lng, captured_at)
 geofences (id, child_id, name, polygon/radius, alert_on[enter|exit])
 usage_limits (id, child_id, daily_minutes, blocked_windows jsonb)
 usage_sessions (id, child_id, app_context, started_at, ended_at)
+subscriptions (id, parent_user_id, plan[free|paid], status[active|past_due|canceled], children_limit int, current_period_end)
 ```
 
 Regra de gravação: ao inserir em `messages`, se `conversation.is_parent_child_private = false`, disparar trigger/job que replica o registro para a visão do Responsável (`mirror_log` ou índice direto por `parent_id`).
 
+Regra de billing: toda checagem de acesso a feature paga (ex: número de crianças monitoradas, gravação de vídeo, retenção estendida) deve fazer `JOIN` em `subscriptions` via `users.parent_id` — **nunca** via `contacts` ou `conversations`.
+
 ---
 
-## 6. Requisitos técnicos sugeridos
+## 7. Requisitos técnicos sugeridos
 
 - **Frontend**: React Native (Expo) para mobile nativo (necessário para GPS em background, notificações push e controle de uso real); alternativa PWA é limitada para localização em background e chamadas de vídeo nativas.
 - **Backend**: Supabase (Postgres + Realtime + Storage) — Realtime resolve o espelhamento ao vivo via subscriptions nas tabelas `messages`/`locations`.
@@ -87,7 +107,7 @@ Regra de gravação: ao inserir em `messages`, se `conversation.is_parent_child_
 
 ---
 
-## 7. Considerações legais/privacidade (não pular)
+## 8. Considerações legais/privacidade (não pular)
 
 - Definir idade mínima da Criança e adequação ao ECA (Brasil) e à LGPD — dados de menores exigem consentimento do responsável legal, que já é o próprio usuário Responsável aqui.
 - Deixar explícito nos termos de uso que a conta da Criança é monitorada (transparência, mesmo que a Criança não possa desativar).
@@ -96,7 +116,7 @@ Regra de gravação: ao inserir em `messages`, se `conversation.is_parent_child_
 
 ---
 
-## 8. MVP sugerido (ordem de construção)
+## 9. MVP sugerido (ordem de construção)
 
 1. Auth + vínculo Responsável↔Criança
 2. Gestão de contatos (fluxo de aprovação)
@@ -105,4 +125,5 @@ Regra de gravação: ao inserir em `messages`, se `conversation.is_parent_child_
 5. Envio de fotos com espelhamento
 6. Localização + geofencing
 7. Controle de tempo de uso
-8. Áudio/vídeo (chamadas) com espelhamento — módulo mais caro/complexo, deixar por último
+8. Modelo de assinatura (`subscriptions` + paywall por `children_limit`)
+9. Áudio/vídeo (chamadas) com espelhamento — módulo mais caro/complexo, deixar por último
