@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { conversationsTable, db, usersTable } from "@workspace/db";
-import { sendPushToParent } from "./webPush";
+import { sendPushToChild, sendPushToParent } from "./webPush";
 
 const RENOTIFY_INTERVAL_MS = 30 * 60 * 1000;
 
@@ -43,5 +43,46 @@ export async function notifyParentOfActivity(params: {
     title: "Amparo",
     body: `${senderName} tem uma conversa ativa no chat`,
     url: "/conversations",
+  });
+}
+
+/**
+ * Pedido do Marcelo: a Criança também deve ser notificada quando o
+ * Responsável manda mensagem pra ela — hoje só o Responsável era avisado
+ * (item 10 original). Mesma cadência do item 10 (notifica na hora se é a
+ * primeira vez, senão só de novo depois de 30min), pra não virar um push
+ * por mensagem numa conversa ativa; usa `lastNotifiedChildAt`, um relógio
+ * de debounce separado do do Responsável (ver comentário no schema).
+ *
+ * Chamado depois de gravar qualquer mensagem cujo remetente seja o
+ * Responsável (ele mandando pra própria Criança) — nunca quando é a
+ * Criança mandando pra ela mesma, o que nem existe.
+ */
+export async function notifyChildOfActivity(params: {
+  conversation: { id: string; lastNotifiedChildAt: Date | null };
+  parentUserId: string;
+  childId: string;
+}): Promise<void> {
+  const { conversation, parentUserId, childId } = params;
+
+  if (conversation.lastNotifiedChildAt) {
+    const elapsed = Date.now() - conversation.lastNotifiedChildAt.getTime();
+    if (elapsed < RENOTIFY_INTERVAL_MS) return;
+  }
+
+  // Marca ANTES de mandar — mesmo motivo do notifyParentOfActivity: evita
+  // reenvio duplicado se duas mensagens chegarem quase juntas.
+  await db
+    .update(conversationsTable)
+    .set({ lastNotifiedChildAt: new Date() })
+    .where(eq(conversationsTable.id, conversation.id));
+
+  const [parent] = await db.select().from(usersTable).where(eq(usersTable.id, parentUserId)).limit(1);
+  const parentName = parent?.name ?? "Seu Responsável";
+
+  await sendPushToChild(childId, {
+    title: "Amparo",
+    body: `${parentName} te mandou uma mensagem`,
+    url: "./",
   });
 }

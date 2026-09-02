@@ -40,6 +40,26 @@ export async function createPairing(
   return res.json();
 }
 
+// Reconexão: mesma resposta de createPairing (token/joinUrl/expiresAt),
+// só que pra uma Criança que já existe — ver comentário na rota.
+export async function reconnectPairing(
+  childId: string,
+  authToken: string | null,
+): Promise<CreatePairingResponse & { childName: string }> {
+  const res = await fetch(`${API_URL}/api/pairing/reconnect`, {
+    method: "POST",
+    headers: authHeaders(authToken),
+    body: JSON.stringify({ childId }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `pairing_reconnect_failed_${res.status}`);
+  }
+
+  return res.json();
+}
+
 export type ConfirmPairingResponse = {
   childUserId: string;
   parentId: string;

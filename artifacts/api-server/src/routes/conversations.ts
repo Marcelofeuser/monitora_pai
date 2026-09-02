@@ -6,7 +6,7 @@ import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childA
 import { uploadSingleMediaFile } from "../middlewares/mediaUpload";
 import { kindForMime, maxBytesForMime, saveMedia } from "../lib/mediaStorage";
 import { isAllowedSticker } from "../lib/stickers";
-import { notifyParentOfActivity } from "../lib/notify";
+import { notifyChildOfActivity, notifyParentOfActivity } from "../lib/notify";
 
 const router: IRouter = Router();
 
@@ -46,7 +46,7 @@ async function listMessages(conversationId: string) {
 }
 
 type MessageInput = {
-  type: "text" | "photo" | "video";
+  type: "text" | "photo" | "video" | "audio";
   textContent: string | null;
   contentUrl: string | null;
 };
@@ -160,13 +160,20 @@ router.post("/conversations/private/messages", uploadSingleMediaFile, async (req
     })
     .returning();
 
+  // Só dispara quando é o Responsável escrevendo pra Criança (o envio do
+  // lado da Criança não passa por aqui) — pedido do Marcelo: ela também
+  // deve ser avisada quando recebe mensagem, não só ele.
+  await notifyChildOfActivity({ conversation, parentUserId: auth.userId, childId });
+
   return res.status(201).json(message);
 });
 
 /**
  * GET /api/child/conversations/private
  * Criança (autenticada por token de dispositivo, ver childAuth.ts): retorna
- * a conversa privada com o Responsável dela + histórico de mensagens.
+ * a conversa privada com o Responsável dela + histórico de mensagens, mais
+ * o nome do Responsável (pedido do Marcelo: mostrar quem é o Responsável
+ * vinculado na tela da Criança).
  */
 router.get(
   "/child/conversations/private",
@@ -178,9 +185,11 @@ router.get(
     const [child] = await db.select().from(usersTable).where(eq(usersTable.id, childId)).limit(1);
     if (!child?.parentId) return res.status(404).json({ error: "child_not_paired" });
 
+    const [parent] = await db.select().from(usersTable).where(eq(usersTable.id, child.parentId)).limit(1);
+
     const conversation = await getOrCreatePrivateConversation(child.parentId, childId);
     const messages = await listMessages(conversation.id);
-    return res.json({ conversation, messages });
+    return res.json({ conversation, messages, parentName: parent?.name ?? null });
   },
 );
 

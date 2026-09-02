@@ -29,11 +29,33 @@ function subscriptionToPayload(subscription: PushSubscription) {
   return { endpoint: json.endpoint!, keys: { p256dh: json.keys!.p256dh, auth: json.keys!.auth } };
 }
 
+// Quem está assinando: o Responsável (Bearer do Clerk) ou a Criança
+// (X-Child-Token, ela não tem conta Clerk) — decide tanto o endpoint quanto
+// o header de autenticação usado pra guardar a assinatura no backend (ver
+// routes/notifications.ts). Generalizado nesta rodada porque antes só o
+// Responsável podia ativar notificação; agora a Criança também pode.
+export type PushIdentity = { kind: 'parent'; authToken: string | null } | { kind: 'child'; deviceToken: string };
+
+function pushHeaders(identity: PushIdentity): HeadersInit {
+  if (identity.kind === 'parent') {
+    return {
+      'Content-Type': 'application/json',
+      ...(identity.authToken ? { Authorization: `Bearer ${identity.authToken}` } : {}),
+    };
+  }
+  return { 'Content-Type': 'application/json', 'X-Child-Token': identity.deviceToken };
+}
+
+function pushEndpoint(identity: PushIdentity, action: 'subscribe' | 'unsubscribe'): string {
+  const base = identity.kind === 'parent' ? '/api/notifications' : '/api/child/notifications';
+  return `${API_URL}${base}/${action}`;
+}
+
 // Pede permissão de notificação (se ainda não decidida), assina o push no
 // navegador e manda a assinatura pro backend guardar. Lança erro se o
 // usuário negar a permissão ou se o navegador não suportar — quem chama
 // decide como mostrar isso.
-export async function enablePushNotifications(authToken: string | null): Promise<void> {
+export async function enablePushNotifications(identity: PushIdentity): Promise<void> {
   if (!isPushSupported()) throw new Error('push_not_supported');
 
   const permission = await Notification.requestPermission();
@@ -48,18 +70,15 @@ export async function enablePushNotifications(authToken: string | null): Promise
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY!),
     }));
 
-  const res = await fetch(`${API_URL}/api/notifications/subscribe`, {
+  const res = await fetch(pushEndpoint(identity, 'subscribe'), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
+    headers: pushHeaders(identity),
     body: JSON.stringify(subscriptionToPayload(subscription)),
   });
   if (!res.ok) throw new Error(`subscribe_failed_${res.status}`);
 }
 
-export async function disablePushNotifications(authToken: string | null): Promise<void> {
+export async function disablePushNotifications(identity: PushIdentity): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.getSubscription();
@@ -68,12 +87,9 @@ export async function disablePushNotifications(authToken: string | null): Promis
   const payload = subscriptionToPayload(subscription);
   await subscription.unsubscribe();
 
-  await fetch(`${API_URL}/api/notifications/unsubscribe`, {
+  await fetch(pushEndpoint(identity, 'unsubscribe'), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
+    headers: pushHeaders(identity),
     body: JSON.stringify({ endpoint: payload.endpoint }),
   }).catch(() => undefined);
 }

@@ -1,5 +1,5 @@
 import webpush from "web-push";
-import { eq } from "drizzle-orm";
+import { eq, type SQL } from "drizzle-orm";
 import { db, pushSubscriptionsTable } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -26,18 +26,15 @@ function ensureConfigured(): boolean {
 
 export type PushPayload = { title: string; body: string; url?: string };
 
-// Manda a notificação pra TODAS as assinaturas daquele Responsável (ele
-// pode ter mais de um navegador/aparelho com "Notificações" ligado).
-// Assinatura expirada/revogada (404/410 do serviço de push) é removida do
-// banco na hora — evita ficar tentando mandar pra endpoint morto pra
-// sempre.
-export async function sendPushToParent(parentUserId: string, payload: PushPayload): Promise<void> {
+// Núcleo comum aos dois lados (Responsável e Criança): busca as assinaturas
+// que casam com `where`, manda o payload pra todas, e remove do banco na
+// hora qualquer assinatura que o serviço de push disser que está morta
+// (404/410 — navegador desinstalado, permissão revogada, etc.) — evita
+// ficar tentando mandar pra endpoint morto pra sempre.
+async function sendPushToSubscriptions(where: SQL, payload: PushPayload, logContext: Record<string, unknown>): Promise<void> {
   if (!ensureConfigured()) return;
 
-  const subscriptions = await db
-    .select()
-    .from(pushSubscriptionsTable)
-    .where(eq(pushSubscriptionsTable.parentUserId, parentUserId));
+  const subscriptions = await db.select().from(pushSubscriptionsTable).where(where);
 
   await Promise.all(
     subscriptions.map(async (sub) => {
@@ -52,8 +49,20 @@ export async function sendPushToParent(parentUserId: string, payload: PushPayloa
           await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.id, sub.id));
           return;
         }
-        logger.error({ err, parentUserId }, "push_send_failed");
+        logger.error({ err, ...logContext }, "push_send_failed");
       }
     }),
   );
+}
+
+// Manda a notificação pra TODAS as assinaturas daquele Responsável (ele
+// pode ter mais de um navegador/aparelho com "Notificações" ligado).
+export async function sendPushToParent(parentUserId: string, payload: PushPayload): Promise<void> {
+  await sendPushToSubscriptions(eq(pushSubscriptionsTable.parentUserId, parentUserId), payload, { parentUserId });
+}
+
+// Mesma ideia, pro lado da Criança — item novo do Marcelo: ela também deve
+// ser notificada quando o Responsável manda mensagem no canal privado.
+export async function sendPushToChild(childId: string, payload: PushPayload): Promise<void> {
+  await sendPushToSubscriptions(eq(pushSubscriptionsTable.childId, childId), payload, { childId });
 }

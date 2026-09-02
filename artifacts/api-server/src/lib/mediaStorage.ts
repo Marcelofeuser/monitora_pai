@@ -21,11 +21,23 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   "video/mp4": "mp4",
   "video/webm": "webm",
   "video/quicktime": "mov",
+  // Áudio (mensagem de voz): os dois formatos que o MediaRecorder do
+  // navegador realmente produz na prática — audio/webm no Chrome/Firefox/
+  // Android, audio/mp4 no Safari/iOS (o MediaRecorder do WebKit não sabe
+  // gravar webm). audio/mpeg e audio/ogg cobertos também, à toa de custar
+  // pouco e servirem qualquer áudio que venha de outro lugar no futuro.
+  "audio/webm": "weba",
+  "audio/mp4": "m4a",
+  "audio/mpeg": "mp3",
+  "audio/ogg": "ogg",
 };
 
 export const PHOTO_MAX_BYTES = 12 * 1024 * 1024; // 12MB
 export const VIDEO_MAX_BYTES = 60 * 1024 * 1024; // 60MB
-// Limite do multer precisa ser o maior dos dois — o limite específico por
+// Mensagem de voz é sempre curta — 15MB dá muito mais do que qualquer
+// áudio de conversa precisa, mesmo em bitrate alto.
+export const AUDIO_MAX_BYTES = 15 * 1024 * 1024; // 15MB
+// Limite do multer precisa ser o maior dos três — o limite específico por
 // tipo é conferido depois, na rota.
 export const UPLOAD_MAX_BYTES = VIDEO_MAX_BYTES;
 
@@ -33,14 +45,17 @@ export function isAllowedMime(mime: string): boolean {
   return mime in EXTENSION_BY_MIME;
 }
 
-export function kindForMime(mime: string): "photo" | "video" | null {
+export function kindForMime(mime: string): "photo" | "video" | "audio" | null {
   if (mime.startsWith("image/")) return "photo";
   if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
   return null;
 }
 
 export function maxBytesForMime(mime: string): number {
-  return mime.startsWith("video/") ? VIDEO_MAX_BYTES : PHOTO_MAX_BYTES;
+  if (mime.startsWith("video/")) return VIDEO_MAX_BYTES;
+  if (mime.startsWith("audio/")) return AUDIO_MAX_BYTES;
+  return PHOTO_MAX_BYTES;
 }
 
 let dirReady: Promise<void> | null = null;
@@ -54,7 +69,7 @@ async function ensureDir(): Promise<void> {
 // Nome de arquivo é sempre um UUID gerado por nós + extensão conhecida —
 // nunca deriva de nada que o cliente mande, pra não abrir brecha de path
 // traversal (../../etc) nem de sobrescrever arquivo de outra mensagem.
-const FILENAME_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp|gif|mp4|webm|mov)$/;
+const FILENAME_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp|gif|mp4|webm|mov|weba|m4a|mp3|ogg)$/;
 
 export function isValidMediaFilename(filename: string): boolean {
   return FILENAME_PATTERN.test(filename);

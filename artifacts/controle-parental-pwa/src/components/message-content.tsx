@@ -52,6 +52,18 @@ function VideoContent({ contentUrl, authHeaders }: { contentUrl: string; authHea
   return <video src={url} controls className="max-h-64 max-w-full rounded-lg" />;
 }
 
+function AudioContent({ contentUrl, authHeaders }: { contentUrl: string; authHeaders: HeadersInit }) {
+  const { url, error } = useAuthedMediaUrl(contentUrl, authHeaders);
+  if (error) {
+    return <p className="text-xs text-[hsl(var(--destructive))]">Não foi possível carregar o áudio.</p>;
+  }
+  if (!url) {
+    return <p className="text-xs text-[hsl(var(--muted-foreground))]">Carregando áudio…</p>;
+  }
+  // eslint-disable-next-line jsx-a11y/media-has-caption -- áudio de chat pessoal, sem legendas
+  return <audio src={url} controls className="h-10 max-w-full" />;
+}
+
 /**
  * Renderiza o conteúdo de UMA mensagem (texto, foto, vídeo ou figurinha).
  * O balão (cor de fundo, alinhamento, timestamp) fica por conta de quem
@@ -84,6 +96,9 @@ export function MessageContent({
         {message.textContent && <p>{message.textContent}</p>}
       </div>
     );
+  }
+  if (message.type === 'audio' && message.contentUrl) {
+    return <AudioContent contentUrl={message.contentUrl} authHeaders={authHeaders} />;
   }
   return <>{message.textContent}</>;
 }

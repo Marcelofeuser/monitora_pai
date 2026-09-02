@@ -8,10 +8,12 @@ import { ThemeSwitcher } from '@/lib/theme';
 import { EmojiPicker } from '@/components/emoji-picker';
 import { AttachmentPicker } from '@/components/attachment-picker';
 import { StickerPicker } from '@/components/sticker-picker';
+import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
 import { fetchChildScreenTimeStatus, sendScreenTimeHeartbeat } from '@/lib/screen-time-api';
 import type { ChildLockStatus } from '@/lib/screen-time-api';
-import { Hourglass } from 'lucide-react';
+import { enablePushNotifications, disablePushNotifications, isPushSupported } from '@/lib/push';
+import { Hourglass, Bell, BellOff } from 'lucide-react';
 
 /**
  * Rota /join?token=... — é para onde o link do QR code aponta.
@@ -52,6 +54,10 @@ export function PairingJoin() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [screenLock, setScreenLock] = useState<ChildLockStatus | null>(null);
+  const [parentName, setParentName] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState(false);
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -120,6 +126,7 @@ export function PairingJoin() {
         const data = await fetchChildPrivateConversation(deviceToken!);
         if (!cancelled) {
           setPrivateMessages(data.messages);
+          setParentName(data.parentName);
           setPrivateError(null);
         }
       } catch (err) {
@@ -176,6 +183,67 @@ export function PairingJoin() {
       setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
     } finally {
       setPrivateSending(false);
+    }
+  }
+
+  // Áudio grava e manda na hora, mesma lógica da figurinha.
+  async function sendAudio(file: File) {
+    const token = deviceToken ?? localStorage.getItem(DEVICE_TOKEN_KEY);
+    if (!token || privateSending) return;
+    setPrivateSending(true);
+    setPrivateError(null);
+    try {
+      const message = await sendChildPrivateMessage(token, { file });
+      setPrivateMessages((current) => [...current, message]);
+    } catch (err) {
+      setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
+    } finally {
+      setPrivateSending(false);
+    }
+  }
+
+  // Notificações (pedido do Marcelo): a Criança também pode ligar push,
+  // pra ser avisada quando o Responsável mandar mensagem. Mesmo padrão do
+  // toggle em Configurações do lado do Responsável — reflete o estado real
+  // da assinatura do navegador, não um valor solto guardado à parte.
+  useEffect(() => {
+    if (status !== 'success' || !isPushSupported()) return;
+    let cancelled = false;
+    navigator.serviceWorker.ready
+      .then((registration) => registration.pushManager.getSubscription())
+      .then((subscription) => {
+        if (!cancelled) setNotifications(Boolean(subscription));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
+
+  async function toggleNotifications() {
+    const token = deviceToken ?? localStorage.getItem(DEVICE_TOKEN_KEY);
+    if (!token || notificationsBusy) return;
+    setNotificationsBusy(true);
+    setNotificationsError(null);
+    try {
+      if (notifications) {
+        await disablePushNotifications({ kind: 'child', deviceToken: token });
+        setNotifications(false);
+      } else {
+        await enablePushNotifications({ kind: 'child', deviceToken: token });
+        setNotifications(true);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      setNotificationsError(
+        message === 'permission_denied'
+          ? 'Permissão de notificação negada — libere nas configurações do navegador.'
+          : message === 'push_not_supported'
+            ? 'Este navegador não suporta notificações.'
+            : 'Não foi possível ativar as notificações agora.',
+      );
+    } finally {
+      setNotificationsBusy(false);
     }
   }
 
@@ -277,9 +345,24 @@ export function PairingJoin() {
       {/* Único ajuste que a Criança pode mexer além de conversar e
           compartilhar localização: o tema claro/escuro. */}
       {status === 'success' && (
-        <div className="flex w-full justify-end">
+        <div className="flex w-full items-center justify-end gap-2">
+          {isPushSupported() && (
+            <button
+              type="button"
+              onClick={() => { void toggleNotifications(); }}
+              disabled={notificationsBusy}
+              aria-label={notifications ? 'Desativar notificações' : 'Ativar notificações'}
+              data-testid="button-toggle-child-notifications"
+              className="grid size-9 place-items-center rounded-full border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))] disabled:opacity-60"
+            >
+              {notifications ? <Bell size={16} /> : <BellOff size={16} />}
+            </button>
+          )}
           <ThemeSwitcher />
         </div>
+      )}
+      {notificationsError && (
+        <p className="w-full text-right text-xs text-red-600">{notificationsError}</p>
       )}
       {status === 'checking' && <p>Confirmando vínculo com o Responsável…</p>}
 
@@ -310,7 +393,7 @@ export function PairingJoin() {
         <>
           <h1 className="text-lg font-bold">Oi, {childName ?? 'tudo certo'}!</h1>
           <p className="text-sm text-[hsl(var(--muted-foreground))]">
-            Seu aparelho já está vinculado ao Responsável. Você já pode conversar e compartilhar
+            Seu aparelho já está vinculado{parentName ? <> a <strong className="font-semibold text-[hsl(var(--foreground))]">{parentName}</strong></> : ' ao Responsável'}. Você já pode conversar e compartilhar
             sua localização por aqui.
           </p>
 
@@ -377,6 +460,11 @@ export function PairingJoin() {
                 onError={setAttachError}
               />
               <StickerPicker onSelect={(emoji) => { void sendSticker(emoji); }} />
+              <AudioRecorderButton
+                onRecorded={(file) => { void sendAudio(file); }}
+                onError={setAttachError}
+                disabled={privateSending}
+              />
               <input
                 value={privateDraft}
                 onChange={(event) => setPrivateDraft(event.target.value)}

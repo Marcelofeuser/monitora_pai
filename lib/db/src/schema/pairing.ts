@@ -20,6 +20,15 @@ export const pairingTokensTable = pgTable("pairing_tokens", {
   usedAt: timestamp("used_at"),
   // Preenchido depois que a Criança escaneia e confirma o vínculo.
   resultingChildUserId: text("resulting_child_user_id").references(() => usersTable.id),
+  // Presente só nos pareamentos de RECONEXÃO (POST /api/pairing/reconnect):
+  // aponta pra uma Criança que já existe, em vez de criar uma nova. Pedido
+  // do Marcelo: se a conexão do aparelho da Criança cair (localStorage
+  // apagado, trocou de aparelho, etc.), ele quer poder gerar um QR novo
+  // "pra essa mesma criança" clicando no nome dela — sem isso, cada
+  // reconexão criava um usuário novo do zero, perdendo histórico de
+  // mensagens, tempo de uso, localização etc. (tudo isso é vinculado ao
+  // childId). Nulo = pareamento normal, cria Criança nova (fluxo de sempre).
+  reconnectChildId: text("reconnect_child_id").references(() => usersTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

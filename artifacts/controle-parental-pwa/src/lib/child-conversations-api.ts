@@ -23,6 +23,10 @@ export type PrivateMessage = {
 export type PrivateConversation = {
   conversation: { id: string; participantAId: string; participantBId: string };
   messages: PrivateMessage[];
+  // Nome do Responsável vinculado — pedido do Marcelo pra aparecer na tela
+  // da Criança. Vem junto desta mesma busca (que já roda a cada 5s) em vez
+  // de um endpoint próprio, pra não precisar de mais uma chamada de rede.
+  parentName: string | null;
 };
 
 export async function fetchChildPrivateConversation(deviceToken: string): Promise<PrivateConversation> {

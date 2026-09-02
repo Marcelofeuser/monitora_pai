@@ -44,6 +44,7 @@ import { EmojiPicker } from '@/components/emoji-picker';
 import { AttachmentPicker } from '@/components/attachment-picker';
 import { enablePushNotifications, disablePushNotifications, isPushSupported } from '@/lib/push';
 import { StickerPicker } from '@/components/sticker-picker';
+import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
 import { fetchGroups, createGroup, deleteGroup } from '@/lib/groups-api';
 import type { Group } from '@/lib/groups-api';
@@ -937,6 +938,23 @@ function Conversations() {
     }
   }
 
+  // Áudio grava e manda na hora, sem passar pelo composer — igual figurinha.
+  async function sendAudio(file: File) {
+    if (!selectedChildId || privateSending) return;
+    setPrivateSending(true);
+    setPrivateError(null);
+    try {
+      const token = await getToken();
+      setPrivateAuthToken(token);
+      const message = await sendPrivateMessage(selectedChildId, { file }, token);
+      setPrivateMessages((current) => [...current, message]);
+    } catch (err) {
+      setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
+    } finally {
+      setPrivateSending(false);
+    }
+  }
+
   // Figurinha manda na hora, sem passar pelo composer — igual WhatsApp.
   async function sendSticker(emoji: string) {
     if (!selectedChildId || privateSending) return;
@@ -1201,6 +1219,11 @@ function Conversations() {
                   onError={setAttachError}
                 />
                 <StickerPicker onSelect={(emoji) => { void sendSticker(emoji); }} />
+                <AudioRecorderButton
+                  onRecorded={(file) => { void sendAudio(file); }}
+                  onError={setAttachError}
+                  disabled={privateSending}
+                />
                 <input
                   value={privateDraft}
                   onChange={(event) => setPrivateDraft(event.target.value)}
@@ -1613,11 +1636,11 @@ function SettingsPage() {
     try {
       if (notifications) {
         const token = await getToken();
-        await disablePushNotifications(token);
+        await disablePushNotifications({ kind: 'parent', authToken: token });
         setNotifications(false);
       } else {
         const token = await getToken();
-        await enablePushNotifications(token);
+        await enablePushNotifications({ kind: 'parent', authToken: token });
         setNotifications(true);
       }
     } catch (err) {

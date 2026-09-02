@@ -23,6 +23,13 @@ export const conversationsTable = pgTable("conversations", {
   // começa, depois no máximo a cada 30min enquanto ela continuar ativa
   // (nunca por mensagem individual). Ver lib/notify.ts.
   lastNotifiedAt: timestamp("last_notified_at"),
+  // Mesma ideia, só que pro lado da Criança: quando ela foi notificada por
+  // último de o Responsável ter mandado mensagem nesta conversa. Coluna
+  // separada de lastNotifiedAt de propósito — são dois relógios de debounce
+  // independentes (a Criança mandar mensagem não "usa" a cota de
+  // notificação do Responsável, e vice-versa). Ver notifyChildOfActivity em
+  // lib/notify.ts.
+  lastNotifiedChildAt: timestamp("last_notified_child_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
