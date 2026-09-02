@@ -23,7 +23,7 @@ export function StickerPicker({ onSelect }: { onSelect: (emoji: string) => void 
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div
-            className="absolute bottom-full right-0 z-20 mb-2 grid w-64 grid-cols-6 gap-1 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-2 shadow-lg"
+            className="absolute bottom-full right-0 z-20 mb-2 grid max-h-80 w-64 grid-cols-6 gap-1 overflow-y-auto rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-2 shadow-lg"
             data-testid="panel-sticker-picker"
           >
             {ALLOWED_STICKERS.map((emoji) => (

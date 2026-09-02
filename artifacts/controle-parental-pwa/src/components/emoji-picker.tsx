@@ -1,16 +1,11 @@
 import { useState } from 'react';
 import { Smile } from 'lucide-react';
+import { ALLOWED_STICKERS } from '@/lib/stickers';
 
 // Seletor de emoji simples e leve — sem biblioteca externa, só um grid
-// fixo dos emojis mais comuns. Usado nos dois lados da conversa privada
-// (Responsável em App.tsx, Criança em PairingJoin.tsx).
-const COMMON_EMOJIS = [
-  '😀', '😂', '🥰', '😍', '😘', '😉', '😊', '🙂', '😎', '🤔',
-  '😢', '😭', '😡', '😱', '🥳', '😴', '🙄', '😅', '🤗', '🤩',
-  '👍', '👎', '👏', '🙏', '💪', '✌️', '🤝', '👋', '🙌', '🤞',
-  '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '💕', '💯', '✨',
-  '🎉', '🎂', '⚽', '🎮', '📚', '🎵', '🐶', '🐱', '🌈', '☀️',
-];
+// dos emojis da mesma lista de figurinhas (@/lib/stickers), pra não manter
+// duas listas separadas de emoji no app. Usado nos dois lados da conversa
+// privada (Responsável em App.tsx, Criança em PairingJoin.tsx).
 
 export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -30,10 +25,10 @@ export function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void })
           {/* Fecha o painel ao clicar fora, sem precisar de lib de outside-click. */}
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div
-            className="absolute bottom-full right-0 z-20 mb-2 grid w-64 grid-cols-10 gap-1 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-2 shadow-lg"
+            className="absolute bottom-full right-0 z-20 mb-2 grid max-h-72 w-64 grid-cols-10 gap-1 overflow-y-auto rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-2 shadow-lg"
             data-testid="panel-emoji-picker"
           >
-            {COMMON_EMOJIS.map((emoji) => (
+            {ALLOWED_STICKERS.map((emoji) => (
               <button
                 key={emoji}
                 type="button"

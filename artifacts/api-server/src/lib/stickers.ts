@@ -5,10 +5,31 @@
 // contentUrl="emoji:<caractere>" (ver routes/conversations.ts), então
 // aqui só validamos que o emoji mandado está numa lista fechada — não dá
 // pra mandar qualquer string arbitrária como "figurinha".
+//
+// Lista ampliada (categoria "Rostos e Emoções" — rostos, gatinhos, corações
+// e símbolos de fala) a pedido do Marcelo, a partir de uma lista que ele
+// mandou. Precisa continuar IDÊNTICA à cópia do frontend
+// (controle-parental-pwa/src/lib/stickers.ts) — o servidor valida de
+// verdade, o frontend só evita mostrar opção que o servidor recusaria.
 export const ALLOWED_STICKERS = [
-  "❤️", "😂", "😍", "😢", "😮", "😡", "👍", "👎",
-  "👏", "🙌", "🎉", "🔥", "⭐", "🌈", "☀️", "💤",
-  "🐶", "🐱", "🐰", "🦄", "🍕", "🍦", "⚽", "🎮",
+  "😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃",
+  "🫠", "😉", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "☺️",
+  "😚", "😙", "🥲", "😋", "😛", "😜", "🤪", "😝", "🤑", "🤗",
+  "🤭", "🫢", "🫣", "🤫", "🤔", "🫡", "🤐", "🤨", "😐", "😑",
+  "😶", "🫥", "😶‍🌫️", "😏", "😒", "🙄", "😬", "😮‍💨", "🤥", "🫨",
+  "🙂‍↔️", "🙂‍↕️", "😌", "😔", "😪", "🤤", "😴", "🫩", "😷", "🤒",
+  "🤕", "🤢", "🤮", "🤧", "🥵", "🥶", "🥴", "😵", "😵‍💫", "🤯",
+  "🤠", "🥳", "🥸", "😎", "🤓", "🧐", "😕", "🫤", "😟", "🙁",
+  "☹️", "😮", "😯", "😲", "😳", "🫪", "🥺", "🥹", "😦", "😧",
+  "😨", "😰", "😥", "😢", "😭", "😱", "😖", "😣", "😞", "😓",
+  "😩", "😫", "🥱", "😤", "😡", "😠", "🤬", "😈", "👿", "💀",
+  "☠️", "💩", "🤡", "👹", "👺", "👻", "👽", "👾", "🤖", "😺",
+  "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾", "🙈", "🙉",
+  "🙊", "💌", "💘", "💝", "💖", "💗", "💓", "💞", "💕", "💟",
+  "❣️", "💔", "❤️‍🔥", "❤️‍🩹", "❤️", "🩷", "🧡", "💛", "💚", "💙",
+  "🩵", "💜", "🤎", "🖤", "🩶", "🤍", "💋", "💯", "💢", "🫯",
+  "💥", "💫", "💦", "💨", "🕳️", "💬", "👁️‍🗨️", "🗨️", "🗯️", "💭",
+  "💤",
 ];
 
 export function isAllowedSticker(value: string): boolean {
