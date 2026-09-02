@@ -9,6 +9,9 @@ import { EmojiPicker } from '@/components/emoji-picker';
 import { AttachmentPicker } from '@/components/attachment-picker';
 import { StickerPicker } from '@/components/sticker-picker';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
+import { fetchChildScreenTimeStatus, sendScreenTimeHeartbeat } from '@/lib/screen-time-api';
+import type { ChildLockStatus } from '@/lib/screen-time-api';
+import { Hourglass } from 'lucide-react';
 
 /**
  * Rota /join?token=... — é para onde o link do QR code aponta.
@@ -48,6 +51,7 @@ export function PairingJoin() {
   const [privateSending, setPrivateSending] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [screenLock, setScreenLock] = useState<ChildLockStatus | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -222,6 +226,40 @@ export function PairingJoin() {
     };
   }, [status, deviceToken]);
 
+  // Tempo de uso (item 11): manda um "heartbeat" a cada minuto enquanto o
+  // app dela está aberto — cada um soma 1 minuto no total de hoje no
+  // backend (ver POST /api/child/screen-time/heartbeat). A resposta já vem
+  // com o status de bloqueio atualizado, então a tela de bloqueio aparece
+  // no minuto exato em que o limite estoura, sem precisar de uma consulta
+  // separada.
+  useEffect(() => {
+    if (status !== 'success') return;
+    const token = deviceToken ?? localStorage.getItem(DEVICE_TOKEN_KEY);
+    if (!token) return;
+
+    let cancelled = false;
+
+    fetchChildScreenTimeStatus(token)
+      .then((data) => {
+        if (!cancelled) setScreenLock(data);
+      })
+      .catch(() => undefined);
+
+    function beat() {
+      sendScreenTimeHeartbeat(token!)
+        .then((data) => {
+          if (!cancelled) setScreenLock(data);
+        })
+        .catch(() => undefined);
+    }
+
+    const intervalId = window.setInterval(beat, 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [status, deviceToken]);
+
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-4 p-6 text-center">
       {/* Único ajuste que a Criança pode mexer além de conversar e
@@ -264,6 +302,19 @@ export function PairingJoin() {
             sua localização por aqui.
           </p>
 
+          {screenLock?.locked ? (
+            <div className="mt-4 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted)/.4)] p-6 text-center" data-testid="panel-screen-time-locked">
+              <Hourglass className="mx-auto text-[hsl(var(--muted-foreground))]" size={28} />
+              <h2 className="mt-3 text-base font-semibold">
+                {screenLock.lockReason === 'manual' ? 'Seu Responsável bloqueou o app por enquanto' : 'Seu tempo de uso de hoje acabou'}
+              </h2>
+              <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
+                {screenLock.lockReason === 'manual'
+                  ? 'Fale com ele se precisar usar o chat agora.'
+                  : 'Volte amanhã, ou peça pro seu Responsável liberar mais tempo hoje.'}
+              </p>
+            </div>
+          ) : (
           <div className="mt-4 w-full rounded-lg border border-[hsl(var(--border))] p-4 text-left">
             <h2 className="text-base font-semibold">Conversa com o Responsável</h2>
             <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
@@ -329,6 +380,7 @@ export function PairingJoin() {
               </button>
             </form>
           </div>
+          )}
 
           <div className="mt-4 w-full rounded-lg border border-[hsl(var(--border))] p-4 text-left">
             <h2 className="text-base font-semibold">Localização</h2>

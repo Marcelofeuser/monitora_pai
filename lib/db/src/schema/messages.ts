@@ -17,6 +17,12 @@ export const conversationsTable = pgTable("conversations", {
   // Regra central do produto: só é espelhada se NÃO for a conversa
   // Responsável <-> Criança. Toda conversa Criança <-> contato aprovado é espelhada.
   isParentChildPrivate: boolean("is_parent_child_private").notNull().default(false),
+  // Quando a última notificação push foi mandada pro Responsável sobre
+  // atividade nesta conversa. Nulo = nunca notificado. Usado pra decidir a
+  // cadência do item 10 do pedido: notifica na hora quando a conversa
+  // começa, depois no máximo a cada 30min enquanto ela continuar ativa
+  // (nunca por mensagem individual). Ver lib/notify.ts.
+  lastNotifiedAt: timestamp("last_notified_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

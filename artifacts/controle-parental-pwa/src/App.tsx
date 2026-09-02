@@ -10,7 +10,10 @@ import {
   CircleHelp,
   EyeOff,
   HeartHandshake,
+  Hourglass,
   House,
+  Lock,
+  Unlock,
   Info,
   LockKeyhole,
   MapPin,
@@ -39,12 +42,17 @@ import { PairingJoin } from '@/pages/PairingJoin';
 import { ThemeProvider, ThemeSwitcher } from '@/lib/theme';
 import { EmojiPicker } from '@/components/emoji-picker';
 import { AttachmentPicker } from '@/components/attachment-picker';
+import { enablePushNotifications, disablePushNotifications, isPushSupported } from '@/lib/push';
 import { StickerPicker } from '@/components/sticker-picker';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
+import { fetchGroups, createGroup, deleteGroup } from '@/lib/groups-api';
+import type { Group } from '@/lib/groups-api';
 import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages, fetchPrivateConversation, sendPrivateMessage, addApprovedContact } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, MirroredMessage, PrivateMessage } from '@/lib/conversations-api';
 import { fetchChildLocation } from '@/lib/location-api';
 import type { ChildLocation } from '@/lib/location-api';
+import { fetchScreenTime, setDailyLimit, setChildLock } from '@/lib/screen-time-api';
+import type { ScreenTimeStatus } from '@/lib/screen-time-api';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -82,7 +90,7 @@ const pt = {
     title: 'Conta do Responsável', description: 'Entre para manter seu espaço seguro entre dispositivos. Crianças entram apenas pelo pareamento da família.',
     signIn: 'Entrar', signUp: 'Criar conta', signedIn: 'Conta conectada', signedOut: 'Ainda sem uma conta?', signOut: 'Sair',
   },
-  nav: { overview: 'Visão geral', pair: 'Vincular criança', conversations: 'Conversas', location: 'Localização', settings: 'Configurações' },
+  nav: { overview: 'Visão geral', pair: 'Vincular criança', conversations: 'Conversas', location: 'Localização', screenTime: 'Tempo de uso', settings: 'Configurações' },
   shell: {
     yourProfile: 'Seu perfil', setupIncomplete: 'Configuração incompleta', completeSetup: 'Concluir configuração',
     familySpace: 'Espaço da família', noMonitoring: 'Sem monitoramento escondido, nunca.', localMode: 'modo local',
@@ -196,7 +204,7 @@ const en = {
     title: 'Responsible adult account', description: 'Sign in to keep your family space safe across devices. Children join only through family pairing.',
     signIn: 'Sign in', signUp: 'Create account', signedIn: 'Account connected', signedOut: 'No account yet?', signOut: 'Sign out',
   },
-  nav: { overview: 'Overview', pair: 'Pair device', conversations: 'Conversations', location: 'Location', settings: 'Settings' },
+  nav: { overview: 'Overview', pair: 'Pair device', conversations: 'Conversations', location: 'Location', screenTime: 'Screen time', settings: 'Settings' },
   shell: {
     yourProfile: 'Your profile', setupIncomplete: 'Setup incomplete', completeSetup: 'Complete setup',
     familySpace: 'Family space', noMonitoring: 'No hidden monitoring, ever.', localMode: 'local mode',
@@ -591,6 +599,7 @@ const navItems = [
   { href: '/pair', label: 'Pair', icon: QrCode },
   { href: '/conversations', label: 'Conversations', icon: MessageCircle },
   { href: '/location', label: 'Location', icon: MapPin },
+  { href: '/screen-time', label: 'Screen time', icon: Hourglass },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -716,7 +725,7 @@ function GuidedTour({ profile }: { profile: Profile | null }) {
 function NavItem({ item, active, onClick, mobile = false }: { item: typeof navItems[number]; active: boolean; onClick?: () => void; mobile?: boolean }) {
   const Icon = item.icon;
   const { t } = useLanguage();
-  const labels = [t.nav.overview, t.nav.pair, t.nav.conversations, t.nav.location, t.nav.settings];
+  const labels = [t.nav.overview, t.nav.pair, t.nav.conversations, t.nav.location, t.nav.screenTime, t.nav.settings];
   const label = labels[navItems.findIndex((nav) => nav.href === item.href)];
   return (
     <Link href={item.href} onClick={onClick} data-testid={`link-nav-${item.href.slice(1)}`} className={`${mobile ? 'flex min-w-[64px] flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[10px]' : 'flex items-center gap-3 rounded-xl px-3 py-3 text-sm'} font-bold transition-colors ${active ? (mobile ? 'bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-primary))]') : (mobile ? 'text-[hsl(var(--muted-foreground))]' : 'text-[hsl(var(--sidebar-foreground)/.65)] hover:bg-[hsl(var(--sidebar-accent)/.7)] hover:text-[hsl(var(--sidebar-foreground))]')}`}>
@@ -817,6 +826,11 @@ function Conversations() {
   const [privateDraft, setPrivateDraft] = useState('');
   const [privateSending, setPrivateSending] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupName, setGroupName] = useState('');
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [groupError, setGroupError] = useState<string | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [privateAuthToken, setPrivateAuthToken] = useState<string | null>(null);
 
@@ -858,6 +872,24 @@ function Conversations() {
       }
     }
     loadContacts();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedChildId, getToken]);
+
+  useEffect(() => {
+    if (!selectedChildId) return;
+    let cancelled = false;
+    async function loadGroups() {
+      try {
+        const token = await getToken();
+        const data = await fetchGroups(selectedChildId!, token);
+        if (!cancelled) setGroups(data);
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar grupos.');
+      }
+    }
+    loadGroups();
     return () => {
       cancelled = true;
     };
@@ -950,6 +982,35 @@ function Conversations() {
     }
   }
 
+  async function handleCreateGroup(event: FormEvent) {
+    event.preventDefault();
+    const name = groupName.trim();
+    if (!name || selectedContactIds.length === 0 || !selectedChildId || creatingGroup) return;
+    setCreatingGroup(true);
+    setGroupError(null);
+    try {
+      const token = await getToken();
+      const group = await createGroup(selectedChildId, name, selectedContactIds, token);
+      setGroups((current) => [...current, group]);
+      setGroupName('');
+      setSelectedContactIds([]);
+    } catch (err) {
+      setGroupError(err instanceof Error ? err.message : 'Erro ao criar grupo.');
+    } finally {
+      setCreatingGroup(false);
+    }
+  }
+
+  async function handleDeleteGroup(groupId: string) {
+    try {
+      const token = await getToken();
+      await deleteGroup(groupId, token);
+      setGroups((current) => current.filter((group) => group.id !== groupId));
+    } catch (err) {
+      setGroupError(err instanceof Error ? err.message : 'Erro ao excluir grupo.');
+    }
+  }
+
   const hasChild = (children?.length ?? 0) > 0;
   const selectedChildName = children?.find((child) => child.id === selectedChildId)?.name ?? null;
   const mediaAuthHeaders: HeadersInit = privateAuthToken ? { Authorization: `Bearer ${privateAuthToken}` } : {};
@@ -1026,6 +1087,63 @@ function Conversations() {
                   ))}
                 </ul>
               )}
+            </div>
+            <div className="border-t border-[hsl(var(--border))] p-6 sm:p-8">
+              <h2 className="text-xl font-extrabold">Grupos ({groups.length})</h2>
+              <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Um grupo só existe se você criar — escolha entre os contatos já aprovados.</p>
+              <form onSubmit={handleCreateGroup} className="mt-4 flex flex-col gap-3" data-testid="form-create-group">
+                <input
+                  value={groupName}
+                  onChange={(event) => setGroupName(event.target.value)}
+                  placeholder="Nome do grupo (ex: Família)"
+                  data-testid="input-group-name"
+                  className="h-11 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
+                />
+                {approvedContacts.length === 0 ? (
+                  <p className="text-xs text-[hsl(var(--muted-foreground))]">Aprove pelo menos um contato antes de criar um grupo.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {approvedContacts.map((contact) => {
+                      const checked = selectedContactIds.includes(contact.id);
+                      return (
+                        <button
+                          key={contact.id}
+                          type="button"
+                          onClick={() => setSelectedContactIds((current) => (checked ? current.filter((id) => id !== contact.id) : [...current, contact.id]))}
+                          data-testid={`button-toggle-group-contact-${contact.id}`}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${checked ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]'}`}
+                        >
+                          {contact.contactName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {groupError && <p className="text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{groupError}</p>}
+                <Button type="submit" disabled={!groupName.trim() || selectedContactIds.length === 0 || creatingGroup} className="w-fit" testId="button-create-group">
+                  {creatingGroup ? 'Criando…' : 'Criar grupo'}
+                </Button>
+              </form>
+              {groups.length === 0 ? (
+                <p className="mt-5 text-sm text-[hsl(var(--muted-foreground))]">Nenhum grupo criado ainda.</p>
+              ) : (
+                <ul className="mt-5 flex flex-col gap-2">
+                  {groups.map((group) => (
+                    <li key={group.id} className="rounded-xl bg-[hsl(var(--muted)/.5)] px-4 py-3 text-sm" data-testid={`row-group-${group.id}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-bold">{group.name}</p>
+                          <p className="mt-0.5 text-xs text-[hsl(var(--muted-foreground))]">{group.members.map((member) => member.contactName).join(', ')}</p>
+                        </div>
+                        <button type="button" onClick={() => { void handleDeleteGroup(group.id); }} aria-label="Excluir grupo" data-testid={`button-delete-group-${group.id}`} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))]">
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-4 flex items-center gap-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><Info size={13} /> O chat dentro do grupo ainda não está disponível — por enquanto isto só define quem fica autorizado a participar.</p>
             </div>
           </section>
         )
@@ -1375,14 +1493,241 @@ function ChildLocationPage() {
   );
 }
 
+// Tempo de uso e bloqueio temporário (item 11). Mesmo padrão de seletor de
+// criança das outras telas (Conversas/Localização): getToken + fetch*, com
+// seletor só quando há mais de uma criança vinculada.
+function ScreenTimePage() {
+  const { t } = useLanguage();
+  const { getToken } = useAuth();
+  const [children, setChildren] = useState<ChildUser[] | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [status, setStatus] = useState<ScreenTimeStatus | null>(null);
+  const [limitInput, setLimitInput] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const token = await getToken();
+        const kids = await fetchChildren(token);
+        if (cancelled) return;
+        setChildren(kids);
+        setSelectedChildId((current) => current ?? kids[0]?.id ?? null);
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar tempo de uso.');
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+
+  useEffect(() => {
+    if (!selectedChildId) return;
+    let cancelled = false;
+    async function loadStatus() {
+      try {
+        const token = await getToken();
+        const data = await fetchScreenTime(selectedChildId!, token);
+        if (!cancelled) {
+          setStatus(data);
+          setLimitInput(data.dailyLimitMinutes !== null ? String(data.dailyLimitMinutes) : '');
+        }
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar tempo de uso.');
+      }
+    }
+    loadStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedChildId, getToken]);
+
+  async function saveLimit(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedChildId || busy) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      const token = await getToken();
+      const trimmed = limitInput.trim();
+      const minutes = trimmed === '' ? null : Number(trimmed);
+      if (minutes !== null && (!Number.isFinite(minutes) || minutes <= 0)) {
+        throw new Error('Informe um número de minutos válido.');
+      }
+      await setDailyLimit(selectedChildId, minutes, token);
+      setStatus((current) => (current ? { ...current, dailyLimitMinutes: minutes } : current));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Erro ao salvar o limite.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleLock() {
+    if (!selectedChildId || !status || busy) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      const token = await getToken();
+      const shouldLock = status.lockReason !== 'manual';
+      await setChildLock(selectedChildId, shouldLock, token);
+      setStatus((current) =>
+        current
+          ? {
+              ...current,
+              locked: shouldLock,
+              lockReason: shouldLock
+                ? 'manual'
+                : current.dailyLimitMinutes !== null && current.minutesUsedToday >= current.dailyLimitMinutes
+                  ? 'limit'
+                  : null,
+            }
+          : current,
+      );
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Erro ao bloquear/desbloquear.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const hasChild = (children?.length ?? 0) > 0;
+  const selectedChild = children?.find((child) => child.id === selectedChildId) ?? null;
+  const manuallyLocked = status?.lockReason === 'manual';
+
+  return (
+    <>
+      <PageIntro eyebrow={t.nav.screenTime} title={t.nav.screenTime} description="Defina um limite diário de uso do chat e bloqueie o acesso quando precisar." />
+      {children && children.length > 1 && (
+        <div className="mb-6 flex flex-wrap items-center gap-1 rounded-2xl bg-[hsl(var(--muted)/.65)] p-1 sm:w-fit" data-testid="selector-screen-time-child">
+          {children.map((child) => (
+            <button
+              key={child.id}
+              type="button"
+              onClick={() => {
+                setSelectedChildId(child.id);
+                setStatus(null);
+              }}
+              data-testid={`button-select-screen-time-child-${child.id}`}
+              className={`min-h-10 rounded-xl px-4 text-xs font-extrabold transition-colors ${selectedChildId === child.id ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]'}`}
+            >
+              {child.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {loadError ? (
+        <p className="rounded-2xl bg-[hsl(var(--destructive)/.08)] p-5 text-sm text-[hsl(var(--destructive))]" data-testid="status-screen-time-error">{loadError}</p>
+      ) : !hasChild ? (
+        <EmptyState icon={Hourglass} eyebrow={t.nav.screenTime} title="Nenhuma criança vinculada" text="Vá em 'Vincular criança' para gerar o QR code de pareamento." actionLabel="Vincular criança" onAction={() => { window.location.href = '/pair'; }} testId="button-empty-screen-time" />
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
+            <div className="flex items-start gap-4"><IconBox icon={Hourglass} tone="gold" /><div><h2 className="text-lg font-extrabold">Uso de hoje{selectedChild ? ` — ${selectedChild.name}` : ''}</h2></div></div>
+            <p className="mt-5 font-display text-4xl tracking-[-.05em]" data-testid="text-minutes-used-today">{status ? `${status.minutesUsedToday} min` : '—'}</p>
+            <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+              {status?.dailyLimitMinutes != null ? `Limite diário: ${status.dailyLimitMinutes} min` : 'Sem limite diário definido'}
+            </p>
+            {status?.locked && (
+              <p className="mt-4 rounded-xl bg-[hsl(var(--destructive)/.08)] px-3 py-2 text-xs font-bold text-[hsl(var(--destructive))]" data-testid="status-child-locked">
+                {status.lockReason === 'manual' ? 'Bloqueado manualmente agora.' : 'Bloqueado — estourou o limite diário de hoje.'}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => { void toggleLock(); }}
+              disabled={busy || !status}
+              data-testid="button-toggle-child-lock"
+              className={`mt-5 inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-xs font-bold text-white transition-colors disabled:opacity-60 ${manuallyLocked ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--destructive))]'}`}
+            >
+              {manuallyLocked ? <><Unlock size={14} /> Desbloquear agora</> : <><Lock size={14} /> Bloquear agora</>}
+            </button>
+            {actionError && <p className="mt-3 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{actionError}</p>}
+          </section>
+          <form onSubmit={saveLimit} className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
+            <h2 className="text-lg font-extrabold">Limite diário</h2>
+            <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Em minutos por dia. Deixe em branco para não ter limite — ex: 90 para uma hora e meia.</p>
+            <input
+              type="number"
+              min={1}
+              max={1440}
+              value={limitInput}
+              onChange={(event) => setLimitInput(event.target.value)}
+              placeholder="ex: 90"
+              data-testid="input-daily-limit-minutes"
+              className="mt-4 h-11 w-full rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
+            />
+            <div className="mt-5">
+              <Button type="submit" disabled={busy} testId="button-save-daily-limit">Salvar limite</Button>
+            </div>
+          </form>
+        </div>
+      )}
+    </>
+  );
+}
+
 function SettingsPage() {
   const { t } = useLanguage();
+  const { getToken } = useAuth();
   const profile = readProfile();
   const [name, setName] = useState(profile?.displayName ?? '');
   const [family, setFamily] = useState(profile?.familyName ?? '');
   const [saved, setSaved] = useState(false);
   const [, setLocation] = useLocation();
-  const [notifications, setNotifications] = useState(() => localStorage.getItem('amparo-notifications') === 'true');
+  const [notifications, setNotifications] = useState(false);
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+
+  // Reflete o estado real da assinatura (não um valor salvo isolado no
+  // localStorage) — assim, se o usuário negou a permissão do navegador ou
+  // limpou os dados, o toggle não mente dizendo que está ligado.
+  useEffect(() => {
+    let cancelled = false;
+    if (!isPushSupported()) return;
+    navigator.serviceWorker.ready
+      .then((registration) => registration.pushManager.getSubscription())
+      .then((subscription) => {
+        if (!cancelled) setNotifications(Boolean(subscription));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function toggleNotifications() {
+    if (notificationsBusy) return;
+    setNotificationsBusy(true);
+    setNotificationsError(null);
+    try {
+      if (notifications) {
+        const token = await getToken();
+        await disablePushNotifications(token);
+        setNotifications(false);
+      } else {
+        const token = await getToken();
+        await enablePushNotifications(token);
+        setNotifications(true);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      setNotificationsError(
+        message === 'permission_denied'
+          ? 'Você negou a permissão de notificação do navegador — libere nas configurações do navegador pra ativar.'
+          : message === 'push_not_supported'
+            ? 'Este navegador não suporta notificações push.'
+            : 'Não foi possível ativar as notificações agora.',
+      );
+    } finally {
+      setNotificationsBusy(false);
+    }
+  }
 
   function saveSettings(event: FormEvent) {
     event.preventDefault();
@@ -1396,7 +1741,6 @@ function SettingsPage() {
       localStorage.removeItem(PROFILE_KEY);
       localStorage.removeItem(CONTACTS_KEY);
       localStorage.removeItem('amparo-location-sharing');
-      localStorage.removeItem('amparo-notifications');
       setLocation('/');
     }
   }
@@ -1411,7 +1755,7 @@ function SettingsPage() {
         </form>
         <div className="space-y-5">
            <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={CircleHelp} tone="teal" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.tutorialTitle}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.tutorialText}</p><button type="button" onClick={() => { window.dispatchEvent(new Event('amparo:start-tour')); }} data-testid="button-restart-tour" className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-4 text-xs font-bold text-[hsl(var(--primary-foreground))]">{t.settings.tutorialAction} <ArrowRight size={14} /></button></div></div></section>
-          <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Bell} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.notifications}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.notificationsText}</p></div><button role="switch" aria-checked={notifications} onClick={() => { const next = !notifications; setNotifications(next); localStorage.setItem('amparo-notifications', String(next)); }} data-testid="switch-notifications" className={`relative h-7 w-12 rounded-full transition-colors ${notifications ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${notifications ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></section>
+          <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Bell} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.notifications}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.notificationsText}</p>{notificationsError && <p className="mt-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{notificationsError}</p>}</div><button role="switch" aria-checked={notifications} disabled={notificationsBusy} onClick={() => { void toggleNotifications(); }} data-testid="switch-notifications" className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60 ${notifications ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${notifications ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></section>
           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Smartphone} tone="teal" /><div><h2 className="text-lg font-extrabold">{t.settings.device}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.deviceText}</p></div></div><div className="mt-5 flex items-center gap-2 border-t border-[hsl(var(--border))] pt-4 text-xs font-bold text-[hsl(var(--primary))]"><Check size={14} /> {t.settings.browserData}</div></section>
           <section className="rounded-[26px] border border-[hsl(var(--destructive)/.2)] bg-[hsl(var(--destructive)/.04)] p-6 sm:p-7"><h2 className="text-sm font-extrabold text-[hsl(var(--destructive))]">{t.settings.remove}</h2><p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.removeText}</p><button type="button" onClick={deleteProfile} data-testid="button-delete-profile" className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full border border-[hsl(var(--destructive)/.3)] px-4 text-xs font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)]">{t.settings.removeButton} <X size={14} /></button></section>
         </div>
@@ -1493,7 +1837,7 @@ function SignUpPage() {
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/location" component={LocationRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 // /join não exige o Responsável logado — é a rota que o QR code abre no
 // aparelho da Criança, que ainda não tem conta. /pair é o gerador do QR,
@@ -1526,6 +1870,7 @@ function PairingRoute() { return <RequireSignedIn><AppShell><PairingGenerate /><
 function DashboardRoute() { return <RequireSignedIn><AppShell><Dashboard /></AppShell></RequireSignedIn>; }
 function ConversationsRoute() { return <RequireSignedIn><AppShell><Conversations /></AppShell></RequireSignedIn>; }
 function LocationRoute() { return <RequireSignedIn><AppShell><LocationPage /></AppShell></RequireSignedIn>; }
+function ScreenTimeRoute() { return <RequireSignedIn><AppShell><ScreenTimePage /></AppShell></RequireSignedIn>; }
 function SettingsRoute() { return <RequireSignedIn><AppShell><SettingsPage /></AppShell></RequireSignedIn>; }
 
 function NotFound() {
@@ -1560,7 +1905,7 @@ function ClerkApp() {
 function App() {
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?v=3`, { updateViaCache: 'none' }).catch(() => undefined);
+      navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?v=4`, { updateViaCache: 'none' }).catch(() => undefined);
     }
   }, []);
   if (!clerkPubKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY');

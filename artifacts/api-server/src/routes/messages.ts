@@ -9,6 +9,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { z } from "zod/v4";
+import { notifyParentOfActivity } from "../lib/notify";
 
 const router: IRouter = Router();
 
@@ -87,6 +88,14 @@ router.post("/messages", async (req, res) => {
       await db.insert(mirrorLogTable).values({
         messageId: message.id,
         mirroredToParentId: childInConversation.parentId,
+      });
+      // Item 10 do pedido — mesma regra do canal privado (ver
+      // routes/conversations.ts): notifica na hora na primeira vez, depois
+      // no máximo a cada 30min enquanto a conversa continuar ativa.
+      await notifyParentOfActivity({
+        conversation,
+        senderId: auth.userId,
+        parentUserId: childInConversation.parentId,
       });
     }
   }

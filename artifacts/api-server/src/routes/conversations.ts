@@ -6,6 +6,7 @@ import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childA
 import { uploadSingleMediaFile } from "../middlewares/mediaUpload";
 import { kindForMime, maxBytesForMime, saveMedia } from "../lib/mediaStorage";
 import { isAllowedSticker } from "../lib/stickers";
+import { notifyParentOfActivity } from "../lib/notify";
 
 const router: IRouter = Router();
 
@@ -213,6 +214,10 @@ router.post(
         contentUrl: input.contentUrl,
       })
       .returning();
+
+    // Só dispara quando é a Criança escrevendo pro Responsável (o envio do
+    // lado do Responsável não passa por aqui) — item 10 do pedido.
+    await notifyParentOfActivity({ conversation, senderId: childId, parentUserId: child.parentId });
 
     return res.status(201).json(message);
   },

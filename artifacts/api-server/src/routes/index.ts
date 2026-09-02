@@ -6,6 +6,10 @@ import messagesRouter from "./messages";
 import locationRouter from "./location";
 import conversationsRouter from "./conversations";
 import mediaRouter from "./media";
+import notificationsRouter from "./notifications";
+import screenTimeRouter from "./screenTime";
+import groupsRouter from "./groups";
+import migrateNewTablesRouter from "./migrateNewTables";
 
 const router: IRouter = Router();
 
@@ -16,5 +20,9 @@ router.use(messagesRouter);
 router.use(locationRouter);
 router.use(conversationsRouter);
 router.use(mediaRouter);
+router.use(notificationsRouter);
+router.use(screenTimeRouter);
+router.use(groupsRouter);
+router.use(migrateNewTablesRouter);
 
 export default router;

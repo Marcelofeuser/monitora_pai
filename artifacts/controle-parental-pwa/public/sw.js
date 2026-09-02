@@ -1,4 +1,4 @@
-const CACHE_NAME = 'amparo-shell-v3';
+const CACHE_NAME = 'amparo-shell-v4';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -59,5 +59,41 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html'))),
+  );
+});
+
+// Notificações push (item 10 do pedido): o backend manda um payload JSON
+// {title, body, url} sempre que o Responsável precisa ser avisado de
+// atividade no chat — ver lib/notify.ts no api-server. O clique abre (ou
+// foca) a aba do app já na tela de conversas.
+self.addEventListener('push', (event) => {
+  let data = { title: 'Amparo', body: 'Você tem uma atualização.', url: './' };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {
+    // payload não era JSON — mantém o texto padrão em vez de quebrar.
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: './favicon.svg',
+      data: { url: data.url },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url ?? './';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) {
+          client.navigate?.(targetUrl);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(targetUrl);
+    }),
   );
 });
