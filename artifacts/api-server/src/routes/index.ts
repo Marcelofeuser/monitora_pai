@@ -5,6 +5,7 @@ import contactsRouter from "./contacts";
 import messagesRouter from "./messages";
 import locationRouter from "./location";
 import conversationsRouter from "./conversations";
+import mediaRouter from "./media";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(contactsRouter);
 router.use(messagesRouter);
 router.use(locationRouter);
 router.use(conversationsRouter);
+router.use(mediaRouter);
 
 export default router;

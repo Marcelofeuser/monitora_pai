@@ -86,16 +86,47 @@ export async function fetchPrivateConversation(
   return res.json();
 }
 
+// A mensagem pode ser texto, uma foto/vídeo anexado (campo "file") ou uma
+// figurinha (stickerEmoji) — nunca mais de um ao mesmo tempo. Anexo/
+// figurinha viajam como multipart porque texto puro sozinho continua indo
+// como JSON (mais leve, e mantém compatível com o formato de sempre).
+export type SendPrivateMessageInput =
+  | { textContent: string }
+  | { file: File; caption?: string }
+  | { stickerEmoji: string };
+
 export async function sendPrivateMessage(
   childId: string,
-  textContent: string,
+  input: SendPrivateMessageInput,
   authToken: string | null,
 ): Promise<PrivateMessage> {
-  const res = await fetch(`${API_URL}/api/conversations/private/messages`, {
-    method: 'POST',
-    headers: authHeaders(authToken),
-    body: JSON.stringify({ childId, textContent }),
-  });
+  let res: Response;
+  if ('file' in input) {
+    const form = new FormData();
+    form.append('childId', childId);
+    form.append('file', input.file);
+    if (input.caption) form.append('textContent', input.caption);
+    res = await fetch(`${API_URL}/api/conversations/private/messages`, {
+      method: 'POST',
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+      body: form,
+    });
+  } else if ('stickerEmoji' in input) {
+    const form = new FormData();
+    form.append('childId', childId);
+    form.append('stickerEmoji', input.stickerEmoji);
+    res = await fetch(`${API_URL}/api/conversations/private/messages`, {
+      method: 'POST',
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+      body: form,
+    });
+  } else {
+    res = await fetch(`${API_URL}/api/conversations/private/messages`, {
+      method: 'POST',
+      headers: authHeaders(authToken),
+      body: JSON.stringify({ childId, textContent: input.textContent }),
+    });
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `send_private_message_failed_${res.status}`);

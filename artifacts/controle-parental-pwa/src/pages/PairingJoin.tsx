@@ -6,6 +6,9 @@ import { fetchChildPrivateConversation, sendChildPrivateMessage } from '@/lib/ch
 import type { PrivateMessage } from '@/lib/child-conversations-api';
 import { ThemeSwitcher } from '@/lib/theme';
 import { EmojiPicker } from '@/components/emoji-picker';
+import { AttachmentPicker } from '@/components/attachment-picker';
+import { StickerPicker } from '@/components/sticker-picker';
+import { MessageContent, isStickerMessage } from '@/components/message-content';
 
 /**
  * Rota /join?token=... — é para onde o link do QR code aponta.
@@ -43,6 +46,8 @@ export function PairingJoin() {
   const [privateError, setPrivateError] = useState<string | null>(null);
   const [privateDraft, setPrivateDraft] = useState('');
   const [privateSending, setPrivateSending] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -125,15 +130,34 @@ export function PairingJoin() {
     event.preventDefault();
     const text = privateDraft.trim();
     const token = deviceToken ?? localStorage.getItem(DEVICE_TOKEN_KEY);
-    if (!text || !token || privateSending) return;
+    if ((!text && !pendingFile) || !token || privateSending) return;
     setPrivateSending(true);
     setPrivateError(null);
     try {
-      const message = await sendChildPrivateMessage(token, text);
+      const message = pendingFile
+        ? await sendChildPrivateMessage(token, { file: pendingFile, caption: text || undefined })
+        : await sendChildPrivateMessage(token, { textContent: text });
       setPrivateMessages((current) => [...current, message]);
       setPrivateDraft('');
+      setPendingFile(null);
     } catch (err) {
       setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+    } finally {
+      setPrivateSending(false);
+    }
+  }
+
+  // Figurinha manda na hora, sem passar pelo composer.
+  async function sendSticker(emoji: string) {
+    const token = deviceToken ?? localStorage.getItem(DEVICE_TOKEN_KEY);
+    if (!token || privateSending) return;
+    setPrivateSending(true);
+    setPrivateError(null);
+    try {
+      const message = await sendChildPrivateMessage(token, { stickerEmoji: emoji });
+      setPrivateMessages((current) => [...current, message]);
+    } catch (err) {
+      setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
     } finally {
       setPrivateSending(false);
     }
@@ -253,29 +277,52 @@ export function PairingJoin() {
               ) : (
                 privateMessages.map((message) => {
                   const fromMe = childId !== null && message.senderId === childId;
+                  const sticker = isStickerMessage(message);
+                  const bubbleClass = sticker
+                    ? `${fromMe ? 'self-end' : 'self-start'}`
+                    : `rounded-2xl px-3 py-2 shadow-sm ${fromMe ? 'self-end bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'self-start bg-[hsl(var(--card))]'}`;
                   return (
-                    <div
-                      key={message.id}
-                      className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-6 ${fromMe ? 'self-end bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'self-start bg-[hsl(var(--card))] shadow-sm'}`}
-                    >
-                      {message.textContent}
+                    <div key={message.id} className={`max-w-[85%] text-sm leading-6 ${bubbleClass}`}>
+                      <MessageContent message={message} authHeaders={{ 'X-Child-Token': deviceToken ?? '' }} />
                     </div>
                   );
                 })
               )}
             </div>
             {privateError && <p className="mt-2 text-sm text-red-600">{privateError}</p>}
+            {attachError && <p className="mt-2 text-sm text-red-600">{attachError}</p>}
+            {pendingFile && (
+              <div className="mt-2 flex items-center gap-2 rounded-md bg-[hsl(var(--muted)/.6)] px-3 py-2 text-xs font-semibold">
+                {pendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {pendingFile.name}
+                <button
+                  type="button"
+                  onClick={() => setPendingFile(null)}
+                  aria-label="Remover anexo"
+                  className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <form onSubmit={sendPrivate} className="mt-3 flex items-center gap-2">
               <EmojiPicker onSelect={(emoji) => setPrivateDraft((current) => current + emoji)} />
+              <AttachmentPicker
+                onSelect={(file) => {
+                  setAttachError(null);
+                  setPendingFile(file);
+                }}
+                onError={setAttachError}
+              />
+              <StickerPicker onSelect={(emoji) => { void sendSticker(emoji); }} />
               <input
                 value={privateDraft}
                 onChange={(event) => setPrivateDraft(event.target.value)}
-                placeholder="Escreva uma mensagem…"
+                placeholder={pendingFile ? 'Legenda (opcional)…' : 'Escreva uma mensagem…'}
                 className="h-11 flex-1 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
               />
               <button
                 type="submit"
-                disabled={!privateDraft.trim() || privateSending}
+                disabled={(!privateDraft.trim() && !pendingFile) || privateSending}
                 className="h-11 rounded-md bg-[hsl(var(--primary))] px-4 text-sm font-medium text-[hsl(var(--primary-foreground))] disabled:opacity-60"
               >
                 {privateSending ? '…' : 'Enviar'}

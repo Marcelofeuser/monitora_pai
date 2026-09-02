@@ -33,15 +33,40 @@ export async function fetchChildPrivateConversation(deviceToken: string): Promis
   return res.json();
 }
 
+export type SendChildPrivateMessageInput =
+  | { textContent: string }
+  | { file: File; caption?: string }
+  | { stickerEmoji: string };
+
 export async function sendChildPrivateMessage(
   deviceToken: string,
-  textContent: string,
+  input: SendChildPrivateMessageInput,
 ): Promise<PrivateMessage> {
-  const res = await fetch(`${API_URL}/api/child/conversations/private/messages`, {
-    method: 'POST',
-    headers: deviceHeaders(deviceToken),
-    body: JSON.stringify({ textContent }),
-  });
+  let res: Response;
+  if ('file' in input) {
+    const form = new FormData();
+    form.append('file', input.file);
+    if (input.caption) form.append('textContent', input.caption);
+    res = await fetch(`${API_URL}/api/child/conversations/private/messages`, {
+      method: 'POST',
+      headers: { 'X-Child-Token': deviceToken },
+      body: form,
+    });
+  } else if ('stickerEmoji' in input) {
+    const form = new FormData();
+    form.append('stickerEmoji', input.stickerEmoji);
+    res = await fetch(`${API_URL}/api/child/conversations/private/messages`, {
+      method: 'POST',
+      headers: { 'X-Child-Token': deviceToken },
+      body: form,
+    });
+  } else {
+    res = await fetch(`${API_URL}/api/child/conversations/private/messages`, {
+      method: 'POST',
+      headers: deviceHeaders(deviceToken),
+      body: JSON.stringify({ textContent: input.textContent }),
+    });
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `send_private_message_failed_${res.status}`);

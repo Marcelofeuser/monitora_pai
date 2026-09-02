@@ -38,6 +38,9 @@ import { PairingGenerate } from '@/pages/PairingGenerate';
 import { PairingJoin } from '@/pages/PairingJoin';
 import { ThemeProvider, ThemeSwitcher } from '@/lib/theme';
 import { EmojiPicker } from '@/components/emoji-picker';
+import { AttachmentPicker } from '@/components/attachment-picker';
+import { StickerPicker } from '@/components/sticker-picker';
+import { MessageContent, isStickerMessage } from '@/components/message-content';
 import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages, fetchPrivateConversation, sendPrivateMessage, addApprovedContact } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, MirroredMessage, PrivateMessage } from '@/lib/conversations-api';
 import { fetchChildLocation } from '@/lib/location-api';
@@ -813,6 +816,9 @@ function Conversations() {
   const [privateError, setPrivateError] = useState<string | null>(null);
   const [privateDraft, setPrivateDraft] = useState('');
   const [privateSending, setPrivateSending] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [privateAuthToken, setPrivateAuthToken] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -869,6 +875,7 @@ function Conversations() {
       setPrivateError(null);
       try {
         const token = await getToken();
+        if (!cancelled) setPrivateAuthToken(token);
         const data = await fetchPrivateConversation(selectedChildId!, token);
         if (!cancelled) setPrivateMessages(data.messages);
       } catch (err) {
@@ -886,16 +893,37 @@ function Conversations() {
   async function sendPrivate(event: FormEvent) {
     event.preventDefault();
     const text = privateDraft.trim();
-    if (!text || !selectedChildId || privateSending) return;
+    if ((!text && !pendingFile) || !selectedChildId || privateSending) return;
     setPrivateSending(true);
     setPrivateError(null);
     try {
       const token = await getToken();
-      const message = await sendPrivateMessage(selectedChildId, text, token);
+      setPrivateAuthToken(token);
+      const message = pendingFile
+        ? await sendPrivateMessage(selectedChildId, { file: pendingFile, caption: text || undefined }, token)
+        : await sendPrivateMessage(selectedChildId, { textContent: text }, token);
       setPrivateMessages((current) => [...current, message]);
       setPrivateDraft('');
+      setPendingFile(null);
     } catch (err) {
       setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+    } finally {
+      setPrivateSending(false);
+    }
+  }
+
+  // Figurinha manda na hora, sem passar pelo composer — igual WhatsApp.
+  async function sendSticker(emoji: string) {
+    if (!selectedChildId || privateSending) return;
+    setPrivateSending(true);
+    setPrivateError(null);
+    try {
+      const token = await getToken();
+      setPrivateAuthToken(token);
+      const message = await sendPrivateMessage(selectedChildId, { stickerEmoji: emoji }, token);
+      setPrivateMessages((current) => [...current, message]);
+    } catch (err) {
+      setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
     } finally {
       setPrivateSending(false);
     }
@@ -924,6 +952,7 @@ function Conversations() {
 
   const hasChild = (children?.length ?? 0) > 0;
   const selectedChildName = children?.find((child) => child.id === selectedChildId)?.name ?? null;
+  const mediaAuthHeaders: HeadersInit = privateAuthToken ? { Authorization: `Bearer ${privateAuthToken}` } : {};
 
   return (
     <>
@@ -993,7 +1022,7 @@ function Conversations() {
               ) : (
                 <ul className="mt-4 flex flex-col gap-2">
                   {mirroredMessages.map((entry) => (
-                    <li key={entry.message.id} className="rounded-xl bg-[hsl(var(--muted)/.5)] px-4 py-3 text-sm" data-testid={`row-mirrored-message-${entry.message.id}`}>{entry.message.textContent ?? `[${entry.message.type}]`}</li>
+                    <li key={entry.message.id} className="rounded-xl bg-[hsl(var(--muted)/.5)] px-4 py-3 text-sm" data-testid={`row-mirrored-message-${entry.message.id}`}>{entry.message.textContent ?? (entry.message.type === 'video' ? 'Vídeo enviado' : entry.message.type === 'photo' ? 'Foto enviada' : `[${entry.message.type}]`)}</li>
                   ))}
                 </ul>
               )}
@@ -1017,14 +1046,18 @@ function Conversations() {
                 ) : (
                   privateMessages.map((message) => {
                     const fromMe = message.senderId !== selectedChildId;
+                    const sticker = isStickerMessage(message);
+                    const bubbleClass = sticker
+                      ? `${fromMe ? 'self-end' : 'self-start'}`
+                      : `rounded-2xl px-4 py-2.5 shadow-sm ${fromMe ? 'self-end bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'self-start bg-[hsl(var(--card))]'}`;
                     return (
                       <div
                         key={message.id}
                         data-testid={`row-private-message-${message.id}`}
-                        className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-6 ${fromMe ? 'self-end bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'self-start bg-[hsl(var(--card))] shadow-sm'}`}
+                        className={`max-w-[80%] text-sm leading-6 ${bubbleClass}`}
                       >
-                        {message.textContent}
-                        <p className={`mt-1 text-[10px] font-mono-app uppercase tracking-[.08em] ${fromMe ? 'text-[hsl(var(--primary-foreground)/.7)]' : 'text-[hsl(var(--muted-foreground))]'}`}>
+                        <MessageContent message={message} authHeaders={mediaAuthHeaders} />
+                        <p className={`mt-1 text-[10px] font-mono-app uppercase tracking-[.08em] ${fromMe && !sticker ? 'text-[hsl(var(--primary-foreground)/.7)]' : 'text-[hsl(var(--muted-foreground))]'}`}>
                           {new Date(message.createdAt).toLocaleString('pt-BR')}
                         </p>
                       </div>
@@ -1033,16 +1066,38 @@ function Conversations() {
                 )}
               </div>
               {privateError && <p className="text-xs font-semibold text-[hsl(var(--destructive))]" role="alert" data-testid="status-private-error">{privateError}</p>}
-              <form onSubmit={sendPrivate} className="flex items-center gap-3">
+              {attachError && <p className="text-xs font-semibold text-[hsl(var(--destructive))]" role="alert" data-testid="status-attach-error">{attachError}</p>}
+              {pendingFile && (
+                <div className="flex items-center gap-2 self-start rounded-xl bg-[hsl(var(--muted)/.6)] px-3 py-2 text-xs font-semibold" data-testid="chip-pending-attachment">
+                  {pendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {pendingFile.name}
+                  <button
+                    type="button"
+                    onClick={() => setPendingFile(null)}
+                    aria-label="Remover anexo"
+                    className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+              <form onSubmit={sendPrivate} className="flex items-center gap-2">
                 <EmojiPicker onSelect={(emoji) => setPrivateDraft((current) => current + emoji)} />
+                <AttachmentPicker
+                  onSelect={(file) => {
+                    setAttachError(null);
+                    setPendingFile(file);
+                  }}
+                  onError={setAttachError}
+                />
+                <StickerPicker onSelect={(emoji) => { void sendSticker(emoji); }} />
                 <input
                   value={privateDraft}
                   onChange={(event) => setPrivateDraft(event.target.value)}
-                  placeholder={`Escreva pra ${selectedChildName ?? 'a criança'}…`}
+                  placeholder={pendingFile ? 'Adicione uma legenda (opcional)…' : `Escreva pra ${selectedChildName ?? 'a criança'}…`}
                   className="h-12 flex-1 rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--background)/.65)] px-4 text-sm outline-none focus:border-[hsl(var(--primary))]"
                   data-testid="input-private-message"
                 />
-                <Button type="submit" disabled={!privateDraft.trim() || privateSending} testId="button-send-private-message">
+                <Button type="submit" disabled={(!privateDraft.trim() && !pendingFile) || privateSending} testId="button-send-private-message">
                   {privateSending ? 'Enviando…' : 'Enviar'}
                 </Button>
               </form>
