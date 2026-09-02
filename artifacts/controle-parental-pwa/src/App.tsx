@@ -36,7 +36,9 @@ import { Link, Route, Switch, useLocation } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { PairingGenerate } from '@/pages/PairingGenerate';
 import { PairingJoin } from '@/pages/PairingJoin';
-import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages, fetchPrivateConversation, sendPrivateMessage } from '@/lib/conversations-api';
+import { ThemeProvider, ThemeSwitcher } from '@/lib/theme';
+import { EmojiPicker } from '@/components/emoji-picker';
+import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages, fetchPrivateConversation, sendPrivateMessage, addApprovedContact } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, MirroredMessage, PrivateMessage } from '@/lib/conversations-api';
 import { fetchChildLocation } from '@/lib/location-api';
 import type { ChildLocation } from '@/lib/location-api';
@@ -466,6 +468,7 @@ function Onboarding() {
             {t.onboarding.aside}
           </div>
           <LanguageSwitcher />
+          <ThemeSwitcher />
           </div>
         </header>
 
@@ -630,7 +633,7 @@ function AppShell({ children }: { children: ReactNode }) {
           <button className="grid size-11 place-items-center rounded-full hover:bg-[hsl(var(--muted))] lg:hidden" onClick={() => setMenuOpen(true)} aria-label={t.shell.openMenu} data-testid="button-open-menu"><Menu size={21} /></button>
           <div className="lg:hidden"><BrandMark /></div>
           <div className="hidden lg:block"><p className="font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]">{t.shell.familySpace} / {profile?.familyName || t.shell.familyNotSet}</p></div>
-          <div className="flex items-center gap-3"><LanguageSwitcher /><span className="hidden items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))] sm:flex"><span className="size-2 rounded-full bg-[hsl(var(--primary))]" /> {t.shell.localPrivate}</span></div>
+          <div className="flex items-center gap-3"><LanguageSwitcher /><ThemeSwitcher /><span className="hidden items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))] sm:flex"><span className="size-2 rounded-full bg-[hsl(var(--primary))]" /> {t.shell.localPrivate}</span></div>
         </header>
         <main className="mx-auto max-w-[1280px] px-5 pb-28 pt-9 sm:px-8 lg:px-12 lg:pb-12 lg:pt-12">{children}</main>
       </div>
@@ -800,6 +803,9 @@ function Conversations() {
   const [children, setChildren] = useState<ChildUser[] | null>(null);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [approvedContacts, setApprovedContacts] = useState<ApprovedContact[]>([]);
+  const [newContactName, setNewContactName] = useState('');
+  const [addingContact, setAddingContact] = useState(false);
+  const [addContactError, setAddContactError] = useState<string | null>(null);
   const [mirroredMessages, setMirroredMessages] = useState<MirroredMessage[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([]);
@@ -895,6 +901,27 @@ function Conversations() {
     }
   }
 
+  // Só o Responsável adiciona contato — a Criança nunca vê essa opção no
+  // app dela (ver PairingJoin.tsx). Depois de aprovado aqui, o contato já
+  // nasce liberado pra conversar (ver comentário em routes/contacts.ts).
+  async function addContact(event: FormEvent) {
+    event.preventDefault();
+    const name = newContactName.trim();
+    if (!name || !selectedChildId || addingContact) return;
+    setAddingContact(true);
+    setAddContactError(null);
+    try {
+      const token = await getToken();
+      const contact = await addApprovedContact(selectedChildId, name, token);
+      setApprovedContacts((current) => [...current, contact]);
+      setNewContactName('');
+    } catch (err) {
+      setAddContactError(err instanceof Error ? err.message : 'Erro ao adicionar contato.');
+    } finally {
+      setAddingContact(false);
+    }
+  }
+
   const hasChild = (children?.length ?? 0) > 0;
   const selectedChildName = children?.find((child) => child.id === selectedChildId)?.name ?? null;
 
@@ -925,17 +952,39 @@ function Conversations() {
           <p className="rounded-2xl bg-[hsl(var(--destructive)/.08)] p-5 text-sm text-[hsl(var(--destructive))]" data-testid="status-conversations-error">{loadError}</p>
         ) : !hasChild ? (
           <EmptyState icon={MessageCircle} eyebrow={t.conversations.emptyEyebrow} title={t.conversations.emptyTitle} text="Nenhuma criança vinculada ainda. Vá em 'Vincular criança' para gerar o QR code de pareamento." actionLabel="Vincular criança" onAction={() => { window.location.href = '/pair'; }} testId="button-empty-private" />
-        ) : approvedContacts.length === 0 ? (
-          <EmptyState icon={MessageCircle} eyebrow={t.conversations.emptyEyebrow} title={t.conversations.emptyTitle} text={t.conversations.emptyText} actionLabel={t.conversations.learnPrivate} onAction={() => setPrivateOpen(true)} testId="button-empty-private" />
         ) : (
           <section className="overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] shadow-card">
             <div className="border-b border-[hsl(var(--border))] p-6 sm:p-8">
               <h2 className="text-xl font-extrabold">Contatos aprovados ({approvedContacts.length})</h2>
-              <ul className="mt-4 flex flex-col gap-2">
-                {approvedContacts.map((contact) => (
-                  <li key={contact.id} className="rounded-xl bg-[hsl(var(--muted)/.5)] px-4 py-3 text-sm font-bold" data-testid={`row-approved-contact-${contact.id}`}>{contact.contactName}</li>
-                ))}
-              </ul>
+              <form onSubmit={addContact} className="mt-4 flex items-center gap-2" data-testid="form-add-contact">
+                <input
+                  value={newContactName}
+                  onChange={(event) => setNewContactName(event.target.value)}
+                  placeholder="Nome do contato (ex: Vovó Ana)"
+                  data-testid="input-new-contact-name"
+                  className="h-11 flex-1 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
+                />
+                <button
+                  type="submit"
+                  disabled={!newContactName.trim() || addingContact}
+                  data-testid="button-add-contact"
+                  className="h-11 whitespace-nowrap rounded-md bg-[hsl(var(--primary))] px-4 text-sm font-medium text-[hsl(var(--primary-foreground))] disabled:opacity-60"
+                >
+                  {addingContact ? "…" : "Adicionar"}
+                </button>
+              </form>
+              {addContactError && (
+                <p className="mt-2 text-sm text-red-600" data-testid="status-add-contact-error">{addContactError}</p>
+              )}
+              {approvedContacts.length === 0 ? (
+                <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">{t.contacts.approvedEmpty}</p>
+              ) : (
+                <ul className="mt-4 flex flex-col gap-2">
+                  {approvedContacts.map((contact) => (
+                    <li key={contact.id} className="rounded-xl bg-[hsl(var(--muted)/.5)] px-4 py-3 text-sm font-bold" data-testid={`row-approved-contact-${contact.id}`}>{contact.contactName}</li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div className="p-6 sm:p-8">
               <h2 className="text-xl font-extrabold">Mensagens espelhadas ({mirroredMessages.length})</h2>
@@ -985,6 +1034,7 @@ function Conversations() {
               </div>
               {privateError && <p className="text-xs font-semibold text-[hsl(var(--destructive))]" role="alert" data-testid="status-private-error">{privateError}</p>}
               <form onSubmit={sendPrivate} className="flex items-center gap-3">
+                <EmojiPicker onSelect={(emoji) => setPrivateDraft((current) => current + emoji)} />
                 <input
                   value={privateDraft}
                   onChange={(event) => setPrivateDraft(event.target.value)}
@@ -1459,7 +1509,7 @@ function App() {
     }
   }, []);
   if (!clerkPubKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY');
-  return <QueryClientProvider client={queryClient}><TooltipProvider><LanguageProvider><ClerkApp /></LanguageProvider></TooltipProvider></QueryClientProvider>;
+  return <QueryClientProvider client={queryClient}><TooltipProvider><ThemeProvider><LanguageProvider><ClerkApp /></LanguageProvider></ThemeProvider></TooltipProvider></QueryClientProvider>;
 }
 
 function SwitchRouter() {

@@ -102,3 +102,24 @@ export async function sendPrivateMessage(
   }
   return res.json();
 }
+
+
+// Só o Responsável adiciona contato — a Criança não tem como chamar essa
+// rota (não tem conta Clerk). Nasce direto como "approved": ver o
+// comentário em routes/contacts.ts.
+export async function addApprovedContact(
+  childId: string,
+  contactName: string,
+  authToken: string | null,
+): Promise<ApprovedContact> {
+  const res = await fetch(`${API_URL}/api/contacts`, {
+    method: 'POST',
+    headers: authHeaders(authToken),
+    body: JSON.stringify({ childId, contactName }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `add_contact_failed_${res.status}`);
+  }
+  return res.json();
+}

@@ -4,6 +4,8 @@ import { confirmPairing } from '@/lib/pairing-api';
 import { reportLocation } from '@/lib/location-api';
 import { fetchChildPrivateConversation, sendChildPrivateMessage } from '@/lib/child-conversations-api';
 import type { PrivateMessage } from '@/lib/child-conversations-api';
+import { ThemeSwitcher } from '@/lib/theme';
+import { EmojiPicker } from '@/components/emoji-picker';
 
 /**
  * Rota /join?token=... — é para onde o link do QR code aponta.
@@ -32,8 +34,9 @@ export function PairingJoin() {
   const [childName, setChildName] = useState<string | null>(null);
   const [childId, setChildId] = useState<string | null>(null);
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
-  const [shareStatus, setShareStatus] = useState<'idle' | 'asking' | 'shared' | 'error'>('idle');
-  const [shareError, setShareError] = useState<string | null>(null);
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'active' | 'error'>('idle');
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [lastSharedAt, setLastSharedAt] = useState<Date | null>(null);
 
   const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([]);
   const [privateLoading, setPrivateLoading] = useState(false);
@@ -136,47 +139,74 @@ export function PairingJoin() {
     }
   }
 
-  function shareLocation() {
+  // Localização automática: antes exigia a Criança tocar num botão toda
+  // vez. Agora, enquanto o app dela está aberto, manda a posição sozinho
+  // (primeira vez assim que a tela carrega, depois a cada 5 minutos) — sem
+  // pedir confirmação a cada envio. Um PWA de navegador não roda com o app
+  // fechado, então isso só funciona com a aba aberta; é a única forma real
+  // de "automático" que dá pra fazer sem virar um app nativo.
+  useEffect(() => {
+    if (status !== 'success') return;
     const token = deviceToken ?? localStorage.getItem(DEVICE_TOKEN_KEY);
-    if (!token) {
-      setShareStatus('error');
-      setShareError('Não foi possível encontrar a credencial deste aparelho.');
-      return;
-    }
+    if (!token) return;
     if (!('geolocation' in navigator)) {
-      setShareStatus('error');
-      setShareError('Este navegador não suporta localização.');
+      setLocationStatus('error');
+      setLocationError('Este navegador não suporta localização.');
       return;
     }
-    setShareStatus('asking');
-    setShareError(null);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        reportLocation(token, {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracyMeters: position.coords.accuracy ?? undefined,
-        })
-          .then(() => setShareStatus('shared'))
-          .catch((err) => {
-            setShareStatus('error');
-            setShareError(err instanceof Error ? err.message : 'Erro desconhecido.');
-          });
-      },
-      (err) => {
-        setShareStatus('error');
-        setShareError(
-          err.code === err.PERMISSION_DENIED
-            ? 'Permissão de localização negada.'
-            : 'Não foi possível obter a localização.',
-        );
-      },
-      { enableHighAccuracy: true, timeout: 15000 },
-    );
-  }
+
+    let cancelled = false;
+
+    function reportOnce() {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          reportLocation(token!, {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracyMeters: position.coords.accuracy ?? undefined,
+          })
+            .then(() => {
+              if (cancelled) return;
+              setLocationStatus('active');
+              setLocationError(null);
+              setLastSharedAt(new Date());
+            })
+            .catch((err) => {
+              if (cancelled) return;
+              setLocationStatus('error');
+              setLocationError(err instanceof Error ? err.message : 'Erro desconhecido.');
+            });
+        },
+        (err) => {
+          if (cancelled) return;
+          setLocationStatus('error');
+          setLocationError(
+            err.code === err.PERMISSION_DENIED
+              ? 'Permissão de localização negada.'
+              : 'Não foi possível obter a localização.',
+          );
+        },
+        { enableHighAccuracy: true, timeout: 15000 },
+      );
+    }
+
+    reportOnce();
+    const intervalId = window.setInterval(reportOnce, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [status, deviceToken]);
 
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-4 p-6 text-center">
+      {/* Único ajuste que a Criança pode mexer além de conversar e
+          compartilhar localização: o tema claro/escuro. */}
+      {status === 'success' && (
+        <div className="flex w-full justify-end">
+          <ThemeSwitcher />
+        </div>
+      )}
       {status === 'checking' && <p>Confirmando vínculo com o Responsável…</p>}
 
       {status === 'no_token' && (
@@ -236,6 +266,7 @@ export function PairingJoin() {
             </div>
             {privateError && <p className="mt-2 text-sm text-red-600">{privateError}</p>}
             <form onSubmit={sendPrivate} className="mt-3 flex items-center gap-2">
+              <EmojiPicker onSelect={(emoji) => setPrivateDraft((current) => current + emoji)} />
               <input
                 value={privateDraft}
                 onChange={(event) => setPrivateDraft(event.target.value)}
@@ -253,29 +284,23 @@ export function PairingJoin() {
           </div>
 
           <div className="mt-4 w-full rounded-lg border border-[hsl(var(--border))] p-4 text-left">
-            <h2 className="text-base font-semibold">Compartilhar minha localização</h2>
+            <h2 className="text-base font-semibold">Localização</h2>
             <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-              Só acontece quando você escolhe — sem rastreamento em segundo plano. Toque no botão
-              sempre que quiser que o Responsável veja onde você está agora.
+              Fica ligada automaticamente enquanto este app estiver aberto — o Responsável sempre
+              vê onde você está agora, sem você precisar tocar em nada.
             </p>
-            <button
-              type="button"
-              onClick={shareLocation}
-              disabled={shareStatus === 'asking'}
-              className="mt-3 w-full rounded-md bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-[hsl(var(--primary-foreground))] disabled:opacity-60"
-            >
-              {shareStatus === 'asking'
-                ? 'Pedindo permissão…'
-                : shareStatus === 'shared'
-                  ? 'Compartilhado! Compartilhar de novo'
-                  : 'Compartilhar minha localização agora'}
-            </button>
-            {shareStatus === 'shared' && (
-              <p className="mt-2 text-sm text-green-600">Localização enviada com sucesso.</p>
-            )}
-            {shareStatus === 'error' && shareError && (
-              <p className="mt-2 text-sm text-red-600">{shareError}</p>
-            )}
+            <div className="mt-3 flex items-center gap-2 text-sm">
+              <span
+                className={`size-2.5 rounded-full ${locationStatus === 'active' ? 'bg-green-500' : locationStatus === 'error' ? 'bg-red-500' : 'bg-[hsl(var(--muted-foreground))]'}`}
+              />
+              {locationStatus === 'active' && (
+                <span className="text-green-700">
+                  Localização ativa{lastSharedAt ? ` · atualizada ${lastSharedAt.toLocaleTimeString('pt-BR')}` : ''}
+                </span>
+              )}
+              {locationStatus === 'idle' && <span className="text-[hsl(var(--muted-foreground))]">Ativando…</span>}
+              {locationStatus === 'error' && <span className="text-red-600">{locationError}</span>}
+            </div>
           </div>
         </>
       )}

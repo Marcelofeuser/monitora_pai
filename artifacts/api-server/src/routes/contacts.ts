@@ -73,8 +73,16 @@ const requestContactSchema = z.object({
 
 /**
  * POST /api/contacts
- * A Criança (ou o Responsável, em nome dela) solicita adicionar um contato.
- * Sempre nasce como "pending" — nunca é aprovado automaticamente.
+ * A Criança nunca adiciona ninguém sozinha — ela não tem uma rota pra
+ * isso, e não teria como chamar esta (é autenticada por Clerk, e ela não
+ * tem conta Clerk). Só o Responsável adiciona um contato pra ela, e como
+ * é o próprio Responsável fazendo isso (não um pedido da Criança pra
+ * aprovar depois), o contato já nasce "approved" — não existe mais um
+ * passo de aprovação separado.
+ *
+ * Antes esta rota não conferia se quem chamava era realmente o
+ * Responsável daquela criança — qualquer conta logada podia adicionar
+ * contato pra qualquer childId. Corrigido junto.
  */
 router.post("/contacts", async (req, res) => {
   const auth = getAuth(req);
@@ -85,13 +93,16 @@ router.post("/contacts", async (req, res) => {
     return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
   }
 
+  const isParent = await assertIsParentOfChild(auth.userId, parsed.data.childId);
+  if (!isParent) return res.status(403).json({ error: "not_the_parent_of_this_child" });
+
   const [contact] = await db
     .insert(contactsTable)
     .values({
       childId: parsed.data.childId,
       contactName: parsed.data.contactName,
       contactPhone: parsed.data.contactPhone,
-      status: "pending",
+      status: "approved",
     })
     .returning();
 
