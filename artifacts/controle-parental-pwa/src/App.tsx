@@ -429,6 +429,20 @@ function Onboarding() {
   const [familyName, setFamilyName] = useState(existing?.familyName ?? '');
   const [error, setError] = useState('');
 
+  // Antes: "/" sempre mostrava o formulário de cadastro (nome + espaço da
+  // família), mesmo pra quem já tinha perfil local salvo — por isso
+  // "todo login pedia pra cadastrar de novo". O perfil (nome, espaço da
+  // família, papel) é local por design (ver readProfile/saveProfile); uma
+  // vez que já existe, pula direto pro dashboard. Se a sessão do Clerk
+  // tiver caído nesse meio tempo, o guard de login do Dashboard
+  // (RequireSignedIn) já cuida de mandar pro /sign-in.
+  useEffect(() => {
+    if (existing) {
+      setLocation('/dashboard', { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function finish(event: FormEvent) {
     event.preventDefault();
     if (!role || !displayName.trim() || !familyName.trim()) {
@@ -438,6 +452,8 @@ function Onboarding() {
     saveProfile({ role, displayName: displayName.trim(), familyName: familyName.trim() });
     setLocation('/dashboard');
   }
+
+  if (existing) return null;
 
   return (
     <main className="texture min-h-[100dvh] overflow-hidden bg-[hsl(var(--background))]">
