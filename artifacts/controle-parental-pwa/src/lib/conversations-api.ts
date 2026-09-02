@@ -55,3 +55,50 @@ export async function fetchMirroredMessages(authToken: string | null): Promise<M
   if (!res.ok) throw new Error(`fetch_mirrored_failed_${res.status}`);
   return res.json();
 }
+
+
+export type PrivateMessage = {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  type: string;
+  textContent: string | null;
+  contentUrl: string | null;
+  createdAt: string;
+};
+
+export type PrivateConversation = {
+  conversation: { id: string; participantAId: string; participantBId: string };
+  messages: PrivateMessage[];
+};
+
+// Canal privado Responsável <-> Criança (lado do Responsável). Sempre
+// autenticado com token do Clerk, igual ao resto deste arquivo.
+export async function fetchPrivateConversation(
+  childId: string,
+  authToken: string | null,
+): Promise<PrivateConversation> {
+  const res = await fetch(
+    `${API_URL}/api/conversations/private?childId=${encodeURIComponent(childId)}`,
+    { headers: authHeaders(authToken) },
+  );
+  if (!res.ok) throw new Error(`fetch_private_conversation_failed_${res.status}`);
+  return res.json();
+}
+
+export async function sendPrivateMessage(
+  childId: string,
+  textContent: string,
+  authToken: string | null,
+): Promise<PrivateMessage> {
+  const res = await fetch(`${API_URL}/api/conversations/private/messages`, {
+    method: 'POST',
+    headers: authHeaders(authToken),
+    body: JSON.stringify({ childId, textContent }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `send_private_message_failed_${res.status}`);
+  }
+  return res.json();
+}

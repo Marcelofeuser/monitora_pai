@@ -36,8 +36,8 @@ import { Link, Route, Switch, useLocation } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { PairingGenerate } from '@/pages/PairingGenerate';
 import { PairingJoin } from '@/pages/PairingJoin';
-import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages } from '@/lib/conversations-api';
-import type { ChildUser, ApprovedContact, MirroredMessage } from '@/lib/conversations-api';
+import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages, fetchPrivateConversation, sendPrivateMessage } from '@/lib/conversations-api';
+import type { ChildUser, ApprovedContact, MirroredMessage, PrivateMessage } from '@/lib/conversations-api';
 import { fetchChildLocation } from '@/lib/location-api';
 import type { ChildLocation } from '@/lib/location-api';
 import { Toaster } from '@/components/ui/toaster';
@@ -802,6 +802,11 @@ function Conversations() {
   const [approvedContacts, setApprovedContacts] = useState<ApprovedContact[]>([]);
   const [mirroredMessages, setMirroredMessages] = useState<MirroredMessage[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([]);
+  const [privateLoading, setPrivateLoading] = useState(false);
+  const [privateError, setPrivateError] = useState<string | null>(null);
+  const [privateDraft, setPrivateDraft] = useState('');
+  const [privateSending, setPrivateSending] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -846,7 +851,52 @@ function Conversations() {
     };
   }, [selectedChildId, getToken]);
 
+  // Canal privado: antes essa aba era só um cartão estático ("Pronto pra
+  // começar") sem nenhuma mensagem de verdade — não existia jeito de
+  // escrever pra criança. Agora busca e mostra o histórico real assim que
+  // a aba é aberta (ou a criança selecionada muda).
+  useEffect(() => {
+    if (!privateOpen || !selectedChildId) return;
+    let cancelled = false;
+    async function loadPrivate() {
+      setPrivateLoading(true);
+      setPrivateError(null);
+      try {
+        const token = await getToken();
+        const data = await fetchPrivateConversation(selectedChildId!, token);
+        if (!cancelled) setPrivateMessages(data.messages);
+      } catch (err) {
+        if (!cancelled) setPrivateError(err instanceof Error ? err.message : 'Erro ao carregar o canal privado.');
+      } finally {
+        if (!cancelled) setPrivateLoading(false);
+      }
+    }
+    loadPrivate();
+    return () => {
+      cancelled = true;
+    };
+  }, [privateOpen, selectedChildId, getToken]);
+
+  async function sendPrivate(event: FormEvent) {
+    event.preventDefault();
+    const text = privateDraft.trim();
+    if (!text || !selectedChildId || privateSending) return;
+    setPrivateSending(true);
+    setPrivateError(null);
+    try {
+      const token = await getToken();
+      const message = await sendPrivateMessage(selectedChildId, text, token);
+      setPrivateMessages((current) => [...current, message]);
+      setPrivateDraft('');
+    } catch (err) {
+      setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+    } finally {
+      setPrivateSending(false);
+    }
+  }
+
   const hasChild = (children?.length ?? 0) > 0;
+  const selectedChildName = children?.find((child) => child.id === selectedChildId)?.name ?? null;
 
   return (
     <>
@@ -904,7 +954,50 @@ function Conversations() {
       ) : (
            <section className="overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] shadow-card" data-tour="private-channel">
           <div className="flex flex-col gap-4 border-b border-[hsl(var(--border))] p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8"><div className="flex items-start gap-4"><IconBox icon={LockKeyhole} tone="teal" /><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-extrabold">{t.conversations.privateTitle}</h2><span className="rounded-full bg-[hsl(var(--primary)/.1)] px-2.5 py-1 font-mono-app text-[10px] font-medium uppercase tracking-[.08em] text-[hsl(var(--primary))]">{t.conversations.privateBadge}</span></div><p className="mt-2 max-w-[590px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{t.conversations.privateDescription}</p></div></div><span className="flex items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))]"><EyeOff size={15} /> {t.conversations.noParticipants}</span></div>
-          <div className="flex min-h-[290px] flex-col items-center justify-center px-6 py-12 text-center"><div className="relative mb-5"><span className="absolute inset-[-9px] rounded-full border border-dashed border-[hsl(var(--accent)/.65)] animate-pulse-soft" /><span className="relative grid size-16 place-items-center rounded-full bg-[hsl(var(--accent)/.24)] text-[hsl(31_55%_32%)]"><UserPlus size={25} /></span></div><h3 className="font-display text-3xl tracking-[-.04em]">{t.conversations.readyTitle}</h3><p className="mt-3 max-w-[410px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{profile ? t.conversations.readyWithProfile : t.conversations.readyWithoutProfile}</p></div>
+          {!hasChild ? (
+            <div className="flex min-h-[290px] flex-col items-center justify-center px-6 py-12 text-center"><div className="relative mb-5"><span className="absolute inset-[-9px] rounded-full border border-dashed border-[hsl(var(--accent)/.65)] animate-pulse-soft" /><span className="relative grid size-16 place-items-center rounded-full bg-[hsl(var(--accent)/.24)] text-[hsl(31_55%_32%)]"><UserPlus size={25} /></span></div><h3 className="font-display text-3xl tracking-[-.04em]">{t.conversations.readyTitle}</h3><p className="mt-3 max-w-[410px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{profile ? t.conversations.readyWithProfile : t.conversations.readyWithoutProfile}</p></div>
+          ) : (
+            <div className="flex flex-col gap-4 p-6 sm:p-8">
+              <div className="flex min-h-[220px] flex-col gap-3 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.4)] p-4" data-testid="list-private-messages">
+                {privateLoading && privateMessages.length === 0 ? (
+                  <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+                ) : privateMessages.length === 0 ? (
+                  <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                    Nenhuma mensagem ainda com {selectedChildName ?? 'a criança'}. Escreva a primeira aqui embaixo.
+                  </p>
+                ) : (
+                  privateMessages.map((message) => {
+                    const fromMe = message.senderId !== selectedChildId;
+                    return (
+                      <div
+                        key={message.id}
+                        data-testid={`row-private-message-${message.id}`}
+                        className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-6 ${fromMe ? 'self-end bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'self-start bg-[hsl(var(--card))] shadow-sm'}`}
+                      >
+                        {message.textContent}
+                        <p className={`mt-1 text-[10px] font-mono-app uppercase tracking-[.08em] ${fromMe ? 'text-[hsl(var(--primary-foreground)/.7)]' : 'text-[hsl(var(--muted-foreground))]'}`}>
+                          {new Date(message.createdAt).toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              {privateError && <p className="text-xs font-semibold text-[hsl(var(--destructive))]" role="alert" data-testid="status-private-error">{privateError}</p>}
+              <form onSubmit={sendPrivate} className="flex items-center gap-3">
+                <input
+                  value={privateDraft}
+                  onChange={(event) => setPrivateDraft(event.target.value)}
+                  placeholder={`Escreva pra ${selectedChildName ?? 'a criança'}…`}
+                  className="h-12 flex-1 rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--background)/.65)] px-4 text-sm outline-none focus:border-[hsl(var(--primary))]"
+                  data-testid="input-private-message"
+                />
+                <Button type="submit" disabled={!privateDraft.trim() || privateSending} testId="button-send-private-message">
+                  {privateSending ? 'Enviando…' : 'Enviar'}
+                </Button>
+              </form>
+            </div>
+          )}
           <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-6 py-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" /> {t.conversations.privateFooter}</div>
         </section>
       )}
