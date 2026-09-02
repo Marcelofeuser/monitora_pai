@@ -59,9 +59,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 type Role = 'responsible' | 'child';
 type Profile = { displayName: string; familyName: string; role: Role };
-type ContactStatus = 'pending' | 'approved' | 'denied' | 'revoked';
-type Contact = { id: string; displayName: string; identifier?: string; status: ContactStatus; textOnly?: boolean };
-
 const queryClient = new QueryClient();
 const PROFILE_KEY = 'amparo-profile';
 const CONTACTS_KEY = 'amparo-contacts';
@@ -346,20 +343,6 @@ function readProfile(): Profile | null {
 
 function saveProfile(profile: Profile) {
   localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-}
-
-function readContacts(): Contact[] {
-  try {
-    const raw = localStorage.getItem(CONTACTS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveContacts(contacts: Contact[]) {
-  localStorage.setItem(CONTACTS_KEY, JSON.stringify(contacts));
 }
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
@@ -768,7 +751,6 @@ function SetupNotice() {
 function Dashboard() {
   const { t } = useLanguage();
   const profile = readProfile();
-  const approvedCount = readContacts().filter((contact) => contact.status === 'approved').length;
   return (
     <>
       <PageIntro eyebrow={t.dashboard.eyebrow} title={profile ? t.dashboard.greeting.replace('{name}', profile.displayName) : t.dashboard.title} description={profile ? t.dashboard.description : t.dashboard.noProfileDescription} />
@@ -785,7 +767,7 @@ function Dashboard() {
           <div className="flex items-center justify-between"><div><p className="font-mono-app text-[10px] uppercase tracking-[.16em] text-[hsl(var(--muted-foreground))]">{t.dashboard.status}</p><h2 className="mt-2 text-xl font-extrabold">{t.dashboard.quietReady}</h2></div><IconBox icon={WifiOff} tone="slate" /></div>
           <div className="mt-7 space-y-0">
             <StatusRow icon={UserRound} label={t.dashboard.profile} value={profile ? t.dashboard.profileDone : t.dashboard.profileNeeds} done={!!profile} />
-            <StatusRow icon={MessageCircle} label={t.nav.conversations} value={approvedCount > 0 ? t.dashboard.approvedCount.replace('{count}', String(approvedCount)) : t.dashboard.approved} />
+            <StatusRow icon={MessageCircle} label={t.nav.conversations} value={t.dashboard.approved} />
             <StatusRow icon={MapPin} label={t.nav.location} value={t.dashboard.noChildLocation} />
           </div>
           <p className="mt-7 border-t border-[hsl(var(--border))] pt-5 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.dashboard.onlyShows}</p>
@@ -895,30 +877,41 @@ function Conversations() {
     };
   }, [selectedChildId, getToken]);
 
-  // Canal privado: antes essa aba era só um cartão estático ("Pronto pra
-  // começar") sem nenhuma mensagem de verdade — não existia jeito de
-  // escrever pra criança. Agora busca e mostra o histórico real assim que
-  // a aba é aberta (ou a criança selecionada muda).
+  // Canal privado: busca o histórico real assim que a aba é aberta (ou a
+  // criança selecionada muda), e depois fica atualizando sozinho a cada 5s
+  // enquanto a aba estiver aberta. Antes buscava só uma vez — mensagem que
+  // a Criança mandasse depois disso só aparecia recarregando a página.
   useEffect(() => {
     if (!privateOpen || !selectedChildId) return;
     let cancelled = false;
-    async function loadPrivate() {
-      setPrivateLoading(true);
-      setPrivateError(null);
+
+    async function loadPrivate(showSpinner: boolean) {
+      if (showSpinner) setPrivateLoading(true);
       try {
         const token = await getToken();
         if (!cancelled) setPrivateAuthToken(token);
         const data = await fetchPrivateConversation(selectedChildId!, token);
-        if (!cancelled) setPrivateMessages(data.messages);
+        if (!cancelled) {
+          setPrivateMessages(data.messages);
+          setPrivateError(null);
+        }
       } catch (err) {
-        if (!cancelled) setPrivateError(err instanceof Error ? err.message : 'Erro ao carregar o canal privado.');
+        // Erro num poll silencioso não deve gritar na tela — só na carga
+        // inicial, pra não ficar piscando aviso a cada 5s se a rede cair
+        // por um instante.
+        if (!cancelled && showSpinner) {
+          setPrivateError(err instanceof Error ? err.message : 'Erro ao carregar o canal privado.');
+        }
       } finally {
-        if (!cancelled) setPrivateLoading(false);
+        if (!cancelled && showSpinner) setPrivateLoading(false);
       }
     }
-    loadPrivate();
+
+    loadPrivate(true);
+    const intervalId = window.setInterval(() => loadPrivate(false), 5000);
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
   }, [privateOpen, selectedChildId, getToken]);
 
@@ -1224,96 +1217,8 @@ function Conversations() {
           <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-6 py-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" /> {t.conversations.privateFooter}</div>
         </section>
       )}
-      <ContactManagement />
     </>
   );
-}
-
-function ContactManagement() {
-  const { t } = useLanguage();
-  const profile = readProfile();
-  const [contacts, setContacts] = useState<Contact[]>(() => readContacts());
-  const [contactId, setContactId] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [identifier, setIdentifier] = useState('');
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const isChild = profile?.role === 'child';
-  const pending = contacts.filter((contact) => contact.status === 'pending');
-  const approved = contacts.filter((contact) => contact.status === 'approved');
-  const history = contacts.filter((contact) => contact.status === 'denied' || contact.status === 'revoked');
-
-  function persist(next: Contact[]) {
-    setContacts(next);
-    saveContacts(next);
-  }
-
-  function requestContact(event: FormEvent) {
-    event.preventDefault();
-    setError('');
-    setNotice('');
-    const cleanId = contactId.trim();
-    const cleanName = displayName.trim();
-    if (!cleanId || !cleanName) {
-      setError(t.contacts.missing);
-      return;
-    }
-    if (contacts.some((contact) => contact.id.toLowerCase() === cleanId.toLowerCase())) {
-      setError(t.contacts.duplicate);
-      return;
-    }
-    persist([...contacts, { id: cleanId, displayName: cleanName, identifier: identifier.trim() || undefined, status: 'pending' }]);
-    setContactId('');
-    setDisplayName('');
-    setIdentifier('');
-    setNotice(t.contacts.submitted);
-  }
-
-  function changeStatus(id: string, status: ContactStatus, textOnly = false) {
-    const next = contacts.map((contact) => contact.id === id ? { ...contact, status, textOnly: status === 'approved' ? textOnly : undefined } : contact);
-    persist(next);
-    setNotice(status === 'approved' ? (textOnly ? t.contacts.approveTextOnly : t.contacts.approveAlert) : status === 'denied' ? t.contacts.denyAlert : t.contacts.revokeAlert);
-  }
-
-  return (
-    <section className="mt-6 rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8" data-tour="approved-contacts">
-      <div className="flex flex-col gap-4 border-b border-[hsl(var(--border))] pb-7 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-4"><IconBox icon={UserPlus} tone="gold" /><div><p className="font-mono-app text-[10px] uppercase tracking-[.17em] text-[hsl(var(--muted-foreground))]">{t.contacts.eyebrow}</p><h2 className="mt-2 font-display text-3xl tracking-[-.045em]">{isChild ? t.contacts.childTitle : t.contacts.adultTitle}</h2><p className="mt-2 max-w-[650px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{isChild ? t.contacts.childText : t.contacts.adultText}</p></div></div>
-        <span className="flex shrink-0 items-center gap-2 rounded-full bg-[hsl(var(--muted))] px-3 py-2 font-mono-app text-[10px] uppercase tracking-[.08em] text-[hsl(var(--muted-foreground))]"><LockKeyhole size={12} /> {t.shell.localMode}</span>
-      </div>
-
-      {isChild ? (
-        <>
-          <form onSubmit={requestContact} className="grid gap-4 border-b border-[hsl(var(--border))] py-7 md:grid-cols-2">
-            <Field label={t.contacts.idLabel} value={contactId} onChange={setContactId} placeholder={t.contacts.idPlaceholder} testId="input-contact-id" />
-            <Field label={t.contacts.nameLabel} value={displayName} onChange={setDisplayName} placeholder={t.contacts.namePlaceholder} testId="input-contact-name" />
-            <Field label={t.contacts.identifierLabel} value={identifier} onChange={setIdentifier} placeholder={t.contacts.identifierPlaceholder} testId="input-contact-identifier" />
-            <div className="flex items-end"><Button type="submit" className="w-full md:w-auto" testId="button-request-contact"><Plus size={16} /> {t.contacts.request}</Button></div>
-          </form>
-          {error && <p className="border-b border-[hsl(var(--border))] py-4 text-xs font-bold text-[hsl(var(--destructive))]" role="alert" data-testid="status-contact-error">{error}</p>}
-          {notice && <p className="border-b border-[hsl(var(--border))] py-4 text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-contact-notice"><Check size={14} className="mr-1 inline-block align-[-2px]" /> {notice}</p>}
-          <div className="pt-7"><ContactSectionTitle title={t.contacts.channelsTitle} count={approved.length} /><div className="mt-4">{approved.length === 0 ? <p className="rounded-2xl bg-[hsl(var(--muted)/.55)] p-5 text-sm leading-6 text-[hsl(var(--muted-foreground))]" data-testid="empty-contact-channels">{t.contacts.channelsEmpty}</p> : approved.map((contact) => <ContactRow key={contact.id} contact={contact} t={t} />)}</div></div>
-          <div className="mt-7 border-t border-[hsl(var(--border))] pt-6"><ContactSectionTitle title={t.contacts.pendingTitle} count={pending.length} /><div className="mt-4">{pending.length === 0 ? <p className="text-sm text-[hsl(var(--muted-foreground))]" data-testid="empty-contact-pending">{t.contacts.pendingEmpty}</p> : pending.map((contact) => <ContactRow key={contact.id} contact={contact} t={t} />)}</div><p className="mt-5 flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]"><Info size={14} /> {t.contacts.noControls}</p></div>
-        </>
-      ) : (
-        <>
-          {notice && <p className="border-b border-[hsl(var(--border))] py-4 text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-contact-notice"><Check size={14} className="mr-1 inline-block align-[-2px]" /> {notice}</p>}
-          <div className="pt-7"><ContactSectionTitle title={t.contacts.pendingTitle} count={pending.length} /><div className="mt-4">{pending.length === 0 ? <p className="rounded-2xl bg-[hsl(var(--muted)/.55)] p-5 text-sm leading-6 text-[hsl(var(--muted-foreground))]" data-testid="empty-contact-pending">{t.contacts.pendingEmpty}</p> : pending.map((contact) => <ContactRow key={contact.id} contact={contact} t={t} actions={<div className="flex flex-wrap gap-2"><Button variant="soft" className="min-h-9 px-3 text-xs" onClick={() => changeStatus(contact.id, 'approved')} testId={`button-approve-contact-${contact.id}`}>{t.contacts.approve}</Button><Button variant="outline" className="min-h-9 px-3 text-xs" onClick={() => changeStatus(contact.id, 'denied')} testId={`button-deny-contact-${contact.id}`}>{t.contacts.deny}</Button><Button variant="outline" className="min-h-9 px-3 text-xs" onClick={() => changeStatus(contact.id, 'approved', true)} testId={`button-approve-text-contact-${contact.id}`}>{t.contacts.approveTextOnly}</Button></div>} />)}</div></div>
-          <div className="mt-8 border-t border-[hsl(var(--border))] pt-7"><ContactSectionTitle title={t.contacts.approvedTitle} count={approved.length} /><div className="mt-4">{approved.length === 0 ? <p className="rounded-2xl bg-[hsl(var(--muted)/.55)] p-5 text-sm leading-6 text-[hsl(var(--muted-foreground))]" data-testid="empty-contact-approved">{t.contacts.approvedEmpty}</p> : approved.map((contact) => <ContactRow key={contact.id} contact={contact} t={t} actions={<Button variant="outline" className="min-h-9 px-3 text-xs" onClick={() => changeStatus(contact.id, 'revoked')} testId={`button-revoke-contact-${contact.id}`}>{t.contacts.revoke}</Button>} />)}</div></div>
-          <div className="mt-8 border-t border-[hsl(var(--border))] pt-7"><ContactSectionTitle title={t.contacts.historyTitle} count={history.length} /><div className="mt-4">{history.length === 0 ? <p className="text-sm text-[hsl(var(--muted-foreground))]" data-testid="empty-contact-history">{t.contacts.historyEmpty}</p> : history.map((contact) => <ContactRow key={contact.id} contact={contact} t={t} />)}</div></div>
-        </>
-      )}
-    </section>
-  );
-}
-
-function ContactSectionTitle({ title, count }: { title: string; count: number }) {
-  return <div className="flex items-center gap-3"><h3 className="text-sm font-extrabold">{title}</h3><span className="grid min-w-7 place-items-center rounded-full bg-[hsl(var(--muted))] px-2 py-1 font-mono-app text-[10px] text-[hsl(var(--muted-foreground))]" data-testid={`text-contact-count-${title}`}>{count}</span></div>;
-}
-
-function ContactRow({ contact, t, actions }: { contact: Contact; t: Copy; actions?: ReactNode }) {
-  const statusLabel = contact.status === 'pending' ? t.contacts.pending : contact.status === 'approved' ? t.contacts.approved : contact.status === 'denied' ? t.contacts.denied : t.contacts.revoked;
-  return <div className="flex flex-col gap-4 border-b border-[hsl(var(--border))] py-4 last:border-0 sm:flex-row sm:items-center sm:justify-between" data-testid={`row-contact-${contact.id}`}><div className="flex min-w-0 items-center gap-3"><Avatar name={contact.displayName} /><div className="min-w-0"><p className="truncate text-sm font-extrabold">{contact.displayName}</p><p className="mt-1 truncate text-xs text-[hsl(var(--muted-foreground))]">{t.contacts.localId}: {contact.id} · {contact.identifier || t.contacts.identifierMissing}</p>{contact.status === 'approved' && <p className="mt-1 text-xs text-[hsl(var(--primary))]">{t.contacts.channelNote}{contact.textOnly ? ` · ${t.contacts.textOnly}` : ''}</p>}</div></div><div className="flex flex-wrap items-center gap-2 sm:justify-end"><span className={`rounded-full px-2.5 py-1 font-mono-app text-[10px] uppercase tracking-[.08em] ${contact.status === 'approved' ? 'bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : contact.status === 'pending' ? 'bg-[hsl(var(--accent)/.25)] text-[hsl(31_55%_32%)]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'}`}>{t.contacts.statusLabel}: {statusLabel}{contact.textOnly ? ` / ${t.contacts.textOnly}` : ''}</span>{actions}</div></div>;
 }
 
 function EmptyState({ icon: Icon, eyebrow, title, text, actionLabel, onAction, testId }: { icon: LucideIcon; eyebrow: string; title: string; text: string; actionLabel?: string; onAction?: () => void; testId?: string }) {

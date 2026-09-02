@@ -105,28 +105,40 @@ export function PairingJoin() {
   }, []);
 
   // Canal privado com o Responsável — carrega assim que o pareamento (ou a
-  // restauração da credencial salva) termina com sucesso. Antes, essa tela
-  // não tinha NENHUM jeito de escrever mensagem — só o botão de
-  // localização — e não tinha pra onde ir depois. Agora tem a conversa
-  // aqui mesmo.
+  // restauração da credencial salva) termina com sucesso, e depois fica
+  // atualizando sozinho a cada 5s enquanto a tela estiver aberta. Antes só
+  // buscava uma vez — mensagens que o Responsável mandasse depois disso só
+  // apareciam se ela recarregasse a página manualmente, o que parecia
+  // "mensagem não chega".
   useEffect(() => {
     if (status !== 'success' || !deviceToken) return;
     let cancelled = false;
-    async function loadPrivate() {
-      setPrivateLoading(true);
-      setPrivateError(null);
+
+    async function loadPrivate(showSpinner: boolean) {
+      if (showSpinner) setPrivateLoading(true);
       try {
         const data = await fetchChildPrivateConversation(deviceToken!);
-        if (!cancelled) setPrivateMessages(data.messages);
+        if (!cancelled) {
+          setPrivateMessages(data.messages);
+          setPrivateError(null);
+        }
       } catch (err) {
-        if (!cancelled) setPrivateError(err instanceof Error ? err.message : 'Erro ao carregar a conversa.');
+        // Erro num poll silencioso não deve gritar na tela — só na carga
+        // inicial, pra não ficar piscando aviso a cada 5s se a rede cair
+        // por um instante.
+        if (!cancelled && showSpinner) {
+          setPrivateError(err instanceof Error ? err.message : 'Erro ao carregar a conversa.');
+        }
       } finally {
-        if (!cancelled) setPrivateLoading(false);
+        if (!cancelled && showSpinner) setPrivateLoading(false);
       }
     }
-    loadPrivate();
+
+    loadPrivate(true);
+    const intervalId = window.setInterval(() => loadPrivate(false), 5000);
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
   }, [status, deviceToken]);
 
