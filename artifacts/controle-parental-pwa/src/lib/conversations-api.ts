@@ -154,3 +154,17 @@ export async function addApprovedContact(
   }
   return res.json();
 }
+
+// Exclui o contato de verdade (some da lista e de qualquer grupo em que
+// estivesse) — diferente de "revogar" (que só mudaria o status, mantendo
+// a linha). Pedido do Marcelo.
+export async function deleteContact(contactId: string, authToken: string | null): Promise<void> {
+  const res = await fetch(`${API_URL}/api/contacts/${encodeURIComponent(contactId)}`, {
+    method: 'DELETE',
+    headers: authHeaders(authToken),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `delete_contact_failed_${res.status}`);
+  }
+}

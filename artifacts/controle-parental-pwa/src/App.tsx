@@ -48,7 +48,7 @@ import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
 import { fetchGroups, createGroup, deleteGroup } from '@/lib/groups-api';
 import type { Group } from '@/lib/groups-api';
-import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages, fetchPrivateConversation, sendPrivateMessage, addApprovedContact } from '@/lib/conversations-api';
+import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, MirroredMessage, PrivateMessage } from '@/lib/conversations-api';
 import { fetchChildLocation } from '@/lib/location-api';
 import type { ChildLocation } from '@/lib/location-api';
@@ -801,6 +801,8 @@ function Conversations() {
   const [newContactName, setNewContactName] = useState('');
   const [addingContact, setAddingContact] = useState(false);
   const [addContactError, setAddContactError] = useState<string | null>(null);
+  const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
+  const [deleteContactError, setDeleteContactError] = useState<string | null>(null);
   const [mirroredMessages, setMirroredMessages] = useState<MirroredMessage[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([]);
@@ -993,6 +995,31 @@ function Conversations() {
     }
   }
 
+  // Exclusão de verdade (não é "revogar") — pedido do Marcelo: opção de
+  // excluir qualquer contato. Se ele estiver em algum grupo, sai de lá
+  // junto (cascade no backend) — por isso refaz a busca de grupos também,
+  // pra não deixar um nome fantasma na lista de membros na tela.
+  async function handleDeleteContact(contact: ApprovedContact) {
+    if (deletingContactId || !selectedChildId) return;
+    if (!window.confirm(`Excluir o contato "${contact.contactName}"? Ele sai de qualquer grupo do qual participe.`)) {
+      return;
+    }
+    setDeletingContactId(contact.id);
+    setDeleteContactError(null);
+    try {
+      const token = await getToken();
+      await deleteContact(contact.id, token);
+      setApprovedContacts((current) => current.filter((item) => item.id !== contact.id));
+      setSelectedContactIds((current) => current.filter((id) => id !== contact.id));
+      const refreshedGroups = await fetchGroups(selectedChildId, token);
+      setGroups(refreshedGroups);
+    } catch (err) {
+      setDeleteContactError(err instanceof Error ? err.message : 'Erro ao excluir contato.');
+    } finally {
+      setDeletingContactId(null);
+    }
+  }
+
   async function handleCreateGroup(event: FormEvent) {
     event.preventDefault();
     const name = groupName.trim();
@@ -1077,12 +1104,27 @@ function Conversations() {
               {addContactError && (
                 <p className="mt-2 text-sm text-red-600" data-testid="status-add-contact-error">{addContactError}</p>
               )}
+              {deleteContactError && (
+                <p className="mt-2 text-sm text-red-600" data-testid="status-delete-contact-error">{deleteContactError}</p>
+              )}
               {approvedContacts.length === 0 ? (
                 <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">{t.contacts.approvedEmpty}</p>
               ) : (
                 <ul className="mt-4 flex flex-col gap-2">
                   {approvedContacts.map((contact) => (
-                    <li key={contact.id} className="rounded-xl bg-[hsl(var(--muted)/.5)] px-4 py-3 text-sm font-bold" data-testid={`row-approved-contact-${contact.id}`}>{contact.contactName}</li>
+                    <li key={contact.id} className="flex items-center justify-between gap-3 rounded-xl bg-[hsl(var(--muted)/.5)] px-4 py-3 text-sm font-bold" data-testid={`row-approved-contact-${contact.id}`}>
+                      {contact.contactName}
+                      <button
+                        type="button"
+                        onClick={() => { void handleDeleteContact(contact); }}
+                        disabled={deletingContactId === contact.id}
+                        aria-label={`Excluir contato ${contact.contactName}`}
+                        data-testid={`button-delete-contact-${contact.id}`}
+                        className="text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--destructive))] disabled:opacity-60"
+                      >
+                        <X size={16} />
+                      </button>
+                    </li>
                   ))}
                 </ul>
               )}

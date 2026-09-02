@@ -169,4 +169,32 @@ router.patch("/contacts/:id/decision", async (req, res) => {
   return res.json(updated);
 });
 
+/**
+ * DELETE /api/contacts/:id
+ * Exclui um contato de verdade (não é o mesmo que "revoked" — aquilo só
+ * muda o status e mantém a linha; isso apaga por completo). Pedido do
+ * Marcelo: opção de excluir qualquer contato, não só negar/revogar acesso.
+ * Se o contato estiver em algum grupo, sai de lá junto — group_members
+ * referencia contacts com ON DELETE CASCADE (ver schema/groups.ts).
+ */
+router.delete("/contacts/:id", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const [contact] = await db
+    .select()
+    .from(contactsTable)
+    .where(eq(contactsTable.id, req.params.id))
+    .limit(1);
+
+  if (!contact) return res.status(404).json({ error: "contact_not_found" });
+
+  const isParent = await assertIsParentOfChild(auth.userId, contact.childId);
+  if (!isParent) return res.status(403).json({ error: "not_the_parent_of_this_child" });
+
+  await db.delete(contactsTable).where(eq(contactsTable.id, contact.id));
+
+  return res.json({ ok: true });
+});
+
 export default router;
