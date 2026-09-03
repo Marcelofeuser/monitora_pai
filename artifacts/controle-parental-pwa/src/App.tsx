@@ -15,6 +15,7 @@ import {
   Lock,
   Unlock,
   Info,
+  LogOut,
   LockKeyhole,
   MapPin,
   Menu,
@@ -591,6 +592,7 @@ function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const { t } = useLanguage();
+  const { signOut } = useClerk();
   const profile = readProfile();
   return (
     <div className="texture min-h-[100dvh] bg-[hsl(var(--background))]">
@@ -612,6 +614,14 @@ function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="border-t border-[hsl(var(--sidebar-border))] pt-5">
           <p className="flex items-center gap-2 text-xs leading-5 text-[hsl(var(--sidebar-foreground)/.6)]"><EyeOff size={15} /> {t.shell.noMonitoring}</p>
+          <button
+            type="button"
+            onClick={() => { void signOut(); }}
+            data-testid="button-shell-sign-out"
+            className="mt-4 flex items-center gap-2 text-xs font-bold text-[hsl(var(--sidebar-foreground)/.7)] underline underline-offset-4 hover:text-[hsl(var(--sidebar-foreground))]"
+          >
+            <LogOut size={14} /> {t.auth.signOut}
+          </button>
           <p className="mt-4 font-mono-app text-[10px] uppercase tracking-[.16em] text-[hsl(var(--sidebar-foreground)/.35)]">Amparo v0.1 / {t.shell.localMode}</p>
         </div>
       </aside>
@@ -622,6 +632,14 @@ function AppShell({ children }: { children: ReactNode }) {
         <nav className="mt-10 space-y-1" aria-label={t.shell.mobileNav}>
           {navItems.map((item) => <NavItem key={item.href} item={item} active={location === item.href} onClick={() => setMenuOpen(false)} />)}
         </nav>
+        <button
+          type="button"
+          onClick={() => { setMenuOpen(false); void signOut(); }}
+          data-testid="button-shell-sign-out-mobile"
+          className="mt-6 flex items-center gap-2 border-t border-[hsl(var(--sidebar-border))] pt-5 text-xs font-bold text-[hsl(var(--sidebar-foreground)/.7)] underline underline-offset-4"
+        >
+          <LogOut size={14} /> {t.auth.signOut}
+        </button>
       </aside>
 
       <div className="lg:pl-[252px]">

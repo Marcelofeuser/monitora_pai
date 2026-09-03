@@ -21,6 +21,18 @@ export async function fetchChildren(authToken: string | null): Promise<ChildUser
   return res.json();
 }
 
+// Exclusão de verdade da Criança (não é revogar contato) — pedido do
+// Marcelo depois de acumular várias crianças duplicadas de repareamentos
+// antigos. Irreversível: apaga mensagens, localização, tempo de uso e
+// contatos dela junto (cascade no backend, ver routes/contacts.ts).
+export async function deleteChild(childId: string, authToken: string | null): Promise<void> {
+  const res = await fetch(`${API_URL}/api/children/${encodeURIComponent(childId)}`, {
+    method: 'DELETE',
+    headers: authHeaders(authToken),
+  });
+  if (!res.ok) throw new Error(`delete_child_failed_${res.status}`);
+}
+
 export type ApprovedContact = {
   id: string;
   contactName: string;

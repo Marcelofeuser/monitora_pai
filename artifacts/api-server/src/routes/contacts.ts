@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { eq, and, asc } from "drizzle-orm";
-import { db, contactsTable, usersTable } from "@workspace/db";
+import { eq, and, or, asc } from "drizzle-orm";
+import { db, contactsTable, usersTable, conversationsTable, pairingTokensTable } from "@workspace/db";
 import { z } from "zod/v4";
 
 const router: IRouter = Router();
@@ -193,6 +193,51 @@ router.delete("/contacts/:id", async (req, res) => {
   if (!isParent) return res.status(403).json({ error: "not_the_parent_of_this_child" });
 
   await db.delete(contactsTable).where(eq(contactsTable.id, contact.id));
+
+  return res.json({ ok: true });
+});
+
+/**
+ * DELETE /api/children/:id
+ * Exclui uma Criança inteira (perfil de verdade, não "revogar"). Pedido do
+ * Marcelo depois de notar várias crianças duplicadas na tela de Conversas —
+ * sobra de repareamentos de antes de existir "Reconectar" (cada perda de
+ * conexão do aparelho criava uma criança nova do zero). Ação irreversível:
+ * apaga histórico de mensagens, localização, tempo de uso e contatos dela.
+ *
+ * A maioria das tabelas que referenciam usersTable.id já tem ON DELETE
+ * CASCADE no schema (contacts, groups, locations, child_device_tokens,
+ * screen_time_settings, screen_time_usage, child_locks, push_subscriptions,
+ * pairing_tokens.reconnect_child_id) — o Postgres limpa tudo isso sozinho
+ * quando a linha da Criança é apagada. As exceções, sem cascade, tratadas
+ * manualmente aqui:
+ *   - conversations.participant_a_id / participant_b_id — apagamos as
+ *     conversas da Criança primeiro; isso cascateia messages (via
+ *     conversation_id) e mirror_log (via message_id) junto.
+ *   - pairing_tokens.resulting_child_user_id — não é uma referência viva,
+ *     é só o registro histórico de qual criança nasceu daquele QR; em vez
+ *     de apagar o token, só desvinculamos (seta null).
+ */
+router.delete("/children/:id", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const childId = req.params.id;
+  const isParent = await assertIsParentOfChild(auth.userId, childId);
+  if (!isParent) return res.status(403).json({ error: "not_the_parent_of_this_child" });
+
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(conversationsTable)
+      .where(or(eq(conversationsTable.participantAId, childId), eq(conversationsTable.participantBId, childId)));
+
+    await tx
+      .update(pairingTokensTable)
+      .set({ resultingChildUserId: null })
+      .where(eq(pairingTokensTable.resultingChildUserId, childId));
+
+    await tx.delete(usersTable).where(eq(usersTable.id, childId));
+  });
 
   return res.json({ ok: true });
 });

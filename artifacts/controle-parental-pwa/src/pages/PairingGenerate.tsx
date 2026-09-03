@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import QRCode from 'qrcode';
+import { Trash2 } from 'lucide-react';
 import { useAuth } from '@clerk/react';
 import { createPairing, reconnectPairing } from '@/lib/pairing-api';
-import { fetchChildren } from '@/lib/conversations-api';
+import { fetchChildren, deleteChild } from '@/lib/conversations-api';
 import type { ChildUser } from '@/lib/conversations-api';
 
 /**
@@ -35,6 +36,7 @@ export function PairingGenerate() {
   const [pairedChildLabel, setPairedChildLabel] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+  const [deletingChildId, setDeletingChildId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,6 +80,33 @@ export function PairingGenerate() {
       setErrorMessage(err instanceof Error ? err.message : 'Erro ao gerar o código de reconexão.');
     } finally {
       setReconnectingId(null);
+    }
+  }
+
+  // Exclusão de verdade da Criança — pedido do Marcelo depois de notar
+  // várias crianças duplicadas (sobra de repareamentos de antes da opção
+  // de reconectar existir). Irreversível: apaga mensagens, localização e
+  // tempo de uso dela junto, por isso o confirm() é bem explícito.
+  async function handleDeleteChild(child: ChildUser) {
+    if (deletingChildId || reconnectingId) return;
+    const ok = window.confirm(
+      `Excluir "${child.name}" de verdade? Isso apaga o histórico de conversas, localização e tempo de uso dela. Não dá pra desfazer.`,
+    );
+    if (!ok) return;
+    setDeletingChildId(child.id);
+    setErrorMessage(null);
+    try {
+      const authToken = await getToken();
+      await deleteChild(child.id, authToken);
+      setChildren((current) => {
+        const next = (current ?? []).filter((item) => item.id !== child.id);
+        if (next.length === 0) setShowNewChildForm(true);
+        return next;
+      });
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Erro ao excluir a criança.');
+    } finally {
+      setDeletingChildId(null);
     }
   }
 
@@ -142,19 +171,33 @@ export function PairingGenerate() {
               </div>
               <div className="flex flex-col gap-2">
                 {children.map((child) => (
-                  <button
+                  <div
                     key={child.id}
-                    type="button"
-                    onClick={() => { void handleReconnect(child); }}
-                    disabled={reconnectingId !== null}
-                    data-testid={`button-reconnect-child-${child.id}`}
-                    className="flex items-center justify-between rounded-md border border-[hsl(var(--border))] px-3 py-2.5 text-left text-sm font-medium transition-colors hover:border-[hsl(var(--primary))] disabled:opacity-60"
+                    className="flex items-center justify-between gap-2 rounded-md border border-[hsl(var(--border))] px-3 py-2.5 text-sm font-medium"
                   >
-                    {child.name}
-                    <span className="text-xs font-normal text-[hsl(var(--muted-foreground))]">
-                      {reconnectingId === child.id ? 'Gerando…' : 'Reconectar'}
-                    </span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => { void handleReconnect(child); }}
+                      disabled={reconnectingId !== null || deletingChildId !== null}
+                      data-testid={`button-reconnect-child-${child.id}`}
+                      className="flex flex-1 items-center justify-between text-left transition-colors hover:text-[hsl(var(--primary))] disabled:opacity-60"
+                    >
+                      {child.name}
+                      <span className="text-xs font-normal text-[hsl(var(--muted-foreground))]">
+                        {reconnectingId === child.id ? 'Gerando…' : 'Reconectar'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { void handleDeleteChild(child); }}
+                      disabled={deletingChildId !== null || reconnectingId !== null}
+                      aria-label={`Excluir ${child.name}`}
+                      data-testid={`button-delete-child-${child.id}`}
+                      className="shrink-0 rounded-full p-1.5 text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--destructive))] disabled:opacity-60"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
