@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import { randomBytes, randomUUID, createHash } from "crypto";
 import { eq, and, isNull, gt } from "drizzle-orm";
 import { db, pairingTokensTable, usersTable, childDeviceTokensTable } from "@workspace/db";
+import { ensureParentUser } from "../lib/parentUser";
 import { z } from "zod/v4";
 
 const router: IRouter = Router();
@@ -37,14 +38,11 @@ router.post("/pairing", async (req, res) => {
     return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
   }
 
-  // Garante que existe uma linha em `users` para este Responsável (idempotente).
-  const [parentUser] = await db
-    .insert(usersTable)
-    .values({ id: auth.userId, role: "parent", name: "Responsável" })
-    .onConflictDoNothing({ target: usersTable.id })
-    .returning();
-
-  const parentId = parentUser?.id ?? auth.userId;
+  // Garante que existe uma linha em `users` para este Responsável, com o
+  // nome real vindo do Clerk (nunca mais o literal fixo "Responsável" — ver
+  // lib/parentUser.ts).
+  const parentUser = await ensureParentUser(auth.userId);
+  const parentId = parentUser.id;
 
   const token = generateToken();
   const expiresAt = new Date(Date.now() + PAIRING_TOKEN_TTL_MINUTES * 60 * 1000);

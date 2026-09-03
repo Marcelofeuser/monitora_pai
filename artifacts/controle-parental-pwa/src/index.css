@@ -279,8 +279,11 @@
 .child-blob {
   position: absolute;
   border-radius: 999px;
-  filter: blur(1px);
-  opacity: .6;
+  /* Bem borrado de propósito — é um brilho de fundo, não uma forma
+     sólida. Sem isso ele competia com o texto por cima (ver nota em
+     PairingJoin.tsx). */
+  filter: blur(55px);
+  opacity: .5;
   pointer-events: none;
   z-index: 0;
   animation: float-blob 9s ease-in-out infinite;

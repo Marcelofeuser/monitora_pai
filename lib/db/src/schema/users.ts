@@ -4,6 +4,23 @@ import { z } from "zod/v4";
 
 export const userRoleEnum = pgEnum("user_role", ["parent", "child"]);
 export const authProviderEnum = pgEnum("auth_provider", ["email", "google", "apple"]);
+// Como a Criança deve se referir ao Responsável (pedido do Marcelo: "pai,
+// mae, avó, tio, etc" em vez do genérico "Responsável" sempre). Só faz
+// sentido pra role='parent' — nulo pra Criança, e nulo pro Responsável até
+// ele escolher em Configurações (cai no rótulo "Responsável" no frontend
+// nesse caso). Os valores ficam neutros de gênero/artigo aqui de
+// propósito (avo_m/avo_f em vez de "avô"/"avó" com acento) — quem decide
+// o rótulo e o artigo certo ("o Pai", "a Mãe"...) é o frontend (ver
+// lib/relationship.ts na PWA), não o banco.
+export const parentRelationshipEnum = pgEnum("parent_relationship", [
+  "pai",
+  "mae",
+  "avo_m",
+  "avo_f",
+  "tio",
+  "tia",
+  "responsavel",
+]);
 
 export const usersTable = pgTable("users", {
   // TEXT, não uuid: para role='parent' este id É o Clerk userId (ex.:
@@ -23,6 +40,8 @@ export const usersTable = pgTable("users", {
   authProvider: authProviderEnum("auth_provider"),
   // Aponta para o Responsável quando role = 'child'. Nulo para Responsáveis.
   parentId: text("parent_id"),
+  // Só usado quando role = 'parent'. Ver comentário em parentRelationshipEnum.
+  relationship: parentRelationshipEnum("relationship"),
   onboardingCompleted: text("onboarding_completed").default("false"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

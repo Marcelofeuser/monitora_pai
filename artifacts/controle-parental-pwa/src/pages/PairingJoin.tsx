@@ -13,6 +13,7 @@ import { MessageContent, isStickerMessage } from '@/components/message-content';
 import { fetchChildScreenTimeStatus, sendScreenTimeHeartbeat } from '@/lib/screen-time-api';
 import type { ChildLockStatus } from '@/lib/screen-time-api';
 import { enablePushNotifications, disablePushNotifications, isPushSupported } from '@/lib/push';
+import { getRelationshipInfo } from '@/lib/relationship';
 import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin } from 'lucide-react';
 
 /**
@@ -55,6 +56,7 @@ export function PairingJoin() {
   const [attachError, setAttachError] = useState<string | null>(null);
   const [screenLock, setScreenLock] = useState<ChildLockStatus | null>(null);
   const [parentName, setParentName] = useState<string | null>(null);
+  const [parentRelationship, setParentRelationship] = useState<string | null>(null);
   const [notifications, setNotifications] = useState(false);
   const [notificationsBusy, setNotificationsBusy] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
@@ -127,6 +129,7 @@ export function PairingJoin() {
         if (!cancelled) {
           setPrivateMessages(data.messages);
           setParentName(data.parentName);
+          setParentRelationship(data.parentRelationship);
           setPrivateError(null);
         }
       } catch (err) {
@@ -340,12 +343,20 @@ export function PairingJoin() {
     };
   }, [status, deviceToken]);
 
+  // Rótulo em português (com artigo certo) do relacionamento escolhido
+  // pelo Responsável em Configurações — "o Pai", "a Mãe", "o Responsável"
+  // como fallback até ele escolher. Ver lib/relationship.ts.
+  const relationshipInfo = getRelationshipInfo(parentRelationship);
+
   return (
     <div className="child-portal">
-      {/* Bolhas decorativas — só visual, não interativas. */}
-      <div aria-hidden="true" className="child-blob" style={{ width: 160, height: 160, left: -50, top: 30, background: 'hsl(45 97% 78%)', animationDelay: '0s' }} />
-      <div aria-hidden="true" className="child-blob" style={{ width: 220, height: 220, right: -70, top: 160, background: 'hsl(174 72% 80%)', animationDelay: '2.2s' }} />
-      <div aria-hidden="true" className="child-blob" style={{ width: 140, height: 140, left: 20, bottom: 30, background: 'hsl(330 85% 85%)', animationDelay: '4.4s' }} />
+      {/* Bolhas decorativas — bem borradas e nos cantos, de propósito: na
+          primeira versão elas ficavam quase sólidas atrás do texto (que
+          não tinha fundo próprio) e "engoliam" a leitura. Agora são só um
+          brilho suave, empurradas pra fora da coluna de conteúdo. */}
+      <div aria-hidden="true" className="child-blob" style={{ width: 220, height: 220, left: -90, top: -60, background: 'hsl(45 97% 78%)', animationDelay: '0s' }} />
+      <div aria-hidden="true" className="child-blob" style={{ width: 260, height: 260, right: -110, top: 260, background: 'hsl(174 72% 80%)', animationDelay: '2.2s' }} />
+      <div aria-hidden="true" className="child-blob" style={{ width: 200, height: 200, left: -80, bottom: -70, background: 'hsl(330 85% 85%)', animationDelay: '4.4s' }} />
 
       <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center gap-5 p-5 pb-12 text-center">
         {status === 'success' && (
@@ -378,7 +389,7 @@ export function PairingJoin() {
         {status === 'checking' && (
           <div className="mt-16 flex flex-col items-center gap-3">
             <span className="animate-bob text-6xl" aria-hidden="true">🎈</span>
-            <p className="font-kid text-lg font-bold text-[hsl(258_40%_25%)]">Confirmando vínculo com o Responsável…</p>
+            <p className="font-kid text-lg font-bold text-[hsl(var(--foreground))]">Confirmando vínculo com o Responsável…</p>
           </div>
         )}
 
@@ -417,11 +428,11 @@ export function PairingJoin() {
               >
                 {(childName ?? '?').trim().slice(0, 1).toUpperCase()}
               </div>
-              <h1 className="font-kid text-2xl font-extrabold text-[hsl(258_45%_22%)]">
+              <h1 className="font-kid text-2xl font-extrabold text-[hsl(var(--foreground))]" style={{ textShadow: '0 2px 18px hsl(var(--background) / .55)' }}>
                 Oi, {childName ?? 'tudo certo'}! <span aria-hidden="true">👋</span>
               </h1>
               <p className="max-w-xs text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-                Seu aparelho já está vinculado{parentName ? <> a <strong className="font-extrabold text-[hsl(var(--foreground))]">{parentName}</strong></> : ' ao Responsável'}. Você já pode conversar e compartilhar
+                Seu aparelho já está vinculado{parentName ? <> a <strong className="font-extrabold text-[hsl(var(--foreground))]">{parentName}</strong></> : <> {relationshipInfo.article === 'o' ? 'ao' : 'à'} {relationshipInfo.label}</>}. Você já pode conversar e compartilhar
                 sua localização por aqui. <span aria-hidden="true">✨</span>
               </p>
             </div>
@@ -433,19 +444,19 @@ export function PairingJoin() {
               >
                 <Hourglass className="mx-auto text-[hsl(var(--primary))]" size={34} />
                 <h2 className="font-kid mt-3 text-lg font-extrabold">
-                  {screenLock.lockReason === 'manual' ? 'Seu Responsável bloqueou o app por enquanto' : 'Seu tempo de uso de hoje acabou'}
+                  {screenLock.lockReason === 'manual' ? `${relationshipInfo.article === 'o' ? 'Seu' : 'Sua'} ${relationshipInfo.label} bloqueou o app por enquanto` : 'Seu tempo de uso de hoje acabou'}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
                   {screenLock.lockReason === 'manual'
-                    ? 'Fale com ele se precisar usar o chat agora.'
-                    : 'Volte amanhã, ou peça pro seu Responsável liberar mais tempo hoje.'}
+                    ? `Fale com ${relationshipInfo.article === 'o' ? 'ele' : 'ela'} se precisar usar o chat agora.`
+                    : `Volte amanhã, ou peça ${relationshipInfo.article === 'a' ? 'pra' : 'pro'} ${relationshipInfo.label} liberar mais tempo hoje.`}
                 </p>
               </div>
             ) : (
               <div className="w-full animate-pop-in rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-5 text-left shadow-card">
                 <div className="flex items-center gap-2">
                   <Sparkles size={18} className="text-[hsl(var(--secondary))]" />
-                  <h2 className="font-kid text-base font-extrabold">Conversa com o Responsável</h2>
+                  <h2 className="font-kid text-base font-extrabold">Conversa com {relationshipInfo.article === 'o' ? 'o' : 'a'} {relationshipInfo.label}</h2>
                 </div>
                 <p className="mt-1 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
                   Só vocês dois veem essa conversa.

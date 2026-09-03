@@ -3,13 +3,11 @@ import type { FormEvent, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRight,
-  Baby,
   Bell,
   Check,
   ChevronRight,
   CircleHelp,
   EyeOff,
-  HeartHandshake,
   Hourglass,
   House,
   Lock,
@@ -29,6 +27,7 @@ import {
   Smartphone,
   UserPlus,
   UserRound,
+  Users,
   WifiOff,
   X,
 } from 'lucide-react';
@@ -55,6 +54,9 @@ import { fetchChildLocation } from '@/lib/location-api';
 import type { ChildLocation } from '@/lib/location-api';
 import { fetchScreenTime, setDailyLimit, setChildLock } from '@/lib/screen-time-api';
 import type { ScreenTimeStatus } from '@/lib/screen-time-api';
+import { fetchMe, updateMyRelationship } from '@/lib/me-api';
+import { RELATIONSHIP_OPTIONS } from '@/lib/relationship';
+import type { ParentRelationship } from '@/lib/relationship';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -77,7 +79,7 @@ const pt = {
     heroOne: 'Segurança funciona', heroTwo: 'melhor', heroThree: 'às claras.',
     description: 'O Amparo oferece à família um lugar compartilhado para combinar cuidados, conversar e compartilhar uma localização quando todos concordarem. Sem monitoramento escondido. Sem adivinhar o que é real.',
     checkOne: 'Todos podem ver o que é compartilhado', checkTwo: 'Nada começa sem consentimento',
-    step: '01 / comece aqui', question: 'Qual é o seu papel nesta família?', choiceDescription: 'Sua escolha define o que você vê. É possível mudar depois.',
+    step: '01 / comece aqui', question: 'Vamos criar o espaço da sua família', choiceDescription: 'Esta tela é só pra você, o Responsável — a criança nunca cadastra nada aqui, ela entra pelo link/QR de pareamento.',
     adult: 'Adulto responsável', adultDescription: 'Ajudo a manter a família conectada.',
     child: 'Criança', childDescription: 'Quero participar do meu espaço de segurança.',
     yourName: 'Seu nome', yourNamePlaceholder: 'Digite seu nome', familyName: 'Nome do espaço da família', familyNamePlaceholder: 'Dê um nome ao seu espaço',
@@ -179,6 +181,7 @@ const pt = {
     device: 'Este dispositivo', deviceText: 'O Amparo está rodando em modo local. Não há sincronização de conta nem coleta em segundo plano.',
     browserData: 'Os dados ficam no seu navegador', remove: 'Remover perfil local', removeText: 'Isso limpa seu perfil e as escolhas locais de compartilhamento deste dispositivo.',
     removeButton: 'Remover perfil', removeConfirm: 'Remover este perfil local de família deste dispositivo?', tutorialTitle: 'Tutorial guiado', tutorialText: 'Revise os passos principais do Amparo sempre que quiser.', tutorialAction: 'Ver tutorial novamente',
+    relationshipTitle: 'Como a criança te chama', relationshipText: 'Escolha como você aparece para ela na tela de conversa — em vez do genérico "Responsável".', relationshipSaved: 'Salvo.',
   },
   notFound: { title: 'Esta página não está aqui.', text: 'O espaço do Amparo que você pediu não existe.', back: 'Voltar ao Amparo' },
   metadata: { title: 'Amparo — um espaço claro para cuidar', description: 'Um espaço transparente de segurança familiar para adultos responsáveis e crianças.' },
@@ -191,7 +194,7 @@ const en = {
     heroOne: 'Safety works', heroTwo: 'better', heroThree: 'in the open.',
     description: 'Amparo gives families a shared place to check in, talk, and share a location when everyone agrees. No hidden monitoring. No guessing what is real.',
     checkOne: 'Everyone can see what is shared', checkTwo: 'Nothing starts without consent',
-    step: '01 / start here', question: 'Who are you in this family?', choiceDescription: 'Your choice shapes what you see. You can change it later.',
+    step: '01 / start here', question: "Let's set up your family's space", choiceDescription: "This screen is just for you, the guardian — the child never signs up here, she joins through the pairing link/QR code.",
     adult: 'Responsible adult', adultDescription: 'I help keep the family connected.',
     child: 'Child', childDescription: 'I want a say in my safety space.',
     yourName: 'Your name', yourNamePlaceholder: 'Type your name', familyName: 'Family space name', familyNamePlaceholder: 'Give your space a name',
@@ -293,6 +296,7 @@ const en = {
     device: 'This device', deviceText: 'Amparo is running in local mode. There is no account sync or background collection.',
     browserData: 'Data stays in your browser', remove: 'Remove local profile', removeText: 'This clears your profile and local sharing choices from this device.',
     removeButton: 'Remove profile', removeConfirm: 'Remove this local family profile from this device?', tutorialTitle: 'Guided tutorial', tutorialText: 'Review the main Amparo steps whenever you want.', tutorialAction: 'View tutorial again',
+    relationshipTitle: 'How the child addresses you', relationshipText: 'Choose how you appear to her on the chat screen — instead of the generic "Responsável".', relationshipSaved: 'Saved.',
   },
   notFound: { title: 'This page is not here.', text: 'The Amparo space you asked for does not exist.', back: 'Back to Amparo' },
   metadata: { title: 'Amparo — a clear space for care', description: 'A transparent family safety space for responsible adults and children.' },
@@ -422,7 +426,6 @@ function Onboarding() {
   const [, setLocation] = useLocation();
   const { t } = useLanguage();
   const existing = readProfile();
-  const [role, setRole] = useState<Role | null>(existing?.role ?? null);
   const [displayName, setDisplayName] = useState(existing?.displayName ?? '');
   const [familyName, setFamilyName] = useState(existing?.familyName ?? '');
   const [error, setError] = useState('');
@@ -441,13 +444,18 @@ function Onboarding() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Esta tela é só pro Responsável (a Criança nunca "cadastra" nada — ela
+  // só entra pelo link/QR de pareamento, ver PairingJoin.tsx). Antes havia
+  // aqui um seletor "Adulto responsável / Criança" que deixava CRIAR um
+  // perfil local como Criança — o que não deveria existir (a Criança não
+  // pode criar nada). Removido; o papel agora é sempre 'responsible'.
   function finish(event: FormEvent) {
     event.preventDefault();
-    if (!role || !displayName.trim() || !familyName.trim()) {
+    if (!displayName.trim() || !familyName.trim()) {
       setError(t.onboarding.error);
       return;
     }
-    saveProfile({ role, displayName: displayName.trim(), familyName: familyName.trim() });
+    saveProfile({ role: 'responsible', displayName: displayName.trim(), familyName: familyName.trim() });
     setLocation('/dashboard');
   }
 
@@ -493,11 +501,7 @@ function Onboarding() {
               <h2 className="mt-3 font-display text-4xl tracking-[-.045em]">{t.onboarding.question}</h2>
               <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{t.onboarding.choiceDescription}</p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <RoleChoice selected={role === 'responsible'} onClick={() => { setRole('responsible'); setError(''); }} icon={HeartHandshake} title={t.onboarding.adult} text={t.onboarding.adultDescription} testId="button-role-responsible" />
-              <RoleChoice selected={role === 'child'} onClick={() => { setRole('child'); setError(''); }} icon={Baby} title={t.onboarding.child} text={t.onboarding.childDescription} testId="button-role-child" />
-            </div>
-            {role === 'responsible' && <AuthPrompt />}
+            <AuthPrompt />
             <form onSubmit={finish} className="mt-8 space-y-5">
               <Field label={t.onboarding.yourName} value={displayName} onChange={setDisplayName} placeholder={t.onboarding.yourNamePlaceholder} testId="input-profile-name" />
               <Field label={t.onboarding.familyName} value={familyName} onChange={setFamilyName} placeholder={t.onboarding.familyNamePlaceholder} testId="input-family-name" />
@@ -518,24 +522,6 @@ function Onboarding() {
         </footer>
       </div>
     </main>
-  );
-}
-
-function RoleChoice({ selected, onClick, icon: Icon, title, text, testId }: { selected: boolean; onClick: () => void; icon: LucideIcon; title: string; text: string; testId: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-testid={testId}
-      aria-pressed={selected}
-      className={`group min-h-[116px] rounded-2xl border p-4 text-left transition-all duration-200 ${selected ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary)/.08)] shadow-[inset_0_0_0_1px_hsl(var(--primary)/.25)]' : 'border-[hsl(var(--border))] bg-[hsl(var(--background)/.55)] hover:-translate-y-0.5 hover:border-[hsl(var(--primary)/.4)]'}`}
-    >
-      <span className={`mb-3 grid size-9 place-items-center rounded-xl ${selected ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--primary))]'}`}>
-        <Icon size={18} />
-      </span>
-      <span className="block text-sm font-extrabold">{title}</span>
-      <span className="mt-1 block text-xs leading-5 text-[hsl(var(--muted-foreground))]">{text}</span>
-    </button>
   );
 }
 
@@ -667,7 +653,10 @@ function GuidedTour({ profile }: { profile: Profile | null }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const [spotlight, setSpotlight] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
-  const steps: readonly TourStep[] = profile?.role === 'child' ? t.tutorial.child : t.tutorial.parent;
+  // Sempre o roteiro do Responsável — não existe mais um perfil local de
+  // Criança de verdade (ver nota em Onboarding()); a Criança tem seu
+  // próprio tutorial embutido na tela dela (PairingJoin.tsx), não este.
+  const steps: readonly TourStep[] = t.tutorial.parent;
   const profileKey = profile ? `${TOUR_KEY_PREFIX}-${profile.role}-${profile.displayName.trim().toLowerCase()}` : '';
 
   useEffect(() => {
@@ -1308,14 +1297,14 @@ function EmptyState({ icon: Icon, eyebrow, title, text, actionLabel, onAction, t
   return <section className="flex min-h-[390px] flex-col items-center justify-center rounded-[26px] border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--card)/.45)] px-6 py-14 text-center"><span className="mb-6 grid size-16 place-items-center rounded-[22px] bg-[hsl(var(--muted))] text-[hsl(var(--primary))]"><Icon size={27} strokeWidth={1.6} /></span><p className="font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]">{eyebrow}</p><h2 className="mt-3 font-display text-4xl tracking-[-.05em]">{title}</h2><p className="mt-3 max-w-[420px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{text}</p>{actionLabel && <Button variant="outline" className="mt-7" onClick={onAction} testId={testId}>{actionLabel} <ArrowRight size={15} /></Button>}</section>;
 }
 
+// Antes, esta tela decidia entre o Responsável (dados reais do backend)
+// e uma "Criança" local (uma tela de permissão/compartilhamento falsa,
+// só com localStorage, nunca ligada a nada real) com base no papel salvo
+// no perfil local do navegador. Essa Criança local não existe mais (ver
+// nota em Onboarding()) — a localização de verdade da Criança já é 100%
+// automática pelo lado dela (PairingJoin.tsx), sem nenhuma tela própria.
 function LocationPage() {
-  const profile = readProfile();
-  // O Responsável vê localização real (backend); a Criança continua com a
-  // tela local de permissão/compartilhamento que já existia.
-  if (profile?.role !== 'child') {
-    return <ResponsibleLocationPage />;
-  }
-  return <ChildLocationPage />;
+  return <ResponsibleLocationPage />;
 }
 
 // Tela real: busca as crianças vinculadas e a última localização reportada
@@ -1444,43 +1433,6 @@ function ResponsibleLocationPage() {
 // Criança dentro do app principal (a tela real de compartilhamento fica em
 // PairingJoin.tsx, mas esta continua existindo pra quem navega direto pra
 // /location no papel de Criança).
-function ChildLocationPage() {
-  const { t } = useLanguage();
-  const [permission, setPermission] = useState<'unknown' | 'asking' | 'granted' | 'denied'>('unknown');
-  const [sharing, setSharing] = useState(() => localStorage.getItem('amparo-location-sharing') === 'true');
-  const [error, setError] = useState('');
-
-  function requestPermission() {
-    setError('');
-    if (!navigator.geolocation) { setPermission('denied'); setError(t.location.locationUnavailable); return; }
-    setPermission('asking');
-    navigator.geolocation.getCurrentPosition(() => setPermission('granted'), () => { setPermission('denied'); setError(t.location.notGranted); }, { enableHighAccuracy: false, timeout: 8000 });
-  }
-  function toggleSharing() {
-    const next = !sharing;
-    setSharing(next);
-    localStorage.setItem('amparo-location-sharing', String(next));
-  }
-  return (
-    <>
-      <PageIntro eyebrow={t.location.eyebrow} title={t.location.title} description={t.location.description} />
-      <div className="grid gap-5 lg:grid-cols-[.82fr_1.18fr]">
-        <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
-          <div className="flex items-start justify-between"><IconBox icon={MapPin} tone="gold" /><span className={`rounded-full px-3 py-1 font-mono-app text-[10px] uppercase tracking-[.08em] ${permission === 'granted' ? 'bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : permission === 'denied' ? 'bg-[hsl(var(--destructive)/.1)] text-[hsl(var(--destructive))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'}`}>{permission === 'granted' ? t.location.allowed : permission === 'denied' ? t.location.denied : t.location.notRequested}</span></div>
-          <h2 className="mt-8 font-display text-4xl tracking-[-.05em]">{t.location.permission}</h2><p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{t.location.permissionText}</p>
-          <Button className="mt-7 w-full" onClick={requestPermission} disabled={permission === 'asking'} testId="button-request-location">{permission === 'asking' ? t.location.waiting : permission === 'granted' ? t.location.granted : t.location.ask} <Navigation size={16} /></Button>
-          {error && <p className="mt-3 text-xs font-semibold leading-5 text-[hsl(var(--destructive))]" role="alert" data-testid="status-location-error">{error}</p>}
-          <div className="mt-8 border-t border-[hsl(var(--border))] pt-6"><div className="flex items-center justify-between gap-4"><div><p className="text-sm font-extrabold">{t.location.share}</p><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{sharing ? t.location.sharedChoice : t.location.privateChoice}</p></div><button role="switch" aria-checked={sharing} onClick={toggleSharing} data-testid="switch-location-sharing" className={`relative h-7 w-12 rounded-full transition-colors ${sharing ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${sharing ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></div>
-        </section>
-        <section className="relative min-h-[430px] overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(191_25%_25%)] p-6 text-[hsl(var(--card))] sm:p-8">
-          <div className="absolute inset-0 opacity-25" style={{ backgroundImage: 'linear-gradient(32deg, transparent 48%, hsl(38 77% 65% / .18) 49%, transparent 50%), linear-gradient(118deg, transparent 48%, hsl(42 32% 95% / .12) 49%, transparent 50%)', backgroundSize: '78px 78px' }} />
-          <div className="relative flex h-full flex-col justify-between"><div className="flex items-center justify-between"><span className="font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--accent))]">{t.location.map}</span><span className="flex items-center gap-2 rounded-full border border-[hsl(var(--card)/.2)] px-3 py-1.5 text-[10px] font-bold text-[hsl(var(--card)/.65)]"><LockKeyhole size={12} /> {t.location.consent}</span></div><div className="flex flex-1 flex-col items-center justify-center text-center"><span className="mb-6 grid size-20 place-items-center rounded-full border border-[hsl(var(--accent)/.45)] bg-[hsl(var(--accent)/.13)] text-[hsl(var(--accent))]"><MapPin size={31} strokeWidth={1.4} /></span><h2 className="font-display text-4xl tracking-[-.05em]">{t.location.noLocation}</h2><p className="mt-3 max-w-[330px] text-sm leading-6 text-[hsl(var(--card)/.65)]">{sharing ? t.location.sharingOnEmpty : t.location.mapEmpty}</p></div><div className="flex items-center gap-2 border-t border-[hsl(var(--card)/.15)] pt-5 text-xs text-[hsl(var(--card)/.6)]"><EyeOff size={15} /> {t.location.noTracking}</div></div>
-        </section>
-      </div>
-    </>
-  );
-}
-
 // Tempo de uso e bloqueio temporário (item 11). Mesmo padrão de seletor de
 // criança das outras telas (Conversas/Localização): getToken + fetch*, com
 // seletor só quando há mais de uma criança vinculada.
@@ -1671,6 +1623,41 @@ function SettingsPage() {
   const [notifications, setNotifications] = useState(false);
   const [notificationsBusy, setNotificationsBusy] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [relationship, setRelationship] = useState<ParentRelationship | null>(null);
+  const [relationshipBusy, setRelationshipBusy] = useState(false);
+  const [relationshipSaved, setRelationshipSaved] = useState(false);
+
+  // Carrega o relacionamento já salvo no servidor (pedido do Marcelo: pai,
+  // mãe, avó, tio etc — ver lib/relationship.ts). Vem do backend, não do
+  // localStorage, porque é isso que a Criança vê do lado dela.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      const me = await fetchMe(token).catch(() => null);
+      if (!cancelled && me) setRelationship(me.relationship);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+
+  async function chooseRelationship(next: ParentRelationship) {
+    if (relationshipBusy || next === relationship) return;
+    setRelationshipBusy(true);
+    try {
+      const token = await getToken();
+      const me = await updateMyRelationship(next, token);
+      setRelationship(me.relationship);
+      setRelationshipSaved(true);
+      window.setTimeout(() => setRelationshipSaved(false), 2200);
+    } catch {
+      // Silencioso — o seletor simplesmente não muda de seleção, o
+      // Responsável pode tentar de novo.
+    } finally {
+      setRelationshipBusy(false);
+    }
+  }
 
   // Reflete o estado real da assinatura (não um valor salvo isolado no
   // localStorage) — assim, se o usuário negou a permissão do navegador ou
@@ -1720,7 +1707,10 @@ function SettingsPage() {
   function saveSettings(event: FormEvent) {
     event.preventDefault();
     if (!name.trim() || !family.trim()) return;
-    saveProfile({ displayName: name.trim(), familyName: family.trim(), role: profile?.role ?? 'responsible' });
+    // Sempre 'responsible' (nunca preserva profile?.role) — auto-corrige
+    // qualquer perfil local antigo salvo como 'child' pelo bug do seletor
+    // de papel que existia em Onboarding().
+    saveProfile({ displayName: name.trim(), familyName: family.trim(), role: 'responsible' });
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2200);
   }
@@ -1742,6 +1732,7 @@ function SettingsPage() {
           <div className="mt-7 flex flex-wrap items-center gap-4"><Button type="submit" testId="button-save-settings">{t.settings.save} <Check size={16} /></Button>{saved && <span className="text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-settings-saved">{t.settings.saved}</span>}</div>
         </form>
         <div className="space-y-5">
+           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Users} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.relationshipTitle}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.relationshipText}</p><div className="mt-4 flex flex-wrap gap-2">{RELATIONSHIP_OPTIONS.filter((opt) => opt.value !== 'responsavel').map((opt) => (<button key={opt.value} type="button" disabled={relationshipBusy} onClick={() => { void chooseRelationship(opt.value); }} data-testid={`button-relationship-${opt.value}`} className={`min-h-9 rounded-full border px-4 text-xs font-bold transition-colors disabled:opacity-60 ${relationship === opt.value ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'border-[hsl(var(--card-border))] bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]'}`}>{opt.label}</button>))}</div>{relationshipSaved && <span className="mt-3 block text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-relationship-saved">{t.settings.relationshipSaved}</span>}</div></div></section>
            <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={CircleHelp} tone="teal" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.tutorialTitle}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.tutorialText}</p><button type="button" onClick={() => { window.dispatchEvent(new Event('amparo:start-tour')); }} data-testid="button-restart-tour" className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-4 text-xs font-bold text-[hsl(var(--primary-foreground))]">{t.settings.tutorialAction} <ArrowRight size={14} /></button></div></div></section>
           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Bell} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.notifications}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.notificationsText}</p>{notificationsError && <p className="mt-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{notificationsError}</p>}</div><button role="switch" aria-checked={notifications} disabled={notificationsBusy} onClick={() => { void toggleNotifications(); }} data-testid="switch-notifications" className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60 ${notifications ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${notifications ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></section>
           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Smartphone} tone="teal" /><div><h2 className="text-lg font-extrabold">{t.settings.device}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.deviceText}</p></div></div><div className="mt-5 flex items-center gap-2 border-t border-[hsl(var(--border))] pt-4 text-xs font-bold text-[hsl(var(--primary))]"><Check size={14} /> {t.settings.browserData}</div></section>

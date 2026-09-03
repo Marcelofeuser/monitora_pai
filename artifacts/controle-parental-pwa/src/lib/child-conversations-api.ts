@@ -27,6 +27,10 @@ export type PrivateConversation = {
   // da Criança. Vem junto desta mesma busca (que já roda a cada 5s) em vez
   // de um endpoint próprio, pra não precisar de mais uma chamada de rede.
   parentName: string | null;
+  // "pai" | "mae" | "avo_m" | "avo_f" | "tio" | "tia" | "responsavel" | null
+  // — ver lib/relationship.ts pro rótulo em português. Null até o
+  // Responsável escolher em Configurações.
+  parentRelationship: string | null;
 };
 
 export async function fetchChildPrivateConversation(deviceToken: string): Promise<PrivateConversation> {

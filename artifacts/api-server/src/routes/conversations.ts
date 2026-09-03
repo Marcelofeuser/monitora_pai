@@ -189,7 +189,12 @@ router.get(
 
     const conversation = await getOrCreatePrivateConversation(child.parentId, childId);
     const messages = await listMessages(conversation.id);
-    return res.json({ conversation, messages, parentName: parent?.name ?? null });
+    return res.json({
+      conversation,
+      messages,
+      parentName: parent?.name ?? null,
+      parentRelationship: parent?.relationship ?? null,
+    });
   },
 );
 
