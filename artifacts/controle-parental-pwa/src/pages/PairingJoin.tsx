@@ -414,9 +414,9 @@ export function PairingJoin() {
       <div aria-hidden="true" className="child-blob" style={{ width: 260, height: 260, right: -110, top: 260, background: 'hsl(174 72% 80%)', animationDelay: '2.2s' }} />
       <div aria-hidden="true" className="child-blob" style={{ width: 200, height: 200, left: -80, bottom: -70, background: 'hsl(330 85% 85%)', animationDelay: '4.4s' }} />
 
-      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center gap-5 p-5 pb-12 text-center">
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center gap-3 p-4 pb-3 text-center">
         {status === 'success' && (
-          <div className="flex w-full items-center justify-between gap-2">
+          <div className="flex w-full shrink-0 items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--card)/.8)] px-3 py-1.5 shadow-sm backdrop-blur">
               <span aria-hidden="true">🔒</span>
               <span className="text-[11px] font-extrabold text-[hsl(var(--muted-foreground))]">local e privado</span>
@@ -439,7 +439,7 @@ export function PairingJoin() {
           </div>
         )}
         {notificationsError && (
-          <p className="w-full text-right text-xs font-semibold text-[hsl(var(--destructive))]">{notificationsError}</p>
+          <p className="w-full shrink-0 text-right text-xs font-semibold text-[hsl(var(--destructive))]">{notificationsError}</p>
         )}
 
         {status === 'checking' && (
@@ -476,21 +476,22 @@ export function PairingJoin() {
 
         {status === 'success' && (
           <>
-            <div className="mt-2 flex flex-col items-center gap-3">
+            <div className="mt-1 flex w-full shrink-0 items-center gap-3 text-left">
               <div
-                className="grid size-20 animate-wiggle place-items-center rounded-full text-4xl font-extrabold text-white shadow-lg"
+                className="grid size-12 shrink-0 animate-wiggle place-items-center rounded-full text-xl font-extrabold text-white shadow-lg"
                 style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
                 aria-hidden="true"
               >
                 {(childName ?? '?').trim().slice(0, 1).toUpperCase()}
               </div>
-              <h1 className="font-kid text-2xl font-extrabold text-[hsl(var(--foreground))]" style={{ textShadow: '0 2px 18px hsl(var(--background) / .55)' }}>
-                Oi, {childName ?? 'tudo certo'}! <span aria-hidden="true">👋</span>
-              </h1>
-              <p className="max-w-xs text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-                Seu aparelho já está vinculado{parentName ? <> a <strong className="font-extrabold text-[hsl(var(--foreground))]">{parentName}</strong></> : <> {relationshipInfo.article === 'o' ? 'ao' : 'à'} {relationshipInfo.label}</>}. Você já pode conversar e compartilhar
-                sua localização por aqui. <span aria-hidden="true">✨</span>
-              </p>
+              <div className="min-w-0 flex-1">
+                <h1 className="font-kid truncate text-lg font-extrabold text-[hsl(var(--foreground))]" style={{ textShadow: '0 2px 18px hsl(var(--background) / .55)' }}>
+                  Oi, {childName ?? 'tudo certo'}! <span aria-hidden="true">👋</span>
+                </h1>
+                <p className="truncate text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+                  vinculado{parentName ? <> a <strong className="font-extrabold text-[hsl(var(--foreground))]">{parentName}</strong></> : <> {relationshipInfo.article === 'o' ? 'ao' : 'à'} {relationshipInfo.label}</>}
+                </p>
+              </div>
             </div>
 
             {screenLock?.locked ? (
@@ -509,15 +510,15 @@ export function PairingJoin() {
                 </p>
               </div>
             ) : (
-              <div className="w-full animate-pop-in rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-5 text-left shadow-card">
-                <div className="flex items-center gap-2">
-                  <Sparkles size={18} className="text-[hsl(var(--secondary))]" />
-                  <h2 className="font-kid text-base font-extrabold">Conversa com {relationshipInfo.article === 'o' ? 'o' : 'a'} {relationshipInfo.label}</h2>
+              <div className="flex w-full min-h-0 flex-1 animate-pop-in flex-col rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-4 text-left shadow-card">
+                <div className="flex shrink-0 items-center gap-2">
+                  <Sparkles size={18} className="shrink-0 text-[hsl(var(--secondary))]" />
+                  <h2 className="font-kid truncate text-base font-extrabold">{parentName ? `${parentName} (${relationshipInfo.label})` : relationshipInfo.label}</h2>
                 </div>
-                <p className="mt-1 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
+                <p className="mt-1 shrink-0 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
                   Só vocês dois veem essa conversa.
                 </p>
-                <div className="mt-3 flex max-h-72 min-h-[130px] flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3">
+                <div className="mt-3 flex min-h-[130px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3">
                   {privateLoading && privateMessages.length === 0 ? (
                     <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
                   ) : privateMessages.length === 0 ? (
@@ -541,10 +542,10 @@ export function PairingJoin() {
                     })
                   )}
                 </div>
-                {privateError && <p className="mt-2 text-sm font-semibold text-[hsl(var(--destructive))]">{privateError}</p>}
-                {attachError && <p className="mt-2 text-sm font-semibold text-[hsl(var(--destructive))]">{attachError}</p>}
+                {privateError && <p className="mt-2 shrink-0 text-sm font-semibold text-[hsl(var(--destructive))]">{privateError}</p>}
+                {attachError && <p className="mt-2 shrink-0 text-sm font-semibold text-[hsl(var(--destructive))]">{attachError}</p>}
                 {pendingFile && (
-                  <div className="mt-2 flex items-center gap-2 rounded-full bg-[hsl(var(--muted))] px-3.5 py-2 text-xs font-bold">
+                  <div className="mt-2 flex shrink-0 items-center gap-2 rounded-full bg-[hsl(var(--muted))] px-3.5 py-2 text-xs font-bold">
                     {pendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {pendingFile.name}
                     <button
                       type="button"
@@ -556,7 +557,7 @@ export function PairingJoin() {
                     </button>
                   </div>
                 )}
-                <form onSubmit={sendPrivate} className="mt-3 flex items-center gap-1.5">
+                <form onSubmit={sendPrivate} className="mt-3 flex shrink-0 items-center gap-1.5">
                   <EmojiPicker onSelect={(emoji) => setPrivateDraft((current) => current + emoji)} />
                   <AttachmentPicker
                     onSelect={(file) => {
@@ -591,27 +592,24 @@ export function PairingJoin() {
               </div>
             )}
 
-            <div className="w-full animate-pop-in rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-5 text-left shadow-card">
-              <div className="flex items-center gap-2">
-                <MapPin size={18} className="text-[hsl(var(--accent))]" />
-                <h2 className="font-kid text-base font-extrabold">Localização</h2>
-              </div>
-              <p className="mt-1 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
-                Fica ligada automaticamente enquanto este app estiver aberto — o Responsável sempre
-                vê onde você está agora, sem você precisar tocar em nada.
-              </p>
-              <div className="mt-3 flex items-center gap-2 rounded-full bg-[hsl(var(--muted)/.6)] px-3.5 py-2 text-sm font-bold">
-                <span
-                  className={`size-2.5 rounded-full ${locationStatus === 'active' ? 'animate-pulse-soft bg-green-500' : locationStatus === 'error' ? 'bg-red-500' : 'bg-[hsl(var(--muted-foreground))]'}`}
-                />
-                {locationStatus === 'active' && (
-                  <span className="text-green-700">
-                    Localização ativa{lastSharedAt ? ` · atualizada ${lastSharedAt.toLocaleTimeString('pt-BR')}` : ''}
-                  </span>
-                )}
-                {locationStatus === 'idle' && <span className="text-[hsl(var(--muted-foreground))]">Ativando…</span>}
-                {locationStatus === 'error' && <span className="text-[hsl(var(--destructive))]">{locationError}</span>}
-              </div>
+            {/* Barra fina — antes era um card grande, mas com o chat ocupando o
+                resto da tela (pedido do Marcelo) não sobrava espaço. O texto
+                explicativo virou o `title` (tooltip ao segurar/passar o dedo). */}
+            <div
+              className="mt-1 flex w-full shrink-0 items-center gap-2 rounded-full border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] px-4 py-2 text-xs font-bold shadow-card"
+              title="Localização fica ligada automaticamente enquanto este app estiver aberto."
+            >
+              <MapPin size={14} className="shrink-0 text-[hsl(var(--accent))]" />
+              <span
+                className={`size-2 shrink-0 rounded-full ${locationStatus === 'active' ? 'animate-pulse-soft bg-green-500' : locationStatus === 'error' ? 'bg-red-500' : 'bg-[hsl(var(--muted-foreground))]'}`}
+              />
+              {locationStatus === 'active' && (
+                <span className="truncate text-green-700">
+                  Localização ativa{lastSharedAt ? ` · ${lastSharedAt.toLocaleTimeString('pt-BR')}` : ''}
+                </span>
+              )}
+              {locationStatus === 'idle' && <span className="truncate text-[hsl(var(--muted-foreground))]">Ativando localização…</span>}
+              {locationStatus === 'error' && <span className="truncate text-[hsl(var(--destructive))]">{locationError}</span>}
             </div>
           </>
         )}
