@@ -343,7 +343,7 @@ export function PairingJoin() {
     };
   }, [status, deviceToken]);
 
-  // Dá ao PWA da Criança uma identidade própria (nome "Amparo Kids" e o
+  // Dá ao PWA da Criança uma identidade própria (nome "Ampara Kids" e o
   // ícone da estrelinha, em vez do escudo do Responsável) quando ela usa
   // "Adicionar à Tela de Início" a partir desta tela — pedido do Marcelo
   // depois de instalar o PWA da Criança e ver o ícone/nome do Responsável.
@@ -368,7 +368,7 @@ export function PairingJoin() {
       titleMeta.setAttribute('name', 'apple-mobile-web-app-title');
       document.head.appendChild(titleMeta);
     }
-    titleMeta.setAttribute('content', 'Amparo Kids');
+    titleMeta.setAttribute('content', 'Ampara Kids');
 
     let touchIconLink = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
     const hadTouchIconLink = Boolean(touchIconLink);
@@ -391,7 +391,7 @@ export function PairingJoin() {
     themeColorMeta.setAttribute('content', '#8DD217');
 
     const originalDocumentTitle = document.title;
-    document.title = 'Amparo Kids';
+    document.title = 'Ampara Kids';
 
     return () => {
       if (originalManifestHref) manifestLink?.setAttribute('href', originalManifestHref);
