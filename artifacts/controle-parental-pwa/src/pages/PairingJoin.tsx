@@ -343,6 +343,62 @@ export function PairingJoin() {
     };
   }, [status, deviceToken]);
 
+  // Dá ao PWA da Criança uma identidade própria (nome "Amparo Kids" e o
+  // ícone da estrelinha, em vez do escudo do Responsável) quando ela usa
+  // "Adicionar à Tela de Início" a partir desta tela — pedido do Marcelo
+  // depois de instalar o PWA da Criança e ver o ícone/nome do Responsável.
+  // Não precisa de link ou domínio separado: o navegador lê o
+  // <link rel="manifest">, o <meta apple-mobile-web-app-title> e o
+  // <link rel="apple-touch-icon"> presentes no DOM no momento em que a
+  // instalação acontece — então trocamos esses elementos só enquanto esta
+  // tela (a única "casa" da Criança no app) está montada, e devolvemos o
+  // original ao desmontar, caso ela algum dia navegue pra fora daqui.
+  useEffect(() => {
+    const base = import.meta.env.BASE_URL;
+
+    const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const originalManifestHref = manifestLink?.getAttribute('href') ?? null;
+    manifestLink?.setAttribute('href', `${base}manifest-child.webmanifest`);
+
+    let titleMeta = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
+    const hadTitleMeta = Boolean(titleMeta);
+    const originalTitleContent = titleMeta?.getAttribute('content') ?? null;
+    if (!titleMeta) {
+      titleMeta = document.createElement('meta');
+      titleMeta.setAttribute('name', 'apple-mobile-web-app-title');
+      document.head.appendChild(titleMeta);
+    }
+    titleMeta.setAttribute('content', 'Amparo Kids');
+
+    let touchIconLink = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
+    const hadTouchIconLink = Boolean(touchIconLink);
+    const originalTouchIconHref = touchIconLink?.getAttribute('href') ?? null;
+    if (!touchIconLink) {
+      touchIconLink = document.createElement('link');
+      touchIconLink.setAttribute('rel', 'apple-touch-icon');
+      document.head.appendChild(touchIconLink);
+    }
+    touchIconLink.setAttribute('href', `${base}apple-touch-icon-child.png`);
+
+    const originalDocumentTitle = document.title;
+    document.title = 'Amparo Kids';
+
+    return () => {
+      if (originalManifestHref) manifestLink?.setAttribute('href', originalManifestHref);
+      if (hadTitleMeta && originalTitleContent !== null) {
+        titleMeta?.setAttribute('content', originalTitleContent);
+      } else if (!hadTitleMeta) {
+        titleMeta?.remove();
+      }
+      if (hadTouchIconLink && originalTouchIconHref) {
+        touchIconLink?.setAttribute('href', originalTouchIconHref);
+      } else if (!hadTouchIconLink) {
+        touchIconLink?.remove();
+      }
+      document.title = originalDocumentTitle;
+    };
+  }, []);
+
   // Rótulo em português (com artigo certo) do relacionamento escolhido
   // pelo Responsável em Configurações — "o Pai", "a Mãe", "o Responsável"
   // como fallback até ele escolher. Ver lib/relationship.ts.

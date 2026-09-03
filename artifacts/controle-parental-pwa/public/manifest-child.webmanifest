@@ -1,0 +1,24 @@
+{
+  "name": "Amparo Kids",
+  "short_name": "Amparo Kids",
+  "description": "Converse e compartilhe com quem cuida de você.",
+  "start_url": "./join",
+  "display": "standalone",
+  "background_color": "#8B4FEF",
+  "theme_color": "#8B4FEF",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "./favicon-child.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-child-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

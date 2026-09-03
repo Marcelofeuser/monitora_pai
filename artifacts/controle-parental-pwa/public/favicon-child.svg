@@ -1,0 +1,14 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="180" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8B4FEF"/>
+      <stop offset="1" stop-color="#EC6FB0"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" rx="42" fill="url(#bg)"/>
+  <!-- Estrelinha feliz — ícone só da Criança, bem diferente do escudo do Responsável -->
+  <path d="M90 26L104 66L146 66L112 90L125 130L90 106L55 130L68 90L34 66L76 66Z" fill="#FCCD40"/>
+  <circle cx="79" cy="88" r="6" fill="#1F1233"/>
+  <circle cx="101" cy="88" r="6" fill="#1F1233"/>
+  <path d="M76 102C81 111 99 111 104 102" stroke="#1F1233" stroke-width="6" stroke-linecap="round"/>
+</svg>
