@@ -380,6 +380,16 @@ export function PairingJoin() {
     }
     touchIconLink.setAttribute('href', `${base}apple-touch-icon-child.png`);
 
+    let themeColorMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    const hadThemeColorMeta = Boolean(themeColorMeta);
+    const originalThemeColorContent = themeColorMeta?.getAttribute('content') ?? null;
+    if (!themeColorMeta) {
+      themeColorMeta = document.createElement('meta');
+      themeColorMeta.setAttribute('name', 'theme-color');
+      document.head.appendChild(themeColorMeta);
+    }
+    themeColorMeta.setAttribute('content', '#8DD217');
+
     const originalDocumentTitle = document.title;
     document.title = 'Amparo Kids';
 
@@ -394,6 +404,11 @@ export function PairingJoin() {
         touchIconLink?.setAttribute('href', originalTouchIconHref);
       } else if (!hadTouchIconLink) {
         touchIconLink?.remove();
+      }
+      if (hadThemeColorMeta && originalThemeColorContent !== null) {
+        themeColorMeta?.setAttribute('content', originalThemeColorContent);
+      } else if (!hadThemeColorMeta) {
+        themeColorMeta?.remove();
       }
       document.title = originalDocumentTitle;
     };
