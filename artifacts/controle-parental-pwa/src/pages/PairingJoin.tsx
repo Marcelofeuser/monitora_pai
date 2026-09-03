@@ -13,7 +13,7 @@ import { MessageContent, isStickerMessage } from '@/components/message-content';
 import { fetchChildScreenTimeStatus, sendScreenTimeHeartbeat } from '@/lib/screen-time-api';
 import type { ChildLockStatus } from '@/lib/screen-time-api';
 import { enablePushNotifications, disablePushNotifications, isPushSupported } from '@/lib/push';
-import { Hourglass, Bell, BellOff } from 'lucide-react';
+import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin } from 'lucide-react';
 
 /**
  * Rota /join?token=... — é para onde o link do QR code aponta.
@@ -341,168 +341,214 @@ export function PairingJoin() {
   }, [status, deviceToken]);
 
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center gap-4 p-6 text-center">
-      {/* Único ajuste que a Criança pode mexer além de conversar e
-          compartilhar localização: o tema claro/escuro. */}
-      {status === 'success' && (
-        <div className="flex w-full items-center justify-end gap-2">
-          {isPushSupported() && (
-            <button
-              type="button"
-              onClick={() => { void toggleNotifications(); }}
-              disabled={notificationsBusy}
-              aria-label={notifications ? 'Desativar notificações' : 'Ativar notificações'}
-              data-testid="button-toggle-child-notifications"
-              className="grid size-9 place-items-center rounded-full border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))] disabled:opacity-60"
-            >
-              {notifications ? <Bell size={16} /> : <BellOff size={16} />}
-            </button>
-          )}
-          <ThemeSwitcher />
-        </div>
-      )}
-      {notificationsError && (
-        <p className="w-full text-right text-xs text-red-600">{notificationsError}</p>
-      )}
-      {status === 'checking' && <p>Confirmando vínculo com o Responsável…</p>}
+    <div className="child-portal">
+      {/* Bolhas decorativas — só visual, não interativas. */}
+      <div aria-hidden="true" className="child-blob" style={{ width: 160, height: 160, left: -50, top: 30, background: 'hsl(45 97% 78%)', animationDelay: '0s' }} />
+      <div aria-hidden="true" className="child-blob" style={{ width: 220, height: 220, right: -70, top: 160, background: 'hsl(174 72% 80%)', animationDelay: '2.2s' }} />
+      <div aria-hidden="true" className="child-blob" style={{ width: 140, height: 140, left: 20, bottom: 30, background: 'hsl(330 85% 85%)', animationDelay: '4.4s' }} />
 
-      {status === 'no_token' && (
-        <>
-          <h1 className="text-lg font-bold">Link incompleto</h1>
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">
-            Este link não tem um código de pareamento válido. Peça para o Responsável gerar um
-            novo QR code.
-          </p>
-        </>
-      )}
-
-      {status === 'error' && (
-        <>
-          <h1 className="text-lg font-bold">Não foi possível vincular</h1>
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">
-            O código pode ter expirado (válido por 15 minutos) ou já foi usado. Peça para o
-            Responsável gerar um novo QR code.
-          </p>
-          {errorMessage && (
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">Detalhe técnico: {errorMessage}</p>
-          )}
-        </>
-      )}
-
-      {status === 'success' && (
-        <>
-          <h1 className="text-lg font-bold">Oi, {childName ?? 'tudo certo'}!</h1>
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">
-            Seu aparelho já está vinculado{parentName ? <> a <strong className="font-semibold text-[hsl(var(--foreground))]">{parentName}</strong></> : ' ao Responsável'}. Você já pode conversar e compartilhar
-            sua localização por aqui.
-          </p>
-
-          {screenLock?.locked ? (
-            <div className="mt-4 w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted)/.4)] p-6 text-center" data-testid="panel-screen-time-locked">
-              <Hourglass className="mx-auto text-[hsl(var(--muted-foreground))]" size={28} />
-              <h2 className="mt-3 text-base font-semibold">
-                {screenLock.lockReason === 'manual' ? 'Seu Responsável bloqueou o app por enquanto' : 'Seu tempo de uso de hoje acabou'}
-              </h2>
-              <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
-                {screenLock.lockReason === 'manual'
-                  ? 'Fale com ele se precisar usar o chat agora.'
-                  : 'Volte amanhã, ou peça pro seu Responsável liberar mais tempo hoje.'}
-              </p>
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center gap-5 p-5 pb-12 text-center">
+        {status === 'success' && (
+          <div className="flex w-full items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--card)/.8)] px-3 py-1.5 shadow-sm backdrop-blur">
+              <span aria-hidden="true">🔒</span>
+              <span className="text-[11px] font-extrabold text-[hsl(var(--muted-foreground))]">local e privado</span>
             </div>
-          ) : (
-          <div className="mt-4 w-full rounded-lg border border-[hsl(var(--border))] p-4 text-left">
-            <h2 className="text-base font-semibold">Conversa com o Responsável</h2>
-            <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-              Só vocês dois veem essa conversa.
-            </p>
-            <div className="mt-3 flex max-h-72 min-h-[120px] flex-col gap-2 overflow-y-auto rounded-md bg-[hsl(var(--muted)/.4)] p-3">
-              {privateLoading && privateMessages.length === 0 ? (
-                <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
-              ) : privateMessages.length === 0 ? (
-                <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda. Diga oi!</p>
-              ) : (
-                privateMessages.map((message) => {
-                  const fromMe = childId !== null && message.senderId === childId;
-                  const sticker = isStickerMessage(message);
-                  const bubbleClass = sticker
-                    ? `${fromMe ? 'self-end' : 'self-start'}`
-                    : `rounded-2xl px-3 py-2 shadow-sm ${fromMe ? 'self-end bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'self-start bg-[hsl(var(--card))]'}`;
-                  return (
-                    <div key={message.id} className={`max-w-[85%] text-sm leading-6 ${bubbleClass}`}>
-                      <MessageContent message={message} authHeaders={{ 'X-Child-Token': deviceToken ?? '' }} />
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            {privateError && <p className="mt-2 text-sm text-red-600">{privateError}</p>}
-            {attachError && <p className="mt-2 text-sm text-red-600">{attachError}</p>}
-            {pendingFile && (
-              <div className="mt-2 flex items-center gap-2 rounded-md bg-[hsl(var(--muted)/.6)] px-3 py-2 text-xs font-semibold">
-                {pendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {pendingFile.name}
+            <div className="flex items-center gap-2">
+              {isPushSupported() && (
                 <button
                   type="button"
-                  onClick={() => setPendingFile(null)}
-                  aria-label="Remover anexo"
-                  className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                  onClick={() => { void toggleNotifications(); }}
+                  disabled={notificationsBusy}
+                  aria-label={notifications ? 'Desativar notificações' : 'Ativar notificações'}
+                  data-testid="button-toggle-child-notifications"
+                  className="grid size-10 place-items-center rounded-full bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
                 >
-                  ×
+                  {notifications ? <Bell size={17} /> : <BellOff size={17} />}
                 </button>
-              </div>
-            )}
-            <form onSubmit={sendPrivate} className="mt-3 flex items-center gap-2">
-              <EmojiPicker onSelect={(emoji) => setPrivateDraft((current) => current + emoji)} />
-              <AttachmentPicker
-                onSelect={(file) => {
-                  setAttachError(null);
-                  setPendingFile(file);
-                }}
-                onError={setAttachError}
-              />
-              <StickerPicker onSelect={(emoji) => { void sendSticker(emoji); }} />
-              <AudioRecorderButton
-                onRecorded={(file) => { void sendAudio(file); }}
-                onError={setAttachError}
-                disabled={privateSending}
-              />
-              <input
-                value={privateDraft}
-                onChange={(event) => setPrivateDraft(event.target.value)}
-                placeholder={pendingFile ? 'Legenda (opcional)…' : 'Escreva uma mensagem…'}
-                className="h-11 flex-1 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
-              />
-              <button
-                type="submit"
-                disabled={(!privateDraft.trim() && !pendingFile) || privateSending}
-                className="h-11 rounded-md bg-[hsl(var(--primary))] px-4 text-sm font-medium text-[hsl(var(--primary-foreground))] disabled:opacity-60"
-              >
-                {privateSending ? '…' : 'Enviar'}
-              </button>
-            </form>
-          </div>
-          )}
-
-          <div className="mt-4 w-full rounded-lg border border-[hsl(var(--border))] p-4 text-left">
-            <h2 className="text-base font-semibold">Localização</h2>
-            <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-              Fica ligada automaticamente enquanto este app estiver aberto — o Responsável sempre
-              vê onde você está agora, sem você precisar tocar em nada.
-            </p>
-            <div className="mt-3 flex items-center gap-2 text-sm">
-              <span
-                className={`size-2.5 rounded-full ${locationStatus === 'active' ? 'bg-green-500' : locationStatus === 'error' ? 'bg-red-500' : 'bg-[hsl(var(--muted-foreground))]'}`}
-              />
-              {locationStatus === 'active' && (
-                <span className="text-green-700">
-                  Localização ativa{lastSharedAt ? ` · atualizada ${lastSharedAt.toLocaleTimeString('pt-BR')}` : ''}
-                </span>
               )}
-              {locationStatus === 'idle' && <span className="text-[hsl(var(--muted-foreground))]">Ativando…</span>}
-              {locationStatus === 'error' && <span className="text-red-600">{locationError}</span>}
+              <ThemeSwitcher />
             </div>
           </div>
-        </>
-      )}
+        )}
+        {notificationsError && (
+          <p className="w-full text-right text-xs font-semibold text-[hsl(var(--destructive))]">{notificationsError}</p>
+        )}
+
+        {status === 'checking' && (
+          <div className="mt-16 flex flex-col items-center gap-3">
+            <span className="animate-bob text-6xl" aria-hidden="true">🎈</span>
+            <p className="font-kid text-lg font-bold text-[hsl(258_40%_25%)]">Confirmando vínculo com o Responsável…</p>
+          </div>
+        )}
+
+        {status === 'no_token' && (
+          <div className="mt-10 flex flex-col items-center gap-3 rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-7 shadow-card">
+            <span className="text-5xl" aria-hidden="true">🧩</span>
+            <h1 className="font-kid text-xl font-extrabold">Link incompleto</h1>
+            <p className="text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+              Este link não tem um código de pareamento válido. Peça para o Responsável gerar um
+              novo QR code.
+            </p>
+          </div>
+        )}
+
+        {status === 'error' && (
+          <div className="mt-10 flex flex-col items-center gap-3 rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-7 shadow-card">
+            <span className="text-5xl" aria-hidden="true">😅</span>
+            <h1 className="font-kid text-xl font-extrabold">Não foi possível vincular</h1>
+            <p className="text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+              O código pode ter expirado (válido por 15 minutos) ou já foi usado. Peça para o
+              Responsável gerar um novo QR code.
+            </p>
+            {errorMessage && (
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">Detalhe técnico: {errorMessage}</p>
+            )}
+          </div>
+        )}
+
+        {status === 'success' && (
+          <>
+            <div className="mt-2 flex flex-col items-center gap-3">
+              <div
+                className="grid size-20 animate-wiggle place-items-center rounded-full text-4xl font-extrabold text-white shadow-lg"
+                style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
+                aria-hidden="true"
+              >
+                {(childName ?? '?').trim().slice(0, 1).toUpperCase()}
+              </div>
+              <h1 className="font-kid text-2xl font-extrabold text-[hsl(258_45%_22%)]">
+                Oi, {childName ?? 'tudo certo'}! <span aria-hidden="true">👋</span>
+              </h1>
+              <p className="max-w-xs text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+                Seu aparelho já está vinculado{parentName ? <> a <strong className="font-extrabold text-[hsl(var(--foreground))]">{parentName}</strong></> : ' ao Responsável'}. Você já pode conversar e compartilhar
+                sua localização por aqui. <span aria-hidden="true">✨</span>
+              </p>
+            </div>
+
+            {screenLock?.locked ? (
+              <div
+                className="mt-2 w-full animate-pop-in rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-7 text-center shadow-card"
+                data-testid="panel-screen-time-locked"
+              >
+                <Hourglass className="mx-auto text-[hsl(var(--primary))]" size={34} />
+                <h2 className="font-kid mt-3 text-lg font-extrabold">
+                  {screenLock.lockReason === 'manual' ? 'Seu Responsável bloqueou o app por enquanto' : 'Seu tempo de uso de hoje acabou'}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+                  {screenLock.lockReason === 'manual'
+                    ? 'Fale com ele se precisar usar o chat agora.'
+                    : 'Volte amanhã, ou peça pro seu Responsável liberar mais tempo hoje.'}
+                </p>
+              </div>
+            ) : (
+              <div className="w-full animate-pop-in rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-5 text-left shadow-card">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} className="text-[hsl(var(--secondary))]" />
+                  <h2 className="font-kid text-base font-extrabold">Conversa com o Responsável</h2>
+                </div>
+                <p className="mt-1 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
+                  Só vocês dois veem essa conversa.
+                </p>
+                <div className="mt-3 flex max-h-72 min-h-[130px] flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3">
+                  {privateLoading && privateMessages.length === 0 ? (
+                    <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+                  ) : privateMessages.length === 0 ? (
+                    <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda. Diga oi! <span aria-hidden="true">👋</span></p>
+                  ) : (
+                    privateMessages.map((message) => {
+                      const fromMe = childId !== null && message.senderId === childId;
+                      const sticker = isStickerMessage(message);
+                      const bubbleClass = sticker
+                        ? `${fromMe ? 'self-end' : 'self-start'}`
+                        : `rounded-[20px] px-3.5 py-2.5 shadow-sm ${fromMe ? 'self-end text-white' : 'self-start bg-[hsl(var(--card))]'}`;
+                      return (
+                        <div
+                          key={message.id}
+                          className={`max-w-[85%] animate-pop-in text-sm leading-6 ${bubbleClass}`}
+                          style={sticker || !fromMe ? undefined : { background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
+                        >
+                          <MessageContent message={message} authHeaders={{ 'X-Child-Token': deviceToken ?? '' }} />
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                {privateError && <p className="mt-2 text-sm font-semibold text-[hsl(var(--destructive))]">{privateError}</p>}
+                {attachError && <p className="mt-2 text-sm font-semibold text-[hsl(var(--destructive))]">{attachError}</p>}
+                {pendingFile && (
+                  <div className="mt-2 flex items-center gap-2 rounded-full bg-[hsl(var(--muted))] px-3.5 py-2 text-xs font-bold">
+                    {pendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {pendingFile.name}
+                    <button
+                      type="button"
+                      onClick={() => setPendingFile(null)}
+                      aria-label="Remover anexo"
+                      className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+                <form onSubmit={sendPrivate} className="mt-3 flex items-center gap-1.5">
+                  <EmojiPicker onSelect={(emoji) => setPrivateDraft((current) => current + emoji)} />
+                  <AttachmentPicker
+                    onSelect={(file) => {
+                      setAttachError(null);
+                      setPendingFile(file);
+                    }}
+                    onError={setAttachError}
+                  />
+                  <StickerPicker onSelect={(emoji) => { void sendSticker(emoji); }} />
+                  <AudioRecorderButton
+                    onRecorded={(file) => { void sendAudio(file); }}
+                    onError={setAttachError}
+                    disabled={privateSending}
+                  />
+                  <input
+                    value={privateDraft}
+                    onChange={(event) => setPrivateDraft(event.target.value)}
+                    placeholder={pendingFile ? 'Legenda (opcional)…' : 'Escreva uma mensagem…'}
+                    className="h-11 flex-1 rounded-full border border-[hsl(var(--border))] bg-transparent px-4 text-sm outline-none focus:border-[hsl(var(--primary))]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={(!privateDraft.trim() && !pendingFile) || privateSending}
+                    aria-label="Enviar mensagem"
+                    data-testid="button-send-private-message"
+                    className="grid size-11 shrink-0 place-items-center rounded-full text-white shadow-sm transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
+                    style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
+                  >
+                    {privateSending ? '…' : <Send size={17} />}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            <div className="w-full animate-pop-in rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-5 text-left shadow-card">
+              <div className="flex items-center gap-2">
+                <MapPin size={18} className="text-[hsl(var(--accent))]" />
+                <h2 className="font-kid text-base font-extrabold">Localização</h2>
+              </div>
+              <p className="mt-1 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
+                Fica ligada automaticamente enquanto este app estiver aberto — o Responsável sempre
+                vê onde você está agora, sem você precisar tocar em nada.
+              </p>
+              <div className="mt-3 flex items-center gap-2 rounded-full bg-[hsl(var(--muted)/.6)] px-3.5 py-2 text-sm font-bold">
+                <span
+                  className={`size-2.5 rounded-full ${locationStatus === 'active' ? 'animate-pulse-soft bg-green-500' : locationStatus === 'error' ? 'bg-red-500' : 'bg-[hsl(var(--muted-foreground))]'}`}
+                />
+                {locationStatus === 'active' && (
+                  <span className="text-green-700">
+                    Localização ativa{lastSharedAt ? ` · atualizada ${lastSharedAt.toLocaleTimeString('pt-BR')}` : ''}
+                  </span>
+                )}
+                {locationStatus === 'idle' && <span className="text-[hsl(var(--muted-foreground))]">Ativando…</span>}
+                {locationStatus === 'error' && <span className="text-[hsl(var(--destructive))]">{locationError}</span>}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

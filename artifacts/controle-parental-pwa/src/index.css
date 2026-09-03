@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800;900&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
@@ -184,3 +185,124 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
 }
+
+
+/* ============================================================
+   Portal da Criança — tema colorido, interativo e "pra criança"
+   (pedido do Marcelo). Escopo: só dentro de `.child-portal`, que
+   envolve pages/PairingJoin.tsx — essa é a ÚNICA tela da Criança
+   (ela não navega pelo resto do app). Os componentes compartilhados
+   com o lado do Responsável (EmojiPicker, StickerPicker,
+   AttachmentPicker, AudioRecorderButton, MessageContent, ThemeSwitcher)
+   usam hsl(var(--primary)) etc. direto no className deles — como são
+   variáveis CSS resolvidas em tempo de renderização (não Tailwind
+   compilado estático), redefinir essas variáveis aqui já re-tema tudo
+   isso automaticamente quando renderizado dentro de .child-portal, SEM
+   editar nenhum desses arquivos (que continuam com o visual calmo/adulto
+   de sempre do lado do Responsável, fora deste escopo).
+   ============================================================ */
+.child-portal {
+  --background: 250 100% 97%;
+  --foreground: 258 40% 18%;
+  --border: 258 55% 88%;
+  --card: 0 0% 100%;
+  --card-foreground: 258 40% 18%;
+  --card-border: 258 45% 91%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 258 40% 18%;
+  --popover-border: 258 45% 91%;
+  --primary: 262 83% 62%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 45 97% 62%;
+  --secondary-foreground: 258 40% 18%;
+  --muted: 255 65% 95%;
+  --muted-foreground: 258 20% 45%;
+  --accent: 174 72% 42%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 78% 62%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 258 55% 88%;
+  --ring: 262 83% 62%;
+  --radius: 1.6rem;
+  --primary-border: hsl(var(--primary));
+  --secondary-border: hsl(var(--secondary));
+  --muted-border: hsl(var(--muted));
+  --accent-border: hsl(var(--accent));
+  --destructive-border: hsl(var(--destructive));
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 10% 6%, hsl(45 97% 88%) 0%, transparent 40%),
+    radial-gradient(circle at 92% 8%, hsl(174 72% 88%) 0%, transparent 38%),
+    radial-gradient(circle at 88% 94%, hsl(330 85% 91%) 0%, transparent 42%),
+    linear-gradient(160deg, hsl(255 100% 97%), hsl(200 100% 96%) 55%, hsl(45 100% 96%));
+}
+.dark .child-portal {
+  --background: 253 45% 10%;
+  --foreground: 255 55% 95%;
+  --border: 253 35% 26%;
+  --card: 253 40% 15%;
+  --card-foreground: 255 55% 95%;
+  --card-border: 253 32% 24%;
+  --popover: 253 40% 15%;
+  --popover-foreground: 255 55% 95%;
+  --popover-border: 253 32% 24%;
+  --primary: 266 90% 72%;
+  --primary-foreground: 253 45% 10%;
+  --secondary: 45 90% 60%;
+  --secondary-foreground: 253 45% 10%;
+  --muted: 253 35% 20%;
+  --muted-foreground: 255 25% 72%;
+  --accent: 174 70% 55%;
+  --accent-foreground: 253 45% 10%;
+  --destructive: 0 78% 66%;
+  --destructive-foreground: 253 45% 10%;
+  --input: 253 35% 26%;
+  --ring: 266 90% 72%;
+  --primary-border: hsl(var(--primary));
+  --secondary-border: hsl(var(--secondary));
+  --muted-border: hsl(var(--muted));
+  --accent-border: hsl(var(--accent));
+  --destructive-border: hsl(var(--destructive));
+  background:
+    radial-gradient(circle at 14% 10%, hsl(266 60% 22%) 0%, transparent 45%),
+    radial-gradient(circle at 88% 12%, hsl(174 55% 20%) 0%, transparent 42%),
+    radial-gradient(circle at 80% 90%, hsl(330 55% 22%) 0%, transparent 45%),
+    linear-gradient(160deg, hsl(253 45% 9%), hsl(253 45% 11%) 60%, hsl(253 40% 13%));
+}
+.font-kid { font-family: 'Baloo 2', var(--app-font-sans); }
+.child-portal, .child-portal input, .child-portal textarea, .child-portal button {
+  font-family: 'Nunito', var(--app-font-sans);
+}
+.child-blob {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(1px);
+  opacity: .6;
+  pointer-events: none;
+  z-index: 0;
+  animation: float-blob 9s ease-in-out infinite;
+}
+@keyframes float-blob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(0, -18px) scale(1.06); }
+}
+@keyframes pop-in {
+  0% { opacity: 0; transform: scale(.7) translateY(10px); }
+  70% { opacity: 1; transform: scale(1.04) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-7deg); }
+  75% { transform: rotate(7deg); }
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+.animate-pop-in { animation: pop-in .4s cubic-bezier(.34,1.56,.64,1) both; }
+.animate-wiggle { animation: wiggle 1.8s ease-in-out infinite; }
+.animate-bob { animation: bob 2.4s ease-in-out infinite; }
