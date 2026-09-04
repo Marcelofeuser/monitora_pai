@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { confirmPairing } from '@/lib/pairing-api';
 import { reportLocation } from '@/lib/location-api';
@@ -14,7 +14,7 @@ import { fetchChildScreenTimeStatus, sendScreenTimeHeartbeat } from '@/lib/scree
 import type { ChildLockStatus } from '@/lib/screen-time-api';
 import { enablePushNotifications, disablePushNotifications, isPushSupported } from '@/lib/push';
 import { getRelationshipInfo } from '@/lib/relationship';
-import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin } from 'lucide-react';
+import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin, Plus, Maximize2, Minimize2 } from 'lucide-react';
 
 /**
  * Rota /join?token=... — é para onde o link do QR code aponta.
@@ -36,6 +36,16 @@ import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin } from 'lucide-react';
 const DEVICE_TOKEN_KEY = 'amparo-child-device-token';
 const CHILD_NAME_KEY = 'amparo-child-name';
 const CHILD_ID_KEY = 'amparo-child-id';
+
+// Faz o campo de texto crescer sozinho conforme a Criança digita (até um
+// limite, depois rola por dentro) — antes era um <input> de uma linha só,
+// que cortava o texto e, junto com os 4 botões de anexo ao lado, estourava
+// a largura da tela em aparelhos menores (pedido do Marcelo).
+const COMPOSER_MAX_HEIGHT = 128;
+function autoGrowTextarea(el: HTMLTextAreaElement) {
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
+}
 
 export function PairingJoin() {
   const [status, setStatus] = useState<'checking' | 'success' | 'error' | 'no_token'>('checking');
@@ -60,6 +70,9 @@ export function PairingJoin() {
   const [notifications, setNotifications] = useState(false);
   const [notificationsBusy, setNotificationsBusy] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [composerToolsOpen, setComposerToolsOpen] = useState(false);
+  const [chatExpanded, setChatExpanded] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -166,6 +179,7 @@ export function PairingJoin() {
       setPrivateMessages((current) => [...current, message]);
       setPrivateDraft('');
       setPendingFile(null);
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
     } catch (err) {
       setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
     } finally {
@@ -429,7 +443,7 @@ export function PairingJoin() {
       <div aria-hidden="true" className="child-blob" style={{ width: 260, height: 260, right: -110, top: 260, background: 'hsl(174 72% 80%)', animationDelay: '2.2s' }} />
       <div aria-hidden="true" className="child-blob" style={{ width: 200, height: 200, left: -80, bottom: -70, background: 'hsl(330 85% 85%)', animationDelay: '4.4s' }} />
 
-      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center gap-3 p-4 pb-3 text-center">
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center gap-2 p-3 pb-2 text-center">
         {status === 'success' && (
           <div className="flex w-full shrink-0 items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--card)/.8)] px-3 py-1.5 shadow-sm backdrop-blur">
@@ -525,15 +539,32 @@ export function PairingJoin() {
                 </p>
               </div>
             ) : (
-              <div className="flex w-full min-h-0 flex-1 animate-pop-in flex-col rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-4 text-left shadow-card">
+              <div
+                className={
+                  chatExpanded
+                    ? 'fixed inset-0 z-40 flex animate-pop-in flex-col bg-[hsl(var(--card))] p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] text-left'
+                    : 'flex w-full min-h-0 flex-1 animate-pop-in flex-col rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-3 text-left shadow-card'
+                }
+                data-testid="panel-private-chat"
+              >
                 <div className="flex shrink-0 items-center gap-2">
                   <Sparkles size={18} className="shrink-0 text-[hsl(var(--secondary))]" />
-                  <h2 className="font-kid truncate text-base font-extrabold">{parentName ? `${parentName} (${relationshipInfo.label})` : relationshipInfo.label}</h2>
+                  <h2 className="font-kid min-w-0 flex-1 truncate text-base font-extrabold">{parentName ? `${parentName} (${relationshipInfo.label})` : relationshipInfo.label}</h2>
+                  <button
+                    type="button"
+                    onClick={() => setChatExpanded((current) => !current)}
+                    aria-label={chatExpanded ? 'Reduzir conversa' : 'Expandir conversa pra tela toda'}
+                    title={chatExpanded ? 'Reduzir conversa' : 'Expandir conversa pra tela toda'}
+                    data-testid="button-toggle-chat-fullscreen"
+                    className="grid size-8 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
+                  >
+                    {chatExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                  </button>
                 </div>
                 <p className="mt-1 shrink-0 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
                   Só vocês dois veem essa conversa.
                 </p>
-                <div className="mt-3 flex min-h-[130px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3">
+                <div className="mt-3 flex min-h-[80px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3">
                   {privateLoading && privateMessages.length === 0 ? (
                     <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
                   ) : privateMessages.length === 0 ? (
@@ -572,26 +603,81 @@ export function PairingJoin() {
                     </button>
                   </div>
                 )}
-                <form onSubmit={sendPrivate} className="mt-3 flex shrink-0 items-center gap-1.5">
-                  <EmojiPicker onSelect={(emoji) => setPrivateDraft((current) => current + emoji)} />
-                  <AttachmentPicker
-                    onSelect={(file) => {
-                      setAttachError(null);
-                      setPendingFile(file);
-                    }}
-                    onError={setAttachError}
-                  />
-                  <StickerPicker onSelect={(emoji) => { void sendSticker(emoji); }} />
-                  <AudioRecorderButton
-                    onRecorded={(file) => { void sendAudio(file); }}
-                    onError={setAttachError}
-                    disabled={privateSending}
-                  />
-                  <input
+                <form onSubmit={sendPrivate} className="mt-2 flex shrink-0 items-end gap-1.5">
+                  {/* Antes eram 4 botões soltos (emoji/anexo/figurinha/áudio) ao
+                      lado do campo de escrever — em telas menores isso
+                      estourava a largura e empurrava o botão de enviar pra
+                      fora da tela. Agora ficam escondidos atrás de um único
+                      botão "+" que abre um menu em cascata por cima. */}
+                  <div className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setComposerToolsOpen((current) => !current)}
+                      aria-label={composerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                      data-testid="button-composer-tools"
+                      className={`grid size-11 shrink-0 place-items-center rounded-full border transition-transform ${
+                        composerToolsOpen
+                          ? 'rotate-45 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
+                          : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                      }`}
+                    >
+                      <Plus size={20} />
+                    </button>
+                    {composerToolsOpen && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setComposerToolsOpen(false)} />
+                        <div
+                          className="absolute bottom-full left-0 z-40 mb-2 flex flex-col gap-1.5 rounded-2xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-1.5 shadow-lg"
+                          data-testid="panel-composer-tools"
+                        >
+                          <EmojiPicker
+                            onSelect={(emoji) => {
+                              setPrivateDraft((current) => current + emoji);
+                              setComposerToolsOpen(false);
+                            }}
+                          />
+                          <AttachmentPicker
+                            onSelect={(file) => {
+                              setAttachError(null);
+                              setPendingFile(file);
+                              setComposerToolsOpen(false);
+                            }}
+                            onError={setAttachError}
+                          />
+                          <StickerPicker
+                            onSelect={(emoji) => {
+                              void sendSticker(emoji);
+                              setComposerToolsOpen(false);
+                            }}
+                          />
+                          <AudioRecorderButton
+                            onRecorded={(file) => {
+                              void sendAudio(file);
+                              setComposerToolsOpen(false);
+                            }}
+                            onError={setAttachError}
+                            disabled={privateSending}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <textarea
+                    ref={textareaRef}
                     value={privateDraft}
-                    onChange={(event) => setPrivateDraft(event.target.value)}
+                    onChange={(event) => {
+                      setPrivateDraft(event.target.value);
+                      autoGrowTextarea(event.target);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        event.currentTarget.form?.requestSubmit();
+                      }
+                    }}
                     placeholder={pendingFile ? 'Legenda (opcional)…' : 'Escreva uma mensagem…'}
-                    className="h-11 flex-1 rounded-full border border-[hsl(var(--border))] bg-transparent px-4 text-sm outline-none focus:border-[hsl(var(--primary))]"
+                    rows={1}
+                    className="max-h-32 min-h-[44px] flex-1 resize-none rounded-3xl border border-[hsl(var(--border))] bg-transparent px-4 py-2.5 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
                   />
                   <button
                     type="submit"
