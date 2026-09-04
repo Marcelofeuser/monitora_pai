@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -797,6 +797,16 @@ function ActionCard({ icon, tone, eyebrow, title, text, href, action }: { icon: 
   return <Link href={href} data-testid={`link-card-${href.slice(1)}`} className="group rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_50px_rgba(24,48,48,.11)] sm:p-7"><div className="flex items-start justify-between"><IconBox icon={icon} tone={tone} /><ArrowRight size={19} className="text-[hsl(var(--muted-foreground))] transition-transform group-hover:translate-x-1" /></div><p className="mt-8 font-mono-app text-[10px] uppercase tracking-[.17em] text-[hsl(var(--muted-foreground))]">{eyebrow}</p><h2 className="mt-2 font-display text-3xl tracking-[-.04em]">{title}</h2><p className="mt-3 max-w-[390px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{text}</p><span className="mt-6 inline-flex items-center gap-2 text-xs font-extrabold text-[hsl(var(--primary))]">{action} <ChevronRight size={14} /></span></Link>;
 }
 
+// Mesma lógica de components/emoji-picker.tsx etc. usada em
+// PairingJoin.tsx: o campo de escrever cresce sozinho até um limite, em
+// vez de ficar cortado numa linha só (pedido do Marcelo, feito primeiro
+// do lado da Criança e replicado aqui do lado do Responsável).
+const PRIVATE_COMPOSER_MAX_HEIGHT = 128;
+function autoGrowPrivateTextarea(el: HTMLTextAreaElement) {
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, PRIVATE_COMPOSER_MAX_HEIGHT)}px`;
+}
+
 function Conversations() {
   const [privateOpen, setPrivateOpen] = useState(false);
   const { t } = useLanguage();
@@ -818,6 +828,8 @@ function Conversations() {
   const [privateDraft, setPrivateDraft] = useState('');
   const [privateSending, setPrivateSending] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [composerToolsOpen, setComposerToolsOpen] = useState(false);
+  const privateTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupName, setGroupName] = useState('');
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
@@ -940,6 +952,7 @@ function Conversations() {
       setPrivateMessages((current) => [...current, message]);
       setPrivateDraft('');
       setPendingFile(null);
+      if (privateTextareaRef.current) privateTextareaRef.current.style.height = 'auto';
     } catch (err) {
       setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
     } finally {
@@ -1258,26 +1271,82 @@ function Conversations() {
                   </button>
                 </div>
               )}
-              <form onSubmit={sendPrivate} className="flex items-center gap-2">
-                <EmojiPicker onSelect={(emoji) => setPrivateDraft((current) => current + emoji)} />
-                <AttachmentPicker
-                  onSelect={(file) => {
-                    setAttachError(null);
-                    setPendingFile(file);
-                  }}
-                  onError={setAttachError}
-                />
-                <StickerPicker onSelect={(emoji) => { void sendSticker(emoji); }} />
-                <AudioRecorderButton
-                  onRecorded={(file) => { void sendAudio(file); }}
-                  onError={setAttachError}
-                  disabled={privateSending}
-                />
-                <input
+              <form onSubmit={sendPrivate} className="flex items-end gap-2">
+                {/* Antes eram 4 botões soltos (emoji/anexo/figurinha/áudio) ao
+                    lado do campo de escrever — em telas estreitas isso
+                    estourava a largura e escondia o botão Enviar (mesmo
+                    problema corrigido do lado da Criança em
+                    PairingJoin.tsx). Agora ficam atrás de um único botão
+                    "+" que abre em cascata por cima. */}
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setComposerToolsOpen((current) => !current)}
+                    aria-label={composerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                    data-testid="button-composer-tools"
+                    className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl border transition-transform ${
+                      composerToolsOpen
+                        ? 'rotate-45 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
+                        : 'border-[hsl(var(--input))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                    }`}
+                  >
+                    <Plus size={20} />
+                  </button>
+                  {composerToolsOpen && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setComposerToolsOpen(false)} />
+                      <div
+                        className="absolute bottom-full left-0 z-40 mb-2 flex flex-col gap-1.5 rounded-2xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-1.5 shadow-lg"
+                        data-testid="panel-composer-tools"
+                      >
+                        <EmojiPicker
+                          onSelect={(emoji) => {
+                            setPrivateDraft((current) => current + emoji);
+                            setComposerToolsOpen(false);
+                          }}
+                        />
+                        <AttachmentPicker
+                          onSelect={(file) => {
+                            setAttachError(null);
+                            setPendingFile(file);
+                            setComposerToolsOpen(false);
+                          }}
+                          onError={setAttachError}
+                        />
+                        <StickerPicker
+                          onSelect={(emoji) => {
+                            void sendSticker(emoji);
+                            setComposerToolsOpen(false);
+                          }}
+                        />
+                        <AudioRecorderButton
+                          onRecorded={(file) => {
+                            void sendAudio(file);
+                            setComposerToolsOpen(false);
+                          }}
+                          onError={setAttachError}
+                          disabled={privateSending}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+                <textarea
+                  ref={privateTextareaRef}
                   value={privateDraft}
-                  onChange={(event) => setPrivateDraft(event.target.value)}
+                  onChange={(event) => {
+                    setPrivateDraft(event.target.value);
+                    autoGrowPrivateTextarea(event.target);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
                   placeholder={pendingFile ? 'Adicione uma legenda (opcional)…' : `Escreva pra ${selectedChildName ?? 'a criança'}…`}
-                  className="h-12 flex-1 rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--background)/.65)] px-4 text-sm outline-none focus:border-[hsl(var(--primary))]"
+                  rows={1}
+                  className="max-h-32 min-h-[48px] flex-1 resize-none rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--background)/.65)] px-4 py-3 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
                   data-testid="input-private-message"
                 />
                 <Button type="submit" disabled={(!privateDraft.trim() && !pendingFile) || privateSending} testId="button-send-private-message">
