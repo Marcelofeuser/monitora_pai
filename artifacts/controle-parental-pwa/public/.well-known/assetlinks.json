@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.amparakids.app",
+      "sha256_cert_fingerprints": [
+        "5E:AA:1C:01:FE:04:EB:A7:57:C5:46:AE:BA:EF:A0:0F:DC:F0:C7:84:2B:5D:75:43:62:B0:D3:6F:9B:5B:6F:3B"
+      ]
+    }
+  }
+]
