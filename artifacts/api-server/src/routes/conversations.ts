@@ -1,12 +1,14 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { getAuth } from "@clerk/express";
 import { eq, and, or, asc } from "drizzle-orm";
-import { db, conversationsTable, messagesTable, usersTable } from "@workspace/db";
+import { db, conversationsTable, messagesTable, usersTable, contactsTable } from "@workspace/db";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
+import { requireContactAuth, type ContactAuthedRequest } from "../middlewares/contactAuth";
 import { uploadSingleMediaFile } from "../middlewares/mediaUpload";
 import { kindForMime, maxBytesForMime, saveMedia } from "../lib/mediaStorage";
 import { isAllowedSticker } from "../lib/stickers";
 import { notifyChildOfActivity, notifyParentOfActivity } from "../lib/notify";
+import { mirrorAndNotify } from "../lib/mirror";
 
 const router: IRouter = Router();
 
@@ -232,6 +234,181 @@ router.post(
     // Só dispara quando é a Criança escrevendo pro Responsável (o envio do
     // lado do Responsável não passa por aqui) — item 10 do pedido.
     await notifyParentOfActivity({ conversation, senderId: childId, parentUserId: child.parentId });
+
+    return res.status(201).json(message);
+  },
+);
+
+// Conversa espelhada Criança <-> Contato aprovado: sempre isParentChildPrivate
+// = false (regra central do produto -- ver messages.ts), então toda
+// mensagem trocada aqui é logada em mirror_log e notifica o Responsável
+// (mirrorAndNotify). Só existe depois que o Contato aceitou o convite e
+// virou um usersTable de verdade (ver routes/contacts.ts).
+async function getOrCreateContactConversation(childId: string, contactUserId: string) {
+  const [existing] = await db
+    .select()
+    .from(conversationsTable)
+    .where(
+      and(
+        eq(conversationsTable.isParentChildPrivate, false),
+        or(
+          and(eq(conversationsTable.participantAId, childId), eq(conversationsTable.participantBId, contactUserId)),
+          and(eq(conversationsTable.participantAId, contactUserId), eq(conversationsTable.participantBId, childId)),
+        ),
+      ),
+    )
+    .limit(1);
+
+  if (existing) return existing;
+
+  const [created] = await db
+    .insert(conversationsTable)
+    .values({ participantAId: childId, participantBId: contactUserId, isParentChildPrivate: false })
+    .returning();
+  return created;
+}
+
+/**
+ * GET /api/child/conversations/contact/:contactUserId
+ * Criança: conversa (cria se preciso) com um Contato aprovado que já
+ * aceitou o convite, + histórico.
+ */
+router.get(
+  "/child/conversations/contact/:contactUserId",
+  requireChildAuth,
+  async (req: ChildAuthedRequest, res) => {
+    const childId = req.childId;
+    if (!childId) return res.status(401).json({ error: "not_authenticated" });
+    const contactUserId = req.params.contactUserId;
+
+    const [contactRow] = await db
+      .select()
+      .from(contactsTable)
+      .where(
+        and(
+          eq(contactsTable.childId, childId),
+          eq(contactsTable.contactUserId, contactUserId),
+          eq(contactsTable.status, "approved"),
+        ),
+      )
+      .limit(1);
+    if (!contactRow) return res.status(403).json({ error: "not_an_approved_contact" });
+
+    const conversation = await getOrCreateContactConversation(childId, contactUserId);
+    const messages = await listMessages(conversation.id);
+    return res.json({ conversation, messages, contactName: contactRow.contactName });
+  },
+);
+
+/**
+ * POST /api/child/conversations/contact/:contactUserId/messages
+ * Criança manda mensagem pra um Contato aprovado -- sempre espelhada pro
+ * Responsável (mirrorAndNotify).
+ */
+router.post(
+  "/child/conversations/contact/:contactUserId/messages",
+  requireChildAuth,
+  uploadSingleMediaFile,
+  async (req: ChildAuthedRequest, res) => {
+    const childId = req.childId;
+    if (!childId) return res.status(401).json({ error: "not_authenticated" });
+    const contactUserId = req.params.contactUserId;
+
+    const [child] = await db.select().from(usersTable).where(eq(usersTable.id, childId)).limit(1);
+    if (!child?.parentId) return res.status(404).json({ error: "child_not_paired" });
+
+    const [contactRow] = await db
+      .select()
+      .from(contactsTable)
+      .where(
+        and(
+          eq(contactsTable.childId, childId),
+          eq(contactsTable.contactUserId, contactUserId),
+          eq(contactsTable.status, "approved"),
+        ),
+      )
+      .limit(1);
+    if (!contactRow) return res.status(403).json({ error: "not_an_approved_contact" });
+
+    const input = await extractMessageInput(req, res);
+    if (!input) return;
+
+    const conversation = await getOrCreateContactConversation(childId, contactUserId);
+    const [message] = await db
+      .insert(messagesTable)
+      .values({
+        conversationId: conversation.id,
+        senderId: childId,
+        type: input.type,
+        textContent: input.textContent,
+        contentUrl: input.contentUrl,
+      })
+      .returning();
+
+    await mirrorAndNotify({ conversation, messageId: message.id, senderId: childId, parentId: child.parentId });
+
+    return res.status(201).json(message);
+  },
+);
+
+/**
+ * GET /api/contact/conversations/with-child
+ * Contato (token de dispositivo, ver contactAuth.ts): conversa com a
+ * Criança dele -- um Contato só tem UMA Criança (a do convite que
+ * aceitou), por isso não precisa de childId na URL.
+ */
+router.get(
+  "/contact/conversations/with-child",
+  requireContactAuth,
+  async (req: ContactAuthedRequest, res) => {
+    const contactUserId = req.contactUserId;
+    if (!contactUserId) return res.status(401).json({ error: "not_authenticated" });
+
+    const [contactRow] = await db.select().from(contactsTable).where(eq(contactsTable.contactUserId, contactUserId)).limit(1);
+    if (!contactRow) return res.status(404).json({ error: "contact_not_found" });
+
+    const conversation = await getOrCreateContactConversation(contactRow.childId, contactUserId);
+    const messages = await listMessages(conversation.id);
+    const [child] = await db.select().from(usersTable).where(eq(usersTable.id, contactRow.childId)).limit(1);
+    return res.json({ conversation, messages, childName: child?.name ?? null });
+  },
+);
+
+/**
+ * POST /api/contact/conversations/with-child/messages
+ * Contato manda mensagem pra Criança dele -- sempre espelhada pro
+ * Responsável (mirrorAndNotify).
+ */
+router.post(
+  "/contact/conversations/with-child/messages",
+  requireContactAuth,
+  uploadSingleMediaFile,
+  async (req: ContactAuthedRequest, res) => {
+    const contactUserId = req.contactUserId;
+    if (!contactUserId) return res.status(401).json({ error: "not_authenticated" });
+
+    const [contactRow] = await db.select().from(contactsTable).where(eq(contactsTable.contactUserId, contactUserId)).limit(1);
+    if (!contactRow) return res.status(404).json({ error: "contact_not_found" });
+
+    const [child] = await db.select().from(usersTable).where(eq(usersTable.id, contactRow.childId)).limit(1);
+    if (!child?.parentId) return res.status(404).json({ error: "child_not_found" });
+
+    const input = await extractMessageInput(req, res);
+    if (!input) return;
+
+    const conversation = await getOrCreateContactConversation(contactRow.childId, contactUserId);
+    const [message] = await db
+      .insert(messagesTable)
+      .values({
+        conversationId: conversation.id,
+        senderId: contactUserId,
+        type: input.type,
+        textContent: input.textContent,
+        contentUrl: input.contentUrl,
+      })
+      .returning();
+
+    await mirrorAndNotify({ conversation, messageId: message.id, senderId: contactUserId, parentId: child.parentId });
 
     return res.status(201).json(message);
   },

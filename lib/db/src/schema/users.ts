@@ -2,7 +2,10 @@ import { pgTable, text, timestamp, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const userRoleEnum = pgEnum("user_role", ["parent", "child"]);
+// "contact" adicionado pro Contato aprovado (mãe, avó, tia etc) que
+// aceita o convite de acesso (ver schema/contactAuth.ts) e ganha conta
+// própria pra conversar de verdade com a Criança dentro do app.
+export const userRoleEnum = pgEnum("user_role", ["parent", "child", "contact"]);
 export const authProviderEnum = pgEnum("auth_provider", ["email", "google", "apple"]);
 // Como a Criança deve se referir ao Responsável (pedido do Marcelo: "pai,
 // mae, avó, tio, etc" em vez do genérico "Responsável" sempre). Só faz

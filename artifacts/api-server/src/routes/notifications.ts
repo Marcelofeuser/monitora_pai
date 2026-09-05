@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { eq, and } from "drizzle-orm";
-import { db, pushSubscriptionsTable } from "@workspace/db";
+import { db, pushSubscriptionsTable, fcmTokensTable } from "@workspace/db";
 import { z } from "zod/v4";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
 
@@ -131,6 +131,56 @@ router.post("/child/notifications/unsubscribe", requireChildAuth, async (req: Ch
   await db
     .delete(pushSubscriptionsTable)
     .where(and(eq(pushSubscriptionsTable.childId, childId), eq(pushSubscriptionsTable.endpoint, parsed.data.endpoint)));
+
+  return res.json({ ok: true });
+});
+
+const fcmTokenSchema = z.object({ token: z.string().min(1) });
+
+/**
+ * POST /api/notifications/register-fcm-token
+ * Guarda (ou atualiza) o token de push NATIVO (Firebase Cloud Messaging)
+ * do app iOS "Amparo" -- caminho separado do /subscribe porque o
+ * WKWebView do app nativo nao tem acesso a Web Push API do navegador (ver
+ * comentario em schema/notifications.ts). Chamado pelo lado web depois
+ * que a ponte nativa (PushNotifications.swift) devolve o token via o
+ * evento "push-token".
+ */
+router.post("/notifications/register-fcm-token", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const parsed = fcmTokenSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+  }
+
+  await db
+    .insert(fcmTokensTable)
+    .values({ parentUserId: auth.userId, token: parsed.data.token })
+    .onConflictDoUpdate({
+      target: fcmTokensTable.token,
+      set: { parentUserId: auth.userId },
+    });
+
+  return res.status(201).json({ ok: true });
+});
+
+/**
+ * POST /api/notifications/unregister-fcm-token
+ */
+router.post("/notifications/unregister-fcm-token", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const parsed = fcmTokenSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+  }
+
+  await db
+    .delete(fcmTokensTable)
+    .where(and(eq(fcmTokensTable.parentUserId, auth.userId), eq(fcmTokensTable.token, parsed.data.token)));
 
   return res.json({ ok: true });
 });

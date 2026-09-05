@@ -18,6 +18,7 @@
     "cors": "^2.8.6",
     "drizzle-orm": "catalog:",
     "express": "^5.2.1",
+    "firebase-admin": "^14.3.0",
     "http-proxy-middleware": "^4.2.0",
     "multer": "^2.3.0",
     "pino": "^9.14.0",

@@ -31,3 +31,27 @@ export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions
 });
 export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
 export type PushSubscriptionRow = typeof pushSubscriptionsTable.$inferSelect;
+
+// Token de push NATIVO (Firebase Cloud Messaging / APNs) do app iOS "Amparo"
+// (Responsavel). Diferente de pushSubscriptionsTable (Web Push API do
+// navegador) -- o WKWebView do app nativo do iOS nao tem acesso a API de
+// Web Push do navegador (a Apple so libera isso pra PWA instalado via
+// Safari), entao o app nativo usa uma ponte propria (ver
+// PushNotifications.swift / AppDelegate.swift no projeto Xcode) que pega
+// um token do Firebase Messaging e manda pra essa tabela via
+// /api/notifications/register-fcm-token. O envio (lib/fcm.ts) usa esse
+// token com o Firebase Admin SDK em vez da lib web-push.
+export const fcmTokensTable = pgTable("fcm_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  parentUserId: text("parent_user_id").references(() => usersTable.id, { onDelete: "cascade" }),
+  childId: text("child_id").references(() => usersTable.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertFcmTokenSchema = createInsertSchema(fcmTokensTable).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertFcmToken = z.infer<typeof insertFcmTokenSchema>;
+export type FcmTokenRow = typeof fcmTokensTable.$inferSelect;

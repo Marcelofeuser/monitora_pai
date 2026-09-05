@@ -1,8 +1,18 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { eq, and, or, asc } from "drizzle-orm";
-import { db, contactsTable, usersTable, conversationsTable, pairingTokensTable } from "@workspace/db";
+import { randomBytes, randomUUID, createHash } from "crypto";
+import { eq, and, or, asc, isNull, gt } from "drizzle-orm";
+import {
+  db,
+  contactsTable,
+  usersTable,
+  conversationsTable,
+  pairingTokensTable,
+  contactInviteTokensTable,
+  contactDeviceTokensTable,
+} from "@workspace/db";
 import { z } from "zod/v4";
+import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
 
 const router: IRouter = Router();
 
@@ -240,6 +250,157 @@ router.delete("/children/:id", async (req, res) => {
   });
 
   return res.json({ ok: true });
+});
+
+/**
+ * GET /api/child/contacts
+ * Criança (token de dispositivo): lista os contatos aprovados dela, pra
+ * saber com quem já pode conversar dentro do app (ver /child/conversations/contact/:contactUserId).
+ */
+router.get("/child/contacts", requireChildAuth, async (req: ChildAuthedRequest, res) => {
+  const childId = req.childId;
+  if (!childId) return res.status(401).json({ error: "not_authenticated" });
+
+  const contacts = await db
+    .select()
+    .from(contactsTable)
+    .where(and(eq(contactsTable.childId, childId), eq(contactsTable.status, "approved")));
+  return res.json(contacts);
+});
+
+const CONTACT_INVITE_TTL_DAYS = 7;
+
+function generateInviteToken(): string {
+  return randomBytes(24).toString("base64url");
+}
+
+/**
+ * POST /api/contacts/:id/invite
+ * Gera um link/QR de convite pra esse contato virar um participante de
+ * verdade do app (conta própria + token de dispositivo) -- pedido do
+ * Marcelo: hoje "contato" é só um nome digitado, sem jeito de ele entrar
+ * no app pra conversar de fato com a Criança (limitação documentada em
+ * schema/groups.ts). Mesmo mecanismo do pareamento da Criança, adaptado.
+ */
+router.post("/contacts/:id/invite", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const [contact] = await db.select().from(contactsTable).where(eq(contactsTable.id, req.params.id)).limit(1);
+  if (!contact) return res.status(404).json({ error: "contact_not_found" });
+
+  const isParent = await assertIsParentOfChild(auth.userId, contact.childId);
+  if (!isParent) return res.status(403).json({ error: "not_the_parent_of_this_child" });
+
+  const token = generateInviteToken();
+  const expiresAt = new Date(Date.now() + CONTACT_INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+  const [invite] = await db
+    .insert(contactInviteTokensTable)
+    .values({
+      token,
+      parentId: auth.userId,
+      childId: contact.childId,
+      contactId: contact.id,
+      contactName: contact.contactName,
+      expiresAt,
+    })
+    .returning();
+
+  return res.status(201).json({
+    token: invite.token,
+    joinUrl: `${process.env.APP_URL ?? ""}/join-contact?token=${invite.token}`,
+    expiresAt: invite.expiresAt,
+    contactName: invite.contactName,
+  });
+});
+
+/**
+ * GET /api/contacts/invite/:token
+ * Público -- quem foi convidado ainda não tem conta nenhuma. Mostra o
+ * nome pré-preenchido (editável na confirmação) e de qual criança é.
+ */
+router.get("/contacts/invite/:token", async (req, res) => {
+  const [invite] = await db
+    .select()
+    .from(contactInviteTokensTable)
+    .where(
+      and(
+        eq(contactInviteTokensTable.token, req.params.token),
+        isNull(contactInviteTokensTable.usedAt),
+        gt(contactInviteTokensTable.expiresAt, new Date()),
+      ),
+    )
+    .limit(1);
+  if (!invite) return res.status(400).json({ error: "invalid_or_expired_token" });
+
+  const [child] = await db.select().from(usersTable).where(eq(usersTable.id, invite.childId)).limit(1);
+
+  return res.json({ contactName: invite.contactName, childName: child?.name ?? null, expiresAt: invite.expiresAt });
+});
+
+const confirmInviteSchema = z.object({ contactName: z.string().min(1).max(120).optional() });
+
+/**
+ * POST /api/contacts/invite/:token/confirm
+ * Público. Cria a conta do Contato (usersTable role='contact'), vincula
+ * em contactsTable.contactUserId, e devolve o token de dispositivo dele
+ * -- mesmo padrão de /api/pairing/confirm pra Criança (ver routes/pairing.ts).
+ */
+router.post("/contacts/invite/:token/confirm", async (req, res) => {
+  const parsed = confirmInviteSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+  }
+
+  const [invite] = await db
+    .select()
+    .from(contactInviteTokensTable)
+    .where(
+      and(
+        eq(contactInviteTokensTable.token, req.params.token),
+        isNull(contactInviteTokensTable.usedAt),
+        gt(contactInviteTokensTable.expiresAt, new Date()),
+      ),
+    )
+    .limit(1);
+  if (!invite) return res.status(400).json({ error: "invalid_or_expired_token" });
+
+  const finalName = parsed.data.contactName?.trim() || invite.contactName;
+
+  const [contactUser] = await db
+    .insert(usersTable)
+    .values({
+      id: randomUUID(),
+      role: "contact",
+      name: finalName,
+      parentId: invite.parentId,
+    })
+    .returning();
+
+  await db
+    .update(contactsTable)
+    .set({ contactUserId: contactUser.id, contactName: finalName })
+    .where(eq(contactsTable.id, invite.contactId));
+
+  await db
+    .update(contactInviteTokensTable)
+    .set({ usedAt: new Date(), resultingContactUserId: contactUser.id })
+    .where(eq(contactInviteTokensTable.id, invite.id));
+
+  const rawDeviceToken = randomBytes(32).toString("base64url");
+  const deviceTokenHash = createHash("sha256").update(rawDeviceToken).digest("hex");
+  await db.insert(contactDeviceTokensTable).values({ contactUserId: contactUser.id, tokenHash: deviceTokenHash });
+
+  const [child] = await db.select().from(usersTable).where(eq(usersTable.id, invite.childId)).limit(1);
+
+  return res.status(200).json({
+    contactUserId: contactUser.id,
+    contactName: finalName,
+    deviceToken: rawDeviceToken,
+    childId: invite.childId,
+    childName: child?.name ?? null,
+  });
 });
 
 export default router;

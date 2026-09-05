@@ -39,16 +39,20 @@ import { Link, Route, Switch, useLocation } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { PairingGenerate } from '@/pages/PairingGenerate';
 import { PairingJoin } from '@/pages/PairingJoin';
+import { ContactJoin } from '@/pages/ContactJoin';
+import { ContactChat } from '@/pages/ContactChat';
+import QRCode from 'qrcode';
 import { ThemeProvider, ThemeSwitcher } from '@/lib/theme';
 import { EmojiPicker } from '@/components/emoji-picker';
 import { AttachmentPicker } from '@/components/attachment-picker';
 import { enablePushNotifications, disablePushNotifications, isPushSupported } from '@/lib/push';
+import { enableNativeIOSPush, disableNativeIOSPush, isNativeIOSBridgeAvailable } from '@/lib/nativePush';
 import { StickerPicker } from '@/components/sticker-picker';
 import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
-import { fetchGroups, createGroup, deleteGroup } from '@/lib/groups-api';
+import { fetchGroups, createGroup, deleteGroup, addGroupMember, removeGroupMember } from '@/lib/groups-api';
 import type { Group } from '@/lib/groups-api';
-import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact } from '@/lib/conversations-api';
+import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, MirroredMessage, PrivateMessage } from '@/lib/conversations-api';
 import { fetchChildLocation } from '@/lib/location-api';
 import type { ChildLocation } from '@/lib/location-api';
@@ -837,6 +841,12 @@ function Conversations() {
   const [groupError, setGroupError] = useState<string | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [privateAuthToken, setPrivateAuthToken] = useState<string | null>(null);
+  const [inviteTarget, setInviteTarget] = useState<ApprovedContact | null>(null);
+  const [inviteQrDataUrl, setInviteQrDataUrl] = useState<string | null>(null);
+  const [inviteJoinUrl, setInviteJoinUrl] = useState<string | null>(null);
+  const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
+  const [invitingContactId, setInvitingContactId] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1040,6 +1050,36 @@ function Conversations() {
     }
   }
 
+  // Convite por link/QR (pedido do Marcelo: "a Lorena recebe um link com
+  // qrcode, ela basta clicar que já faz o pré cadastro dela feito") -- só
+  // faz sentido pra quem ainda não é um usuário de verdade (contactUserId
+  // null); depois de aceitar, o Contato já aparece "Conectado" na lista.
+  async function handleInviteContact(contact: ApprovedContact) {
+    if (invitingContactId) return;
+    setInvitingContactId(contact.id);
+    setInviteError(null);
+    try {
+      const token = await getToken();
+      const result = await inviteContact(contact.id, token);
+      const qrDataUrl = await QRCode.toDataURL(result.joinUrl, { width: 280, margin: 2 });
+      setInviteTarget(contact);
+      setInviteQrDataUrl(qrDataUrl);
+      setInviteJoinUrl(result.joinUrl);
+      setInviteExpiresAt(result.expiresAt);
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Erro ao gerar o convite.');
+    } finally {
+      setInvitingContactId(null);
+    }
+  }
+
+  function closeInviteModal() {
+    setInviteTarget(null);
+    setInviteQrDataUrl(null);
+    setInviteJoinUrl(null);
+    setInviteExpiresAt(null);
+  }
+
   async function handleCreateGroup(event: FormEvent) {
     event.preventDefault();
     const name = groupName.trim();
@@ -1066,6 +1106,41 @@ function Conversations() {
       setGroups((current) => current.filter((group) => group.id !== groupId));
     } catch (err) {
       setGroupError(err instanceof Error ? err.message : 'Erro ao excluir grupo.');
+    }
+  }
+
+  // Pedido do Marcelo: dava pra escolher os membros só na criação do
+  // grupo -- não tinha como colocar mais alguém depois (ex: criou o grupo
+  // só com a Verônica, quis colocar a Rafaella junto em seguida).
+  async function handleAddGroupMember(groupId: string, contactId: string) {
+    if (!contactId) return;
+    try {
+      const token = await getToken();
+      await addGroupMember(groupId, contactId, token);
+      const contact = approvedContacts.find((item) => item.id === contactId);
+      if (contact) {
+        setGroups((current) =>
+          current.map((group) =>
+            group.id === groupId ? { ...group, members: [...group.members, { id: contact.id, contactName: contact.contactName }] } : group,
+          ),
+        );
+      }
+    } catch (err) {
+      setGroupError(err instanceof Error ? err.message : 'Erro ao adicionar ao grupo.');
+    }
+  }
+
+  async function handleRemoveGroupMember(groupId: string, contactId: string) {
+    try {
+      const token = await getToken();
+      await removeGroupMember(groupId, contactId, token);
+      setGroups((current) =>
+        current.map((group) =>
+          group.id === groupId ? { ...group, members: group.members.filter((member) => member.id !== contactId) } : group,
+        ),
+      );
+    } catch (err) {
+      setGroupError(err instanceof Error ? err.message : 'Erro ao remover do grupo.');
     }
   }
 
@@ -1133,20 +1208,38 @@ function Conversations() {
                 <ul className="mt-4 flex flex-col gap-2">
                   {approvedContacts.map((contact) => (
                     <li key={contact.id} className="flex items-center justify-between gap-3 rounded-xl bg-[hsl(var(--muted)/.5)] px-4 py-3 text-sm font-bold" data-testid={`row-approved-contact-${contact.id}`}>
-                      {contact.contactName}
-                      <button
-                        type="button"
-                        onClick={() => { void handleDeleteContact(contact); }}
-                        disabled={deletingContactId === contact.id}
-                        aria-label={`Excluir contato ${contact.contactName}`}
-                        data-testid={`button-delete-contact-${contact.id}`}
-                        className="text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--destructive))] disabled:opacity-60"
-                      >
-                        <X size={16} />
-                      </button>
+                      <span className="min-w-0 flex-1 truncate">{contact.contactName}</span>
+                      <div className="flex shrink-0 items-center gap-3">
+                        {contact.contactUserId ? (
+                          <span className="text-xs font-semibold text-green-600">Conectado</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { void handleInviteContact(contact); }}
+                            disabled={invitingContactId === contact.id}
+                            data-testid={`button-invite-contact-${contact.id}`}
+                            className="text-xs font-semibold text-[hsl(var(--primary))] transition-colors hover:underline disabled:opacity-60"
+                          >
+                            {invitingContactId === contact.id ? 'Gerando…' : 'Convidar'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => { void handleDeleteContact(contact); }}
+                          disabled={deletingContactId === contact.id}
+                          aria-label={`Excluir contato ${contact.contactName}`}
+                          data-testid={`button-delete-contact-${contact.id}`}
+                          className="text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--destructive))] disabled:opacity-60"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
+              )}
+              {inviteError && (
+                <p className="mt-2 text-sm text-red-600" data-testid="status-invite-contact-error">{inviteError}</p>
               )}
             </div>
             <div className="p-6 sm:p-8">
@@ -1201,19 +1294,45 @@ function Conversations() {
                 <p className="mt-5 text-sm text-[hsl(var(--muted-foreground))]">Nenhum grupo criado ainda.</p>
               ) : (
                 <ul className="mt-5 flex flex-col gap-2">
-                  {groups.map((group) => (
+                  {groups.map((group) => {
+                    const memberIds = new Set(group.members.map((member) => member.id));
+                    const availableToAdd = approvedContacts.filter((contact) => !memberIds.has(contact.id));
+                    return (
                     <li key={group.id} className="rounded-xl bg-[hsl(var(--muted)/.5)] px-4 py-3 text-sm" data-testid={`row-group-${group.id}`}>
                       <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-bold">{group.name}</p>
-                          <p className="mt-0.5 text-xs text-[hsl(var(--muted-foreground))]">{group.members.map((member) => member.contactName).join(', ')}</p>
-                        </div>
+                        <p className="font-bold">{group.name}</p>
                         <button type="button" onClick={() => { void handleDeleteGroup(group.id); }} aria-label="Excluir grupo" data-testid={`button-delete-group-${group.id}`} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))]">
                           <X size={16} />
                         </button>
                       </div>
+                      {group.members.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {group.members.map((member) => (
+                            <span key={member.id} className="flex items-center gap-1 rounded-full bg-[hsl(var(--card))] px-2.5 py-1 text-xs font-bold" data-testid={`chip-group-member-${group.id}-${member.id}`}>
+                              {member.contactName}
+                              <button type="button" onClick={() => { void handleRemoveGroupMember(group.id, member.id); }} aria-label={`Remover ${member.contactName} do grupo`} data-testid={`button-remove-group-member-${group.id}-${member.id}`} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))]">
+                                <X size={12} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {availableToAdd.length > 0 && (
+                        <select
+                          defaultValue=""
+                          onChange={(event) => { void handleAddGroupMember(group.id, event.target.value); event.target.value = ''; }}
+                          data-testid={`select-add-group-member-${group.id}`}
+                          className="mt-2 h-9 rounded-md border border-[hsl(var(--border))] bg-transparent px-2 text-xs outline-none focus:border-[hsl(var(--primary))]"
+                        >
+                          <option value="" disabled>+ Adicionar contato ao grupo</option>
+                          {availableToAdd.map((contact) => (
+                            <option key={contact.id} value={contact.id}>{contact.contactName}</option>
+                          ))}
+                        </select>
+                      )}
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
               <p className="mt-4 flex items-center gap-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><Info size={13} /> O chat dentro do grupo ainda não está disponível — por enquanto isto só define quem fica autorizado a participar.</p>
@@ -1357,6 +1476,29 @@ function Conversations() {
           )}
           <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-6 py-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" /> {t.conversations.privateFooter}</div>
         </section>
+      )}
+      {inviteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[hsl(var(--foreground)/.35)] p-4" onClick={closeInviteModal}>
+          <div
+            className="flex w-full max-w-sm flex-col items-center gap-4 rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 text-center shadow-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="text-lg font-extrabold">Convidar {inviteTarget.contactName}</h2>
+            {inviteQrDataUrl && (
+              <img src={inviteQrDataUrl} alt={`QR code de convite para ${inviteTarget.contactName}`} width={220} height={220} />
+            )}
+            <p className="text-sm text-[hsl(var(--muted-foreground))]">
+              Peça para {inviteTarget.contactName} escanear este código com a câmera do celular, ou envie o link abaixo.
+              {inviteExpiresAt && <> Válido por 7 dias.</>}
+            </p>
+            {inviteJoinUrl && (
+              <p className="break-all rounded-xl bg-[hsl(var(--muted)/.5)] px-3 py-2 text-xs text-[hsl(var(--muted-foreground))]">{inviteJoinUrl}</p>
+            )}
+            <button type="button" onClick={closeInviteModal} className="text-sm font-medium underline" data-testid="button-close-invite-modal">
+              Fechar
+            </button>
+          </div>
+        </div>
       )}
     </>
   );
@@ -1731,8 +1873,19 @@ function SettingsPage() {
   // Reflete o estado real da assinatura (não um valor salvo isolado no
   // localStorage) — assim, se o usuário negou a permissão do navegador ou
   // limpou os dados, o toggle não mente dizendo que está ligado.
+  // No app nativo iOS (Amparo) não existe Push API de navegador -- usa a
+  // ponte nativa (nativePush.ts) em vez de push.ts. Guardamos o estado do
+  // toggle nesse caso no localStorage deste aparelho só pra UI (não tem
+  // como consultar de volta se um token FCM já está registrado).
+  const NATIVE_IOS_FLAG_KEY = 'amparo-native-push-enabled';
+  const nativeIOS = isNativeIOSBridgeAvailable();
+
   useEffect(() => {
     let cancelled = false;
+    if (nativeIOS) {
+      setNotifications(localStorage.getItem(NATIVE_IOS_FLAG_KEY) === '1');
+      return;
+    }
     if (!isPushSupported()) return;
     navigator.serviceWorker.ready
       .then((registration) => registration.pushManager.getSubscription())
@@ -1750,12 +1903,21 @@ function SettingsPage() {
     setNotificationsBusy(true);
     setNotificationsError(null);
     try {
-      if (notifications) {
-        const token = await getToken();
+      const token = await getToken();
+      if (nativeIOS) {
+        if (notifications) {
+          await disableNativeIOSPush(token);
+          localStorage.removeItem(NATIVE_IOS_FLAG_KEY);
+          setNotifications(false);
+        } else {
+          await enableNativeIOSPush(token);
+          localStorage.setItem(NATIVE_IOS_FLAG_KEY, '1');
+          setNotifications(true);
+        }
+      } else if (notifications) {
         await disablePushNotifications({ kind: 'parent', authToken: token });
         setNotifications(false);
       } else {
-        const token = await getToken();
         await enablePushNotifications({ kind: 'parent', authToken: token });
         setNotifications(true);
       }
@@ -1763,9 +1925,9 @@ function SettingsPage() {
       const message = err instanceof Error ? err.message : '';
       setNotificationsError(
         message === 'permission_denied'
-          ? 'Você negou a permissão de notificação do navegador — libere nas configurações do navegador pra ativar.'
-          : message === 'push_not_supported'
-            ? 'Este navegador não suporta notificações push.'
+          ? 'Você negou a permissão de notificação — libere nas configurações do aparelho pra ativar.'
+          : message === 'push_not_supported' || message === 'native_bridge_not_available'
+            ? 'Este app não suporta notificações push.'
             : 'Não foi possível ativar as notificações agora.',
       );
     } finally {
@@ -1885,7 +2047,7 @@ function SignUpPage() {
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route path="/join-contact" component={ContactJoin} /><Route path="/contact" component={ContactChat} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 // /join não exige o Responsável logado — é a rota que o QR code abre no
 // aparelho da Criança, que ainda não tem conta. /pair é o gerador do QR,

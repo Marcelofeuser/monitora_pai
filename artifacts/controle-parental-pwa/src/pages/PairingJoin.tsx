@@ -4,6 +4,8 @@ import { confirmPairing } from '@/lib/pairing-api';
 import { reportLocation } from '@/lib/location-api';
 import { fetchChildPrivateConversation, sendChildPrivateMessage } from '@/lib/child-conversations-api';
 import type { PrivateMessage } from '@/lib/child-conversations-api';
+import { fetchChildContacts, fetchChildContactConversation, sendChildContactMessage } from '@/lib/contact-conversations-api';
+import type { ChildContact } from '@/lib/contact-conversations-api';
 import { ThemeSwitcher } from '@/lib/theme';
 import { EmojiPicker } from '@/components/emoji-picker';
 import { AttachmentPicker } from '@/components/attachment-picker';
@@ -64,6 +66,8 @@ export function PairingJoin() {
   const [privateSending, setPrivateSending] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [contacts, setContacts] = useState<ChildContact[]>([]);
+  const [selectedContactUserId, setSelectedContactUserId] = useState<string | null>(null);
   const [screenLock, setScreenLock] = useState<ChildLockStatus | null>(null);
   const [parentName, setParentName] = useState<string | null>(null);
   const [parentRelationship, setParentRelationship] = useState<string | null>(null);
@@ -138,12 +142,20 @@ export function PairingJoin() {
     async function loadPrivate(showSpinner: boolean) {
       if (showSpinner) setPrivateLoading(true);
       try {
-        const data = await fetchChildPrivateConversation(deviceToken!);
-        if (!cancelled) {
-          setPrivateMessages(data.messages);
-          setParentName(data.parentName);
-          setParentRelationship(data.parentRelationship);
-          setPrivateError(null);
+        if (selectedContactUserId) {
+          const data = await fetchChildContactConversation(deviceToken!, selectedContactUserId);
+          if (!cancelled) {
+            setPrivateMessages(data.messages);
+            setPrivateError(null);
+          }
+        } else {
+          const data = await fetchChildPrivateConversation(deviceToken!);
+          if (!cancelled) {
+            setPrivateMessages(data.messages);
+            setParentName(data.parentName);
+            setParentRelationship(data.parentRelationship);
+            setPrivateError(null);
+          }
         }
       } catch (err) {
         // Erro num poll silencioso não deve gritar na tela — só na carga
@@ -163,7 +175,40 @@ export function PairingJoin() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
+  }, [status, deviceToken, selectedContactUserId]);
+
+  // Lista de Contatos aprovados que já aceitaram o convite por link/QR
+  // (pedido do Marcelo: bolinhas de conversa, igual ao WhatsApp) --
+  // atualiza sozinha de vez em quando, não precisa ser tão frequente
+  // quanto as mensagens.
+  useEffect(() => {
+    if (status !== 'success' || !deviceToken) return;
+    let cancelled = false;
+
+    function loadContacts() {
+      fetchChildContacts(deviceToken!)
+        .then((data) => {
+          if (!cancelled) setContacts(data);
+        })
+        .catch(() => undefined);
+    }
+
+    loadContacts();
+    const intervalId = window.setInterval(loadContacts, 20000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
   }, [status, deviceToken]);
+
+  // Um único ponto que decide se a mensagem vai pro Responsável (canal
+  // privado de sempre) ou pra um Contato aprovado (selectedContactUserId
+  // setado) -- usado pelos três jeitos de mandar mensagem abaixo.
+  function sendCurrent(token: string, input: Parameters<typeof sendChildPrivateMessage>[1]) {
+    return selectedContactUserId
+      ? sendChildContactMessage(token, selectedContactUserId, input)
+      : sendChildPrivateMessage(token, input);
+  }
 
   async function sendPrivate(event: FormEvent) {
     event.preventDefault();
@@ -174,8 +219,8 @@ export function PairingJoin() {
     setPrivateError(null);
     try {
       const message = pendingFile
-        ? await sendChildPrivateMessage(token, { file: pendingFile, caption: text || undefined })
-        : await sendChildPrivateMessage(token, { textContent: text });
+        ? await sendCurrent(token, { file: pendingFile, caption: text || undefined })
+        : await sendCurrent(token, { textContent: text });
       setPrivateMessages((current) => [...current, message]);
       setPrivateDraft('');
       setPendingFile(null);
@@ -194,7 +239,7 @@ export function PairingJoin() {
     setPrivateSending(true);
     setPrivateError(null);
     try {
-      const message = await sendChildPrivateMessage(token, { stickerEmoji: emoji });
+      const message = await sendCurrent(token, { stickerEmoji: emoji });
       setPrivateMessages((current) => [...current, message]);
     } catch (err) {
       setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
@@ -210,7 +255,7 @@ export function PairingJoin() {
     setPrivateSending(true);
     setPrivateError(null);
     try {
-      const message = await sendChildPrivateMessage(token, { file });
+      const message = await sendCurrent(token, { file });
       setPrivateMessages((current) => [...current, message]);
     } catch (err) {
       setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
@@ -547,9 +592,49 @@ export function PairingJoin() {
                 }
                 data-testid="panel-private-chat"
               >
+                {/* Bolinhas de conversa (Responsável + Contatos que já
+                    aceitaram convite) -- pedido do Marcelo, igual ao
+                    WhatsApp. Fica visível mesmo em tela cheia, pra dar
+                    pra trocar de conversa sem sair do modo expandido. */}
+                <div className="mb-2 flex shrink-0 gap-3 overflow-x-auto pb-1">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedContactUserId(null)}
+                    data-testid="button-select-chat-parent"
+                    className={`flex shrink-0 flex-col items-center gap-1 ${selectedContactUserId === null ? '' : 'opacity-60'}`}
+                  >
+                    <span
+                      className="grid size-11 place-items-center rounded-full text-sm font-extrabold text-white shadow-sm"
+                      style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
+                    >
+                      {(parentName ?? relationshipInfo.label).trim().slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{parentName ?? relationshipInfo.label}</span>
+                  </button>
+                  {contacts.map((contact) => (
+                    <button
+                      key={contact.id}
+                      type="button"
+                      onClick={() => setSelectedContactUserId(contact.contactUserId)}
+                      data-testid={`button-select-chat-contact-${contact.id}`}
+                      className={`flex shrink-0 flex-col items-center gap-1 ${selectedContactUserId === contact.contactUserId ? '' : 'opacity-60'}`}
+                    >
+                      <span className="grid size-11 place-items-center rounded-full bg-[hsl(var(--secondary))] text-sm font-extrabold text-white shadow-sm">
+                        {contact.contactName.trim().slice(0, 1).toUpperCase()}
+                      </span>
+                      <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{contact.contactName}</span>
+                    </button>
+                  ))}
+                </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Sparkles size={18} className="shrink-0 text-[hsl(var(--secondary))]" />
-                  <h2 className="font-kid min-w-0 flex-1 truncate text-base font-extrabold">{parentName ? `${parentName} (${relationshipInfo.label})` : relationshipInfo.label}</h2>
+                  <h2 className="font-kid min-w-0 flex-1 truncate text-base font-extrabold">
+                    {selectedContactUserId
+                      ? (contacts.find((c) => c.contactUserId === selectedContactUserId)?.contactName ?? 'Conversa')
+                      : parentName
+                        ? `${parentName} (${relationshipInfo.label})`
+                        : relationshipInfo.label}
+                  </h2>
                   <button
                     type="button"
                     onClick={() => setChatExpanded((current) => !current)}
@@ -562,7 +647,7 @@ export function PairingJoin() {
                   </button>
                 </div>
                 <p className="mt-1 shrink-0 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
-                  Só vocês dois veem essa conversa.
+                  {selectedContactUserId ? 'Essa conversa também é vista pelo responsável.' : 'Só vocês dois veem essa conversa.'}
                 </p>
                 <div className="mt-3 flex min-h-[80px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3">
                   {privateLoading && privateMessages.length === 0 ? (

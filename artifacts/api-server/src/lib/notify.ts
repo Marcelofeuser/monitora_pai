@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { conversationsTable, db, usersTable } from "@workspace/db";
 import { sendPushToChild, sendPushToParent } from "./webPush";
+import { sendFcmToParent } from "./fcm";
 
 const RENOTIFY_INTERVAL_MS = 30 * 60 * 1000;
 
@@ -39,11 +40,16 @@ export async function notifyParentOfActivity(params: {
   const [sender] = await db.select().from(usersTable).where(eq(usersTable.id, senderId)).limit(1);
   const senderName = sender?.name ?? "Alguém";
 
-  await sendPushToParent(parentUserId, {
+  const payload = {
     title: "Amparo",
     body: `${senderName} tem uma conversa ativa no chat`,
     url: "/conversations",
-  });
+  };
+  // Manda pelos dois canais: Web Push (navegador/Android) e FCM nativo
+  // (app iOS "Amparo", que não tem acesso à Web Push API do navegador —
+  // ver comentário em schema/notifications.ts). Cada um só manda de
+  // verdade se o Responsável tiver assinatura/token daquele tipo.
+  await Promise.all([sendPushToParent(parentUserId, payload), sendFcmToParent(parentUserId, payload)]);
 }
 
 /**

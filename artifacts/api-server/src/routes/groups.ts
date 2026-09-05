@@ -111,4 +111,75 @@ router.delete("/groups/:id", async (req, res) => {
   return res.json({ ok: true });
 });
 
+const addMemberSchema = z.object({ contactId: z.string().uuid() });
+
+/**
+ * POST /api/groups/:id/members
+ * Pedido do Marcelo: hoje só dava pra escolher os membros na criação do
+ * grupo -- não tinha como adicionar alguém a um grupo já existente (ex:
+ * criou o grupo só com a Verônica, depois quis colocar a Rafaella junto).
+ * Mesma regra da criação: o contato precisa já estar aprovado pra essa
+ * mesma criança.
+ */
+router.post("/groups/:id/members", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const parsed = addMemberSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+  }
+
+  const [group] = await db.select().from(groupsTable).where(eq(groupsTable.id, req.params.id)).limit(1);
+  if (!group) return res.status(404).json({ error: "not_found" });
+  if (!(await assertIsParentOfChild(auth.userId, group.childId))) {
+    return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  }
+
+  const [contact] = await db
+    .select({ id: contactsTable.id })
+    .from(contactsTable)
+    .where(
+      and(
+        eq(contactsTable.id, parsed.data.contactId),
+        eq(contactsTable.childId, group.childId),
+        eq(contactsTable.status, "approved"),
+      ),
+    )
+    .limit(1);
+  if (!contact) return res.status(400).json({ error: "contact_not_approved_for_this_child" });
+
+  const [existing] = await db
+    .select({ id: groupMembersTable.id })
+    .from(groupMembersTable)
+    .where(and(eq(groupMembersTable.groupId, group.id), eq(groupMembersTable.contactId, contact.id)))
+    .limit(1);
+  if (!existing) {
+    await db.insert(groupMembersTable).values({ groupId: group.id, contactId: contact.id });
+  }
+
+  return res.status(201).json({ ok: true });
+});
+
+/**
+ * DELETE /api/groups/:id/members/:contactId
+ * Tira um contato de um grupo sem apagar o grupo inteiro.
+ */
+router.delete("/groups/:id/members/:contactId", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const [group] = await db.select().from(groupsTable).where(eq(groupsTable.id, req.params.id)).limit(1);
+  if (!group) return res.status(404).json({ error: "not_found" });
+  if (!(await assertIsParentOfChild(auth.userId, group.childId))) {
+    return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  }
+
+  await db
+    .delete(groupMembersTable)
+    .where(and(eq(groupMembersTable.groupId, group.id), eq(groupMembersTable.contactId, req.params.contactId)));
+
+  return res.json({ ok: true });
+});
+
 export default router;

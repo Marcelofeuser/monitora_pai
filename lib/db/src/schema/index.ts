@@ -7,3 +7,4 @@ export * from "./location";
 export * from "./notifications";
 export * from "./screenTime";
 export * from "./groups";
+export * from "./contactAuth";

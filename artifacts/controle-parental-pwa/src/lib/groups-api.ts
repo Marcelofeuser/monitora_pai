@@ -58,3 +58,28 @@ export async function deleteGroup(groupId: string, authToken: string | null): Pr
     throw new Error(body.error ?? `delete_group_failed_${res.status}`);
   }
 }
+
+// Adiciona/remove um contato de um grupo já existente (pedido do Marcelo:
+// antes só dava pra escolher os membros na hora de criar o grupo).
+export async function addGroupMember(groupId: string, contactId: string, authToken: string | null): Promise<void> {
+  const res = await fetch(`${API_URL}/api/groups/${encodeURIComponent(groupId)}/members`, {
+    method: 'POST',
+    headers: authHeaders(authToken),
+    body: JSON.stringify({ contactId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `add_group_member_failed_${res.status}`);
+  }
+}
+
+export async function removeGroupMember(groupId: string, contactId: string, authToken: string | null): Promise<void> {
+  const res = await fetch(
+    `${API_URL}/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(contactId)}`,
+    { method: 'DELETE', headers: authHeaders(authToken) },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `remove_group_member_failed_${res.status}`);
+  }
+}

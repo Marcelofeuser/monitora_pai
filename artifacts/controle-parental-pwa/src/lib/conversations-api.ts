@@ -37,6 +37,10 @@ export type ApprovedContact = {
   id: string;
   contactName: string;
   status: string;
+  // Preenchido só depois que o Contato aceita o convite por link/QR (ver
+  // inviteContact abaixo e routes/contacts.ts) -- até lá é null, e ele
+  // ainda não tem como conversar de verdade com a Criança.
+  contactUserId: string | null;
 };
 
 export async function fetchApprovedContacts(
@@ -179,4 +183,27 @@ export async function deleteContact(contactId: string, authToken: string | null)
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `delete_contact_failed_${res.status}`);
   }
+}
+
+export type ContactInvite = {
+  token: string;
+  joinUrl: string;
+  expiresAt: string;
+  contactName: string;
+};
+
+// Gera o link/QR de convite pra um Contato aprovado virar um usuário de
+// verdade e poder conversar com a Criança -- pedido do Marcelo: "a Lorena
+// recebe um link com qrcode, ela basta clicar que já faz o pré cadastro
+// dela feito". Válido por 7 dias (ver CONTACT_INVITE_TTL_DAYS no backend).
+export async function inviteContact(contactId: string, authToken: string | null): Promise<ContactInvite> {
+  const res = await fetch(`${API_URL}/api/contacts/${encodeURIComponent(contactId)}/invite`, {
+    method: 'POST',
+    headers: authHeaders(authToken),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `invite_contact_failed_${res.status}`);
+  }
+  return res.json();
 }
