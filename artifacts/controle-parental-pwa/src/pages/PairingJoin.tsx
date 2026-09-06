@@ -87,6 +87,8 @@ export function PairingJoin() {
   const [groupAttachError, setGroupAttachError] = useState<string | null>(null);
   const [groupComposerToolsOpen, setGroupComposerToolsOpen] = useState(false);
   const groupTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const groupListRef = useRef<HTMLDivElement | null>(null);
+  const groupStickToBottomRef = useRef(true);
   const [screenLock, setScreenLock] = useState<ChildLockStatus | null>(null);
   const [parentName, setParentName] = useState<string | null>(null);
   const [parentRelationship, setParentRelationship] = useState<string | null>(null);
@@ -96,6 +98,25 @@ export function PairingJoin() {
   const [composerToolsOpen, setComposerToolsOpen] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const privateListRef = useRef<HTMLDivElement | null>(null);
+  const privateStickToBottomRef = useRef(true);
+
+  // Chat tem que rolar sozinho pra ultima mensagem, igual WhatsApp --
+  // antes ficava travado onde a pessoa deixou. So auto-rola se ja
+  // estava perto do fim (ou acabou de trocar de conversa), pra nao
+  // puxar a tela de quem rolou pra cima pra ler o historico.
+  useEffect(() => { privateStickToBottomRef.current = true; }, [selectedContactUserId]);
+  useEffect(() => { groupStickToBottomRef.current = true; }, [selectedGroupId]);
+
+  useEffect(() => {
+    const el = privateListRef.current;
+    if (el && privateStickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [privateMessages]);
+
+  useEffect(() => {
+    const el = groupListRef.current;
+    if (el && groupStickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [groupChatMessages]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -815,7 +836,14 @@ export function PairingJoin() {
                 </p>
                 {selectedGroupId ? (
                   <>
-                    <div className="mt-3 flex min-h-[80px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3">
+                    <div
+                      ref={groupListRef}
+                      onScroll={(event) => {
+                        const el = event.currentTarget;
+                        groupStickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+                      }}
+                      className="mt-3 flex min-h-[80px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3"
+                    >
                       {groupChatLoading && groupChatMessages.length === 0 ? (
                         <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
                       ) : groupChatMessages.length === 0 ? (
@@ -943,7 +971,14 @@ export function PairingJoin() {
                   </>
                 ) : (
                   <>
-                    <div className="mt-3 flex min-h-[80px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3">
+                    <div
+                      ref={privateListRef}
+                      onScroll={(event) => {
+                        const el = event.currentTarget;
+                        privateStickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+                      }}
+                      className="mt-3 flex min-h-[80px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3"
+                    >
                       {privateLoading && privateMessages.length === 0 ? (
                         <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
                       ) : privateMessages.length === 0 ? (

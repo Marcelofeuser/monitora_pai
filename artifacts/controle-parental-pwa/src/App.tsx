@@ -832,6 +832,8 @@ function Conversations() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [composerToolsOpen, setComposerToolsOpen] = useState(false);
   const privateTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const privateListRef = useRef<HTMLDivElement | null>(null);
+  const privateStickToBottomRef = useRef(true);
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupName, setGroupName] = useState('');
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
@@ -859,6 +861,23 @@ function Conversations() {
   const [groupAttachError, setGroupAttachError] = useState<string | null>(null);
   const [groupComposerToolsOpen, setGroupComposerToolsOpen] = useState(false);
   const groupTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const groupListRef = useRef<HTMLDivElement | null>(null);
+  const groupStickToBottomRef = useRef(true);
+
+  // Reabrir uma conversa (trocar de criança/grupo) sempre começa colada
+  // no fim, igual WhatsApp.
+  useEffect(() => { privateStickToBottomRef.current = true; }, [selectedChildId]);
+  useEffect(() => { groupStickToBottomRef.current = true; }, [openGroupChatId]);
+
+  useEffect(() => {
+    const el = privateListRef.current;
+    if (el && privateStickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [privateMessages]);
+
+  useEffect(() => {
+    const el = groupListRef.current;
+    if (el && groupStickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [groupChatMessages]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1471,7 +1490,15 @@ function Conversations() {
             <div className="flex min-h-[290px] flex-col items-center justify-center px-6 py-12 text-center"><div className="relative mb-5"><span className="absolute inset-[-9px] rounded-full border border-dashed border-[hsl(var(--accent)/.65)] animate-pulse-soft" /><span className="relative grid size-16 place-items-center rounded-full bg-[hsl(var(--accent)/.24)] text-[hsl(31_55%_32%)]"><UserPlus size={25} /></span></div><h3 className="font-display text-3xl tracking-[-.04em]">{t.conversations.readyTitle}</h3><p className="mt-3 max-w-[410px] text-sm leading-6 text-[hsl(var(--muted-foreground))]">{profile ? t.conversations.readyWithProfile : t.conversations.readyWithoutProfile}</p></div>
           ) : (
             <div className="flex flex-col gap-4 p-6 sm:p-8">
-              <div className="flex min-h-[220px] flex-col gap-3 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.4)] p-4" data-testid="list-private-messages">
+              <div
+                ref={privateListRef}
+                onScroll={(event) => {
+                  const el = event.currentTarget;
+                  privateStickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+                }}
+                className="flex min-h-[220px] flex-col gap-3 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.4)] p-4"
+                data-testid="list-private-messages"
+              >
                 {privateLoading && privateMessages.length === 0 ? (
                   <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
                 ) : privateMessages.length === 0 ? (
@@ -1640,7 +1667,15 @@ function Conversations() {
             </button>
           </header>
 
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" data-testid="list-group-messages">
+          <div
+            ref={groupListRef}
+            onScroll={(event) => {
+              const el = event.currentTarget;
+              groupStickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+            }}
+            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+            data-testid="list-group-messages"
+          >
             {groupChatLoading && groupChatMessages.length === 0 ? (
               <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
             ) : groupChatMessages.length === 0 ? (

@@ -62,6 +62,18 @@ export function ContactChat() {
   const [groupAttachError, setGroupAttachError] = useState<string | null>(null);
   const [groupComposerToolsOpen, setGroupComposerToolsOpen] = useState(false);
   const groupTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
+
+  // Chat tem que rolar sozinho pra ultima mensagem, igual WhatsApp -- so
+  // auto-rola se ja estava perto do fim (ou acabou de trocar de
+  // conversa: Crianca <-> um dos grupos), pra nao puxar a tela de quem
+  // rolou pra cima pra ler o historico.
+  useEffect(() => { stickToBottomRef.current = true; }, [selectedGroupId]);
+  useEffect(() => {
+    const el = listRef.current;
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages, groupChatMessages, selectedGroupId]);
 
   useEffect(() => {
     try {
@@ -325,7 +337,15 @@ export function ContactChat() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" data-testid="list-contact-messages">
+      <div
+        ref={listRef}
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        }}
+        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+        data-testid="list-contact-messages"
+      >
         {selectedGroupId ? (
           groupChatLoading && groupChatMessages.length === 0 ? (
             <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
