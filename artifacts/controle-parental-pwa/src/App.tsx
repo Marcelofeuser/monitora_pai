@@ -640,12 +640,9 @@ function AppShell({ children }: { children: ReactNode }) {
           <div className="hidden lg:block"><p className="font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]">{t.shell.familySpace} / {profile?.familyName || t.shell.familyNotSet}</p></div>
           <div className="flex items-center gap-3"><LanguageSwitcher /><ThemeSwitcher /><span className="hidden items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))] sm:flex"><span className="size-2 rounded-full bg-[hsl(var(--primary))]" /> {t.shell.localPrivate}</span></div>
         </header>
-        <main className="mx-auto max-w-[1280px] px-5 pb-28 pt-9 sm:px-8 lg:px-12 lg:pb-12 lg:pt-12">{children}</main>
+        <main className="mx-auto max-w-[1280px] px-5 pb-9 pt-9 sm:px-8 lg:px-12 lg:pb-12 lg:pt-12">{children}</main>
       </div>
 
-      <nav className="fixed inset-x-3 bottom-3 z-20 flex h-[70px] items-center justify-around rounded-[22px] border border-[hsl(var(--border))] bg-[hsl(var(--card)/.94)] px-1 shadow-[0_12px_40px_rgba(24,48,48,.12)] backdrop-blur lg:hidden" aria-label={t.shell.bottomNav}>
-        {navItems.map((item) => <NavItem key={item.href} item={item} active={location === item.href} mobile />)}
-      </nav>
       <GuidedTour profile={profile} />
     </div>
   );
