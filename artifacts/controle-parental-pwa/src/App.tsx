@@ -82,15 +82,15 @@ const pt = {
   onboarding: {
     aside: 'um espaço de família, não uma sala de controle', overline: 'privado por padrão',
     heroOne: 'Segurança funciona', heroTwo: 'melhor', heroThree: 'às claras.',
-    description: 'O Amparo oferece à família um lugar compartilhado para combinar cuidados, conversar e compartilhar uma localização quando todos concordarem. Sem monitoramento escondido. Sem adivinhar o que é real.',
+    description: 'O Ampara oferece à família um lugar compartilhado para combinar cuidados, conversar e compartilhar uma localização quando todos concordarem. Sem monitoramento escondido. Sem adivinhar o que é real.',
     checkOne: 'Todos podem ver o que é compartilhado', checkTwo: 'Nada começa sem consentimento',
     step: '01 / comece aqui', question: 'Vamos criar o espaço da sua família', choiceDescription: 'Esta tela é só pra você, o Responsável — a criança nunca cadastra nada aqui, ela entra pelo link/QR de pareamento.',
     adult: 'Adulto responsável', adultDescription: 'Ajudo a manter a família conectada.',
     child: 'Criança', childDescription: 'Quero participar do meu espaço de segurança.',
     yourName: 'Seu nome', yourNamePlaceholder: 'Digite seu nome', familyName: 'Nome do espaço da família', familyNamePlaceholder: 'Dê um nome ao seu espaço',
-    localNote: 'Por enquanto, isso fica neste dispositivo. O Amparo nunca inventa uma pessoa, mensagem ou localização.',
+    localNote: 'Por enquanto, isso fica neste dispositivo. O Ampara nunca inventa uma pessoa, mensagem ou localização.',
     error: 'Escolha um papel e preencha os dois campos para continuar.', create: 'Criar meu espaço de família',
-    footer: 'Amparo / um espaço claro para cuidar', help: 'Precisa de ajuda? Peça para sua família configurar junto.',
+    footer: 'Ampara / um espaço claro para cuidar', help: 'Precisa de ajuda? Peça para sua família configurar junto.',
   },
   auth: {
     title: 'Conta do Responsável', description: 'Entre para manter seu espaço seguro entre dispositivos. Crianças entram apenas pelo pareamento da família.',
@@ -112,7 +112,7 @@ const pt = {
     emptyExplanation: 'Quando sua família começar a compartilhar, é aqui que as atualizações claras e combinadas vão aparecer.',
     status: 'status do espaço', quietReady: 'Quieto e pronto', profile: 'Seu perfil', profileDone: 'Configurado neste dispositivo', profileNeeds: 'Precisa dos seus dados',
     approved: 'Nenhuma conversa aprovada', approvedCount: '{count} contato(s) aprovado(s) localmente', noChildLocation: 'Nenhuma localização de criança compartilhada',
-    onlyShows: 'O Amparo mostra apenas informações que alguém escolheu ativamente compartilhar com este espaço da família.',
+    onlyShows: 'O Ampara mostra apenas informações que alguém escolheu ativamente compartilhar com este espaço da família.',
     connectEyebrow: 'manter conectado', connectTitle: 'Conversas aprovadas', connectText: 'Um lugar para mensagens que todos podem ver como parte do espaço da família.', connectAction: 'Abrir conversas',
     locationEyebrow: 'quando importa', locationTitle: 'Localização, com consentimento', locationText: 'A localização fica vazia até que uma criança escolha compartilhá-la. A permissão fica sempre visível.', locationAction: 'Revisar localização',
   },
@@ -138,7 +138,7 @@ const pt = {
   tutorial: {
     skip: 'Pular tutorial', back: 'Voltar', next: 'Próximo', finish: 'Ir para o painel', stepOf: 'passo {current} de {total}',
     parent: [
-      { title: 'Bem-vindo ao Amparo', text: 'Este é um espaço claro para cuidar, conversar e compartilhar somente o que sua família escolher.', target: 'dashboard' },
+      { title: 'Bem-vindo ao Ampara', text: 'Este é um espaço claro para cuidar, conversar e compartilhar somente o que sua família escolher.', target: 'dashboard' },
       { title: 'Perfil da criança', text: 'Confira o perfil da criança e mantenha os dados reais da família neste espaço.', target: 'child-profile' },
       { title: 'Atividade compartilhada', text: 'Conversas aprovadas e localização aparecem no painel quando forem compartilhadas de verdade.', target: 'activity' },
       { title: 'Aprove contatos', text: 'Antes de conversar, revise cada pedido e escolha entre aprovar, limitar a texto, negar ou revogar.', target: 'approved-contacts' },
@@ -156,7 +156,7 @@ const pt = {
     description: 'Somente conversas aprovadas ficam aqui. O canal privado da família é identificado com clareza e nunca é compartilhado em silêncio.',
     privacy: 'Como a privacidade funciona', approvedTab: 'Conversas aprovadas', privateTab: 'Canal privado da família',
     emptyEyebrow: 'nada compartilhado ainda', emptyTitle: 'Suas conversas estão vazias.',
-    emptyText: 'Quando uma pessoa da família for aprovada e iniciar uma conversa, ela aparecerá aqui. O Amparo não cria mensagens de exemplo.',
+    emptyText: 'Quando uma pessoa da família for aprovada e iniciar uma conversa, ela aparecerá aqui. O Ampara não cria mensagens de exemplo.',
     learnPrivate: 'Conhecer o canal privado', privateTitle: 'Canal privado da família', privateBadge: 'privado',
     privateDescription: 'Um espaço direto para um adulto responsável e uma criança. As mensagens aqui só ficam visíveis para essas duas pessoas quando os dois perfis entrarem neste espaço da família.',
     noParticipants: 'nenhum participante ainda', readyTitle: 'Este canal estará pronto quando sua família estiver.',
@@ -169,7 +169,7 @@ const pt = {
     eyebrow: '03 / localização', title: 'Localização, por acordo.',
     description: 'Uma localização nunca é inferida aqui. Ela aparece somente depois que uma criança escolhe compartilhá-la e o dispositivo permite.',
     permission: 'Permissão do dispositivo', allowed: 'permitida', denied: 'não permitida', notRequested: 'não solicitada',
-    permissionText: 'Permissão e compartilhamento com a família são escolhas separadas. O Amparo só pergunta ao dispositivo quando você pede.',
+    permissionText: 'Permissão e compartilhamento com a família são escolhas separadas. O Ampara só pergunta ao dispositivo quando você pede.',
     waiting: 'Aguardando sua escolha…', granted: 'Permissão concedida', ask: 'Pedir permissão',
     locationUnavailable: 'A permissão de localização não está disponível neste navegador.', notGranted: 'A permissão não foi concedida. Nenhuma localização foi salva.',
     share: 'Compartilhar minha localização', sharedChoice: 'Sua família pode ver que você escolheu compartilhar.', privateChoice: 'Sua localização permanece privada.',
@@ -180,16 +180,16 @@ const pt = {
   },
   settings: {
     eyebrow: '04 / configurações', title: 'Seu espaço, sua voz.',
-    description: 'Veja e altere o perfil e as permissões do dispositivo que dão forma a este espaço do Amparo.',
+    description: 'Veja e altere o perfil e as permissões do dispositivo que dão forma a este espaço do Ampara.',
     profile: 'Perfil da família', stored: 'Armazenado somente neste dispositivo', save: 'Salvar alterações', saved: 'Salvo neste dispositivo.',
     notifications: 'Notificações', notificationsText: 'Uma preferência local para futuras atualizações aprovadas.',
-    device: 'Este dispositivo', deviceText: 'O Amparo está rodando em modo local. Não há sincronização de conta nem coleta em segundo plano.',
+    device: 'Este dispositivo', deviceText: 'O Ampara está rodando em modo local. Não há sincronização de conta nem coleta em segundo plano.',
     browserData: 'Os dados ficam no seu navegador', remove: 'Remover perfil local', removeText: 'Isso limpa seu perfil e as escolhas locais de compartilhamento deste dispositivo.',
-    removeButton: 'Remover perfil', removeConfirm: 'Remover este perfil local de família deste dispositivo?', tutorialTitle: 'Tutorial guiado', tutorialText: 'Revise os passos principais do Amparo sempre que quiser.', tutorialAction: 'Ver tutorial novamente',
+    removeButton: 'Remover perfil', removeConfirm: 'Remover este perfil local de família deste dispositivo?', tutorialTitle: 'Tutorial guiado', tutorialText: 'Revise os passos principais do Ampara sempre que quiser.', tutorialAction: 'Ver tutorial novamente',
     relationshipTitle: 'Como a criança te chama', relationshipText: 'Escolha como você aparece para ela na tela de conversa — em vez do genérico "Responsável".', relationshipSaved: 'Salvo.',
   },
-  notFound: { title: 'Esta página não está aqui.', text: 'O espaço do Amparo que você pediu não existe.', back: 'Voltar ao Amparo' },
-  metadata: { title: 'Amparo — um espaço claro para cuidar', description: 'Um espaço transparente de segurança familiar para adultos responsáveis e crianças.' },
+  notFound: { title: 'Esta página não está aqui.', text: 'O espaço do Ampara que você pediu não existe.', back: 'Voltar ao Ampara' },
+  metadata: { title: 'Ampara — um espaço claro para cuidar', description: 'Um espaço transparente de segurança familiar para adultos responsáveis e crianças.' },
 } as const;
 
 const en = {
@@ -197,15 +197,15 @@ const en = {
   onboarding: {
     aside: 'a family space, not a control room', overline: 'private by default',
     heroOne: 'Safety works', heroTwo: 'better', heroThree: 'in the open.',
-    description: 'Amparo gives families a shared place to check in, talk, and share a location when everyone agrees. No hidden monitoring. No guessing what is real.',
+    description: 'Ampara gives families a shared place to check in, talk, and share a location when everyone agrees. No hidden monitoring. No guessing what is real.',
     checkOne: 'Everyone can see what is shared', checkTwo: 'Nothing starts without consent',
     step: '01 / start here', question: "Let's set up your family's space", choiceDescription: "This screen is just for you, the guardian — the child never signs up here, she joins through the pairing link/QR code.",
     adult: 'Responsible adult', adultDescription: 'I help keep the family connected.',
     child: 'Child', childDescription: 'I want a say in my safety space.',
     yourName: 'Your name', yourNamePlaceholder: 'Type your name', familyName: 'Family space name', familyNamePlaceholder: 'Give your space a name',
-    localNote: 'This stays on this device for now. Amparo will never make up a person, message, or location.',
+    localNote: 'This stays on this device for now. Ampara will never make up a person, message, or location.',
     error: 'Choose a role and complete both fields to continue.', create: 'Create my family space',
-    footer: 'Amparo / a clear space for care', help: 'Need help? Ask your family to set this up together.',
+    footer: 'Ampara / a clear space for care', help: 'Need help? Ask your family to set this up together.',
   },
   auth: {
     title: 'Responsible adult account', description: 'Sign in to keep your family space safe across devices. Children join only through family pairing.',
@@ -227,7 +227,7 @@ const en = {
     emptyExplanation: 'When your family starts sharing, this is where the clear, agreed-upon updates will appear.',
     status: 'space status', quietReady: 'Quiet and ready', profile: 'Your profile', profileDone: 'Set up on this device', profileNeeds: 'Needs your details',
     approved: 'No approved conversations', approvedCount: '{count} approved contact(s) stored locally', noChildLocation: 'No child location shared',
-    onlyShows: 'Amparo only shows information someone has actively chosen to share with this family space.',
+    onlyShows: 'Ampara only shows information someone has actively chosen to share with this family space.',
     connectEyebrow: 'stay connected', connectTitle: 'Approved conversations', connectText: 'A place for messages that everyone can see are part of the family space.', connectAction: 'Open conversations',
     locationEyebrow: 'when it matters', locationTitle: 'Location, with consent', locationText: 'Location is empty until a child chooses to share it. Permission is always visible.', locationAction: 'Review location',
   },
@@ -253,7 +253,7 @@ const en = {
   tutorial: {
     skip: 'Skip tutorial', back: 'Back', next: 'Next', finish: 'Go to dashboard', stepOf: 'step {current} of {total}',
     parent: [
-      { title: 'Welcome to Amparo', text: 'This is a clear place to care, talk, and share only what your family chooses.', target: 'dashboard' },
+      { title: 'Welcome to Ampara', text: 'This is a clear place to care, talk, and share only what your family chooses.', target: 'dashboard' },
       { title: 'Child profile', text: 'Review the child profile and keep real family details in this space.', target: 'child-profile' },
       { title: 'Shared activity', text: 'Approved conversations and location appear on the dashboard when they are truly shared.', target: 'activity' },
       { title: 'Approve contacts', text: 'Before anyone talks, review each request and choose approve, text-only, deny, or revoke.', target: 'approved-contacts' },
@@ -271,7 +271,7 @@ const en = {
     description: 'Only approved conversations belong here. The private family channel is clearly marked and never silently shared.',
     privacy: 'How privacy works', approvedTab: 'Approved conversations', privateTab: 'Private family channel',
     emptyEyebrow: 'nothing shared yet', emptyTitle: 'Your conversations are empty.',
-    emptyText: 'When a family member is approved and starts a conversation, it will appear here. Amparo does not create placeholder messages.',
+    emptyText: 'When a family member is approved and starts a conversation, it will appear here. Ampara does not create placeholder messages.',
     learnPrivate: 'Learn about the private channel', privateTitle: 'Private family channel', privateBadge: 'private',
     privateDescription: 'A direct space for a responsible adult and child. Messages here are visible only to those two people once both profiles join this family space.',
     noParticipants: 'no participants yet', readyTitle: 'This channel is ready when your family is.',
@@ -284,7 +284,7 @@ const en = {
     eyebrow: '03 / location', title: 'Location, by agreement.',
     description: 'A location is never inferred here. It appears only after a child chooses to share it and the device allows it.',
     permission: 'Device permission', allowed: 'allowed', denied: 'not allowed', notRequested: 'not requested',
-    permissionText: 'Permission and family sharing are separate choices. Amparo asks the device only when you ask Amparo.',
+    permissionText: 'Permission and family sharing are separate choices. Ampara asks the device only when you ask Ampara.',
     waiting: 'Waiting for your choice…', granted: 'Permission granted', ask: 'Ask for permission',
     locationUnavailable: 'Location permission is not available in this browser.', notGranted: 'Permission was not granted. No location was saved.',
     share: 'Share my location', sharedChoice: 'Your family can see that you chose to share.', privateChoice: 'Your location stays private.',
@@ -295,16 +295,16 @@ const en = {
   },
   settings: {
     eyebrow: '04 / settings', title: 'Your space, your say.',
-    description: 'See and change the profile and device permissions that shape this Amparo space.',
+    description: 'See and change the profile and device permissions that shape this Ampara space.',
     profile: 'Family profile', stored: 'Stored on this device only', save: 'Save changes', saved: 'Saved on this device.',
     notifications: 'Notifications', notificationsText: 'A local preference for future approved updates.',
-    device: 'This device', deviceText: 'Amparo is running in local mode. There is no account sync or background collection.',
+    device: 'This device', deviceText: 'Ampara is running in local mode. There is no account sync or background collection.',
     browserData: 'Data stays in your browser', remove: 'Remove local profile', removeText: 'This clears your profile and local sharing choices from this device.',
-    removeButton: 'Remove profile', removeConfirm: 'Remove this local family profile from this device?', tutorialTitle: 'Guided tutorial', tutorialText: 'Review the main Amparo steps whenever you want.', tutorialAction: 'View tutorial again',
+    removeButton: 'Remove profile', removeConfirm: 'Remove this local family profile from this device?', tutorialTitle: 'Guided tutorial', tutorialText: 'Review the main Ampara steps whenever you want.', tutorialAction: 'View tutorial again',
     relationshipTitle: 'How the child addresses you', relationshipText: 'Choose how you appear to her on the chat screen — instead of the generic "Responsável".', relationshipSaved: 'Saved.',
   },
-  notFound: { title: 'This page is not here.', text: 'The Amparo space you asked for does not exist.', back: 'Back to Amparo' },
-  metadata: { title: 'Amparo — a clear space for care', description: 'A transparent family safety space for responsible adults and children.' },
+  notFound: { title: 'This page is not here.', text: 'The Ampara space you asked for does not exist.', back: 'Back to Ampara' },
+  metadata: { title: 'Ampara — a clear space for care', description: 'A transparent family safety space for responsible adults and children.' },
 } as const;
 
 type Language = 'pt-BR' | 'en';
@@ -364,7 +364,7 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
       </span>
       {!compact && (
         <span className="font-display text-[27px] leading-none tracking-[-.04em] text-[hsl(var(--foreground))]">
-          amparo
+          ampara
         </span>
       )}
     </Link>
@@ -613,7 +613,7 @@ function AppShell({ children }: { children: ReactNode }) {
           >
             <LogOut size={14} /> {t.auth.signOut}
           </button>
-          <p className="mt-4 font-mono-app text-[10px] uppercase tracking-[.16em] text-[hsl(var(--sidebar-foreground)/.35)]">Amparo v0.1 / {t.shell.localMode}</p>
+          <p className="mt-4 font-mono-app text-[10px] uppercase tracking-[.16em] text-[hsl(var(--sidebar-foreground)/.35)]">Ampara v0.1 / {t.shell.localMode}</p>
         </div>
       </aside>
 
@@ -2128,7 +2128,7 @@ function SettingsPage() {
   // Reflete o estado real da assinatura (não um valor salvo isolado no
   // localStorage) — assim, se o usuário negou a permissão do navegador ou
   // limpou os dados, o toggle não mente dizendo que está ligado.
-  // No app nativo iOS (Amparo) não existe Push API de navegador -- usa a
+  // No app nativo iOS (Ampara) não existe Push API de navegador -- usa a
   // ponte nativa (nativePush.ts) em vez de push.ts. Guardamos o estado do
   // toggle nesse caso no localStorage deste aparelho só pra UI (não tem
   // como consultar de volta se um token FCM já está registrado).
@@ -2355,7 +2355,7 @@ function ClerkApp() {
       signUpUrl={`${basePath}/sign-up`}
       routerPush={(to) => setLocation(stripBase(to))}
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-      localization={{ signIn: { start: { title: 'Entre no Amparo', subtitle: 'Acesse seu espaço da família' } }, signUp: { start: { title: 'Crie sua conta', subtitle: 'Comece seu espaço de cuidado' } } }}
+      localization={{ signIn: { start: { title: 'Entre no Ampara', subtitle: 'Acesse seu espaço da família' } }, signUp: { start: { title: 'Crie sua conta', subtitle: 'Comece seu espaço de cuidado' } } }}
     >
       <Switch>
         <Route path="/sign-in/*?" component={SignInPage} />
