@@ -4,8 +4,15 @@ import { confirmPairing } from '@/lib/pairing-api';
 import { reportLocation } from '@/lib/location-api';
 import { fetchChildPrivateConversation, sendChildPrivateMessage } from '@/lib/child-conversations-api';
 import type { PrivateMessage } from '@/lib/child-conversations-api';
-import { fetchChildContacts, fetchChildContactConversation, sendChildContactMessage } from '@/lib/contact-conversations-api';
-import type { ChildContact } from '@/lib/contact-conversations-api';
+import {
+  fetchChildContacts,
+  fetchChildContactConversation,
+  sendChildContactMessage,
+  fetchChildGroups,
+  fetchChildGroupMessages,
+  sendChildGroupMessage,
+} from '@/lib/contact-conversations-api';
+import type { ChildContact, GroupSummary, GroupMessage } from '@/lib/contact-conversations-api';
 import { ThemeSwitcher } from '@/lib/theme';
 import { EmojiPicker } from '@/components/emoji-picker';
 import { AttachmentPicker } from '@/components/attachment-picker';
@@ -68,6 +75,18 @@ export function PairingJoin() {
   const [attachError, setAttachError] = useState<string | null>(null);
   const [contacts, setContacts] = useState<ChildContact[]>([]);
   const [selectedContactUserId, setSelectedContactUserId] = useState<string | null>(null);
+  const [groups, setGroups] = useState<GroupSummary[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [groupChatMessages, setGroupChatMessages] = useState<GroupMessage[]>([]);
+  const [groupChatNames, setGroupChatNames] = useState<Record<string, string>>({});
+  const [groupChatLoading, setGroupChatLoading] = useState(false);
+  const [groupChatError, setGroupChatError] = useState<string | null>(null);
+  const [groupDraft, setGroupDraft] = useState('');
+  const [groupSending, setGroupSending] = useState(false);
+  const [groupPendingFile, setGroupPendingFile] = useState<File | null>(null);
+  const [groupAttachError, setGroupAttachError] = useState<string | null>(null);
+  const [groupComposerToolsOpen, setGroupComposerToolsOpen] = useState(false);
+  const groupTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [screenLock, setScreenLock] = useState<ChildLockStatus | null>(null);
   const [parentName, setParentName] = useState<string | null>(null);
   const [parentRelationship, setParentRelationship] = useState<string | null>(null);
@@ -200,6 +219,135 @@ export function PairingJoin() {
       window.clearInterval(intervalId);
     };
   }, [status, deviceToken]);
+
+  // Lista de grupos da Criança (chat de grupo de verdade, pedido do
+  // Marcelo) -- mesma cadência de atualização da lista de Contatos acima.
+  useEffect(() => {
+    if (status !== 'success' || !deviceToken) return;
+    let cancelled = false;
+
+    function loadGroups() {
+      fetchChildGroups(deviceToken!)
+        .then((data) => {
+          if (!cancelled) setGroups(data);
+        })
+        .catch(() => undefined);
+    }
+
+    loadGroups();
+    const intervalId = window.setInterval(loadGroups, 20000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [status, deviceToken]);
+
+  // Poll de 5s do chat de um grupo aberto -- separado do poll privado
+  // acima porque a mensagem tem formato diferente (groupId em vez de
+  // conversationId) e porque pode ter mais de 2 remetentes possíveis.
+  useEffect(() => {
+    if (status !== 'success' || !deviceToken || !selectedGroupId) return;
+    let cancelled = false;
+
+    async function loadGroupMessages(showSpinner: boolean) {
+      if (showSpinner) setGroupChatLoading(true);
+      try {
+        const data = await fetchChildGroupMessages(deviceToken!, selectedGroupId!);
+        if (!cancelled) {
+          setGroupChatMessages(data.messages);
+          setGroupChatNames(data.participantNames);
+          setGroupChatError(null);
+        }
+      } catch (err) {
+        if (!cancelled && showSpinner) {
+          setGroupChatError(err instanceof Error ? err.message : 'Erro ao carregar o chat do grupo.');
+        }
+      } finally {
+        if (!cancelled && showSpinner) setGroupChatLoading(false);
+      }
+    }
+
+    loadGroupMessages(true);
+    const intervalId = window.setInterval(() => loadGroupMessages(false), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [status, deviceToken, selectedGroupId]);
+
+  // Trocar de "conversa" agora é entre 3 tipos (Responsável, Contato,
+  // Grupo) -- estas três funções garantem que só um fica selecionado
+  // por vez, pra bolinha certa ficar destacada e o corpo do chat trocar
+  // pro conteúdo certo.
+  function selectParentChat() {
+    setSelectedGroupId(null);
+    setSelectedContactUserId(null);
+  }
+
+  function selectContactChat(contactUserId: string) {
+    setSelectedGroupId(null);
+    setSelectedContactUserId(contactUserId);
+  }
+
+  function selectGroupChat(groupId: string) {
+    setGroupChatMessages([]);
+    setGroupChatError(null);
+    setGroupDraft('');
+    setGroupPendingFile(null);
+    setSelectedGroupId(groupId);
+  }
+
+  async function handleSendGroupMessage(event: FormEvent) {
+    event.preventDefault();
+    const text = groupDraft.trim();
+    const token = deviceToken ?? localStorage.getItem(DEVICE_TOKEN_KEY);
+    if ((!text && !groupPendingFile) || !token || !selectedGroupId || groupSending) return;
+    setGroupSending(true);
+    setGroupChatError(null);
+    try {
+      const message = groupPendingFile
+        ? await sendChildGroupMessage(token, selectedGroupId, { file: groupPendingFile, caption: text || undefined })
+        : await sendChildGroupMessage(token, selectedGroupId, { textContent: text });
+      setGroupChatMessages((current) => [...current, message]);
+      setGroupDraft('');
+      setGroupPendingFile(null);
+      if (groupTextareaRef.current) groupTextareaRef.current.style.height = 'auto';
+    } catch (err) {
+      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+    } finally {
+      setGroupSending(false);
+    }
+  }
+
+  async function sendGroupSticker(emoji: string) {
+    const token = deviceToken ?? localStorage.getItem(DEVICE_TOKEN_KEY);
+    if (!token || !selectedGroupId || groupSending) return;
+    setGroupSending(true);
+    setGroupChatError(null);
+    try {
+      const message = await sendChildGroupMessage(token, selectedGroupId, { stickerEmoji: emoji });
+      setGroupChatMessages((current) => [...current, message]);
+    } catch (err) {
+      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
+    } finally {
+      setGroupSending(false);
+    }
+  }
+
+  async function sendGroupAudio(file: File) {
+    const token = deviceToken ?? localStorage.getItem(DEVICE_TOKEN_KEY);
+    if (!token || !selectedGroupId || groupSending) return;
+    setGroupSending(true);
+    setGroupChatError(null);
+    try {
+      const message = await sendChildGroupMessage(token, selectedGroupId, { file });
+      setGroupChatMessages((current) => [...current, message]);
+    } catch (err) {
+      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
+    } finally {
+      setGroupSending(false);
+    }
+  }
 
   // Um único ponto que decide se a mensagem vai pro Responsável (canal
   // privado de sempre) ou pra um Contato aprovado (selectedContactUserId
@@ -599,9 +747,9 @@ export function PairingJoin() {
                 <div className="mb-2 flex shrink-0 gap-3 overflow-x-auto pb-1">
                   <button
                     type="button"
-                    onClick={() => setSelectedContactUserId(null)}
+                    onClick={selectParentChat}
                     data-testid="button-select-chat-parent"
-                    className={`flex shrink-0 flex-col items-center gap-1 ${selectedContactUserId === null ? '' : 'opacity-60'}`}
+                    className={`flex shrink-0 flex-col items-center gap-1 ${selectedGroupId === null && selectedContactUserId === null ? '' : 'opacity-60'}`}
                   >
                     <span
                       className="grid size-11 place-items-center rounded-full text-sm font-extrabold text-white shadow-sm"
@@ -615,9 +763,9 @@ export function PairingJoin() {
                     <button
                       key={contact.id}
                       type="button"
-                      onClick={() => setSelectedContactUserId(contact.contactUserId)}
+                      onClick={() => selectContactChat(contact.contactUserId)}
                       data-testid={`button-select-chat-contact-${contact.id}`}
-                      className={`flex shrink-0 flex-col items-center gap-1 ${selectedContactUserId === contact.contactUserId ? '' : 'opacity-60'}`}
+                      className={`flex shrink-0 flex-col items-center gap-1 ${selectedGroupId === null && selectedContactUserId === contact.contactUserId ? '' : 'opacity-60'}`}
                     >
                       <span className="grid size-11 place-items-center rounded-full bg-[hsl(var(--secondary))] text-sm font-extrabold text-white shadow-sm">
                         {contact.contactName.trim().slice(0, 1).toUpperCase()}
@@ -625,15 +773,31 @@ export function PairingJoin() {
                       <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{contact.contactName}</span>
                     </button>
                   ))}
+                  {groups.map((group) => (
+                    <button
+                      key={group.id}
+                      type="button"
+                      onClick={() => selectGroupChat(group.id)}
+                      data-testid={`button-select-chat-group-${group.id}`}
+                      className={`flex shrink-0 flex-col items-center gap-1 ${selectedGroupId === group.id ? '' : 'opacity-60'}`}
+                    >
+                      <span className="grid size-11 place-items-center rounded-full bg-[hsl(var(--accent))] text-sm font-extrabold text-white shadow-sm">
+                        {group.name.trim().slice(0, 1).toUpperCase()}
+                      </span>
+                      <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{group.name}</span>
+                    </button>
+                  ))}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Sparkles size={18} className="shrink-0 text-[hsl(var(--secondary))]" />
                   <h2 className="font-kid min-w-0 flex-1 truncate text-base font-extrabold">
-                    {selectedContactUserId
-                      ? (contacts.find((c) => c.contactUserId === selectedContactUserId)?.contactName ?? 'Conversa')
-                      : parentName
-                        ? `${parentName} (${relationshipInfo.label})`
-                        : relationshipInfo.label}
+                    {selectedGroupId
+                      ? (groups.find((g) => g.id === selectedGroupId)?.name ?? 'Grupo')
+                      : selectedContactUserId
+                        ? (contacts.find((c) => c.contactUserId === selectedContactUserId)?.contactName ?? 'Conversa')
+                        : parentName
+                          ? `${parentName} (${relationshipInfo.label})`
+                          : relationshipInfo.label}
                   </h2>
                   <button
                     type="button"
@@ -647,134 +811,261 @@ export function PairingJoin() {
                   </button>
                 </div>
                 <p className="mt-1 shrink-0 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
-                  {selectedContactUserId ? 'Essa conversa também é vista pelo responsável.' : 'Só vocês dois veem essa conversa.'}
+                  {selectedGroupId ? 'Todo mundo do grupo vê essa conversa.' : selectedContactUserId ? 'Essa conversa também é vista pelo responsável.' : 'Só vocês dois veem essa conversa.'}
                 </p>
-                <div className="mt-3 flex min-h-[80px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3">
-                  {privateLoading && privateMessages.length === 0 ? (
-                    <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
-                  ) : privateMessages.length === 0 ? (
-                    <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda. Diga oi! <span aria-hidden="true">👋</span></p>
-                  ) : (
-                    privateMessages.map((message) => {
-                      const fromMe = childId !== null && message.senderId === childId;
-                      const sticker = isStickerMessage(message);
-                      const bubbleClass = sticker
-                        ? `${fromMe ? 'self-end' : 'self-start'}`
-                        : `rounded-[20px] px-3.5 py-2.5 shadow-sm ${fromMe ? 'self-end text-white' : 'self-start bg-[hsl(var(--card))]'}`;
-                      return (
-                        <div
-                          key={message.id}
-                          className={`max-w-[85%] animate-pop-in text-sm leading-6 ${bubbleClass}`}
-                          style={sticker || !fromMe ? undefined : { background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
+                {selectedGroupId ? (
+                  <>
+                    <div className="mt-3 flex min-h-[80px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3">
+                      {groupChatLoading && groupChatMessages.length === 0 ? (
+                        <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+                      ) : groupChatMessages.length === 0 ? (
+                        <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda neste grupo. Diga oi! <span aria-hidden="true">👋</span></p>
+                      ) : (
+                        groupChatMessages.map((message) => {
+                          const fromMe = childId !== null && message.senderId === childId;
+                          const sticker = isStickerMessage(message);
+                          const bubbleClass = sticker
+                            ? `${fromMe ? 'self-end' : 'self-start'}`
+                            : `rounded-[20px] px-3.5 py-2.5 shadow-sm ${fromMe ? 'self-end text-white' : 'self-start bg-[hsl(var(--card))]'}`;
+                          return (
+                            <div key={message.id} className={`flex max-w-[85%] flex-col ${fromMe ? 'items-end self-end' : 'items-start self-start'}`}>
+                              {!fromMe && (
+                                <p className="mb-0.5 px-1 text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{groupChatNames[message.senderId] ?? '…'}</p>
+                              )}
+                              <div
+                                className={`animate-pop-in text-sm leading-6 ${bubbleClass}`}
+                                style={sticker || !fromMe ? undefined : { background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
+                              >
+                                <MessageContent message={message} authHeaders={{ 'X-Child-Token': deviceToken ?? '' }} />
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                    {groupChatError && <p className="mt-2 shrink-0 text-sm font-semibold text-[hsl(var(--destructive))]">{groupChatError}</p>}
+                    {groupAttachError && <p className="mt-2 shrink-0 text-sm font-semibold text-[hsl(var(--destructive))]">{groupAttachError}</p>}
+                    {groupPendingFile && (
+                      <div className="mt-2 flex shrink-0 items-center gap-2 rounded-full bg-[hsl(var(--muted))] px-3.5 py-2 text-xs font-bold">
+                        {groupPendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {groupPendingFile.name}
+                        <button
+                          type="button"
+                          onClick={() => setGroupPendingFile(null)}
+                          aria-label="Remover anexo"
+                          className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
                         >
-                          <MessageContent message={message} authHeaders={{ 'X-Child-Token': deviceToken ?? '' }} />
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-                {privateError && <p className="mt-2 shrink-0 text-sm font-semibold text-[hsl(var(--destructive))]">{privateError}</p>}
-                {attachError && <p className="mt-2 shrink-0 text-sm font-semibold text-[hsl(var(--destructive))]">{attachError}</p>}
-                {pendingFile && (
-                  <div className="mt-2 flex shrink-0 items-center gap-2 rounded-full bg-[hsl(var(--muted))] px-3.5 py-2 text-xs font-bold">
-                    {pendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {pendingFile.name}
-                    <button
-                      type="button"
-                      onClick={() => setPendingFile(null)}
-                      aria-label="Remover anexo"
-                      className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-                <form onSubmit={sendPrivate} className="mt-2 flex shrink-0 items-end gap-1.5">
-                  {/* Antes eram 4 botões soltos (emoji/anexo/figurinha/áudio) ao
-                      lado do campo de escrever — em telas menores isso
-                      estourava a largura e empurrava o botão de enviar pra
-                      fora da tela. Agora ficam escondidos atrás de um único
-                      botão "+" que abre um menu em cascata por cima. */}
-                  <div className="relative shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setComposerToolsOpen((current) => !current)}
-                      aria-label={composerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
-                      data-testid="button-composer-tools"
-                      className={`grid size-11 shrink-0 place-items-center rounded-full border transition-transform ${
-                        composerToolsOpen
-                          ? 'rotate-45 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
-                          : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
-                      }`}
-                    >
-                      <Plus size={20} />
-                    </button>
-                    {composerToolsOpen && (
-                      <>
-                        <div className="fixed inset-0 z-30" onClick={() => setComposerToolsOpen(false)} />
-                        <div
-                          className="absolute bottom-full left-0 z-40 mb-2 flex flex-col gap-1.5 rounded-2xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-1.5 shadow-lg"
-                          data-testid="panel-composer-tools"
-                        >
-                          <EmojiPicker
-                            onSelect={(emoji) => {
-                              setPrivateDraft((current) => current + emoji);
-                              setComposerToolsOpen(false);
-                            }}
-                          />
-                          <AttachmentPicker
-                            onSelect={(file) => {
-                              setAttachError(null);
-                              setPendingFile(file);
-                              setComposerToolsOpen(false);
-                            }}
-                            onError={setAttachError}
-                          />
-                          <StickerPicker
-                            onSelect={(emoji) => {
-                              void sendSticker(emoji);
-                              setComposerToolsOpen(false);
-                            }}
-                          />
-                          <AudioRecorderButton
-                            onRecorded={(file) => {
-                              void sendAudio(file);
-                              setComposerToolsOpen(false);
-                            }}
-                            onError={setAttachError}
-                            disabled={privateSending}
-                          />
-                        </div>
-                      </>
+                          ×
+                        </button>
+                      </div>
                     )}
-                  </div>
-                  <textarea
-                    ref={textareaRef}
-                    value={privateDraft}
-                    onChange={(event) => {
-                      setPrivateDraft(event.target.value);
-                      autoGrowTextarea(event.target);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
-                        event.preventDefault();
-                        event.currentTarget.form?.requestSubmit();
-                      }
-                    }}
-                    placeholder={pendingFile ? 'Legenda (opcional)…' : 'Escreva uma mensagem…'}
-                    rows={1}
-                    className="max-h-32 min-h-[44px] flex-1 resize-none rounded-3xl border border-[hsl(var(--border))] bg-transparent px-4 py-2.5 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
-                  />
-                  <button
-                    type="submit"
-                    disabled={(!privateDraft.trim() && !pendingFile) || privateSending}
-                    aria-label="Enviar mensagem"
-                    data-testid="button-send-private-message"
-                    className="grid size-11 shrink-0 place-items-center rounded-full text-white shadow-sm transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
-                    style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
-                  >
-                    {privateSending ? '…' : <Send size={17} />}
-                  </button>
-                </form>
+                    <form onSubmit={handleSendGroupMessage} className="mt-2 flex shrink-0 items-end gap-1.5">
+                      <div className="relative shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setGroupComposerToolsOpen((current) => !current)}
+                          aria-label={groupComposerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                          data-testid="button-composer-tools-group"
+                          className={`grid size-11 shrink-0 place-items-center rounded-full border transition-transform ${
+                            groupComposerToolsOpen
+                              ? 'rotate-45 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
+                              : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                          }`}
+                        >
+                          <Plus size={20} />
+                        </button>
+                        {groupComposerToolsOpen && (
+                          <>
+                            <div className="fixed inset-0 z-30" onClick={() => setGroupComposerToolsOpen(false)} />
+                            <div
+                              className="absolute bottom-full left-0 z-40 mb-2 flex flex-col gap-1.5 rounded-2xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-1.5 shadow-lg"
+                              data-testid="panel-composer-tools-group"
+                            >
+                              <EmojiPicker
+                                onSelect={(emoji) => {
+                                  setGroupDraft((current) => current + emoji);
+                                  setGroupComposerToolsOpen(false);
+                                }}
+                              />
+                              <AttachmentPicker
+                                onSelect={(file) => {
+                                  setGroupAttachError(null);
+                                  setGroupPendingFile(file);
+                                  setGroupComposerToolsOpen(false);
+                                }}
+                                onError={setGroupAttachError}
+                              />
+                              <StickerPicker
+                                onSelect={(emoji) => {
+                                  void sendGroupSticker(emoji);
+                                  setGroupComposerToolsOpen(false);
+                                }}
+                              />
+                              <AudioRecorderButton
+                                onRecorded={(file) => {
+                                  void sendGroupAudio(file);
+                                  setGroupComposerToolsOpen(false);
+                                }}
+                                onError={setGroupAttachError}
+                                disabled={groupSending}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <textarea
+                        ref={groupTextareaRef}
+                        value={groupDraft}
+                        onChange={(event) => {
+                          setGroupDraft(event.target.value);
+                          autoGrowTextarea(event.target);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' && !event.shiftKey) {
+                            event.preventDefault();
+                            event.currentTarget.form?.requestSubmit();
+                          }
+                        }}
+                        placeholder={groupPendingFile ? 'Legenda (opcional)…' : 'Escreva pro grupo…'}
+                        rows={1}
+                        className="max-h-32 min-h-[44px] flex-1 resize-none rounded-3xl border border-[hsl(var(--border))] bg-transparent px-4 py-2.5 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
+                      />
+                      <button
+                        type="submit"
+                        disabled={(!groupDraft.trim() && !groupPendingFile) || groupSending}
+                        aria-label="Enviar mensagem"
+                        data-testid="button-send-group-message"
+                        className="grid size-11 shrink-0 place-items-center rounded-full text-white shadow-sm transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
+                        style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
+                      >
+                        {groupSending ? '…' : <Send size={17} />}
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-3 flex min-h-[80px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3">
+                      {privateLoading && privateMessages.length === 0 ? (
+                        <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+                      ) : privateMessages.length === 0 ? (
+                        <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda. Diga oi! <span aria-hidden="true">👋</span></p>
+                      ) : (
+                        privateMessages.map((message) => {
+                          const fromMe = childId !== null && message.senderId === childId;
+                          const sticker = isStickerMessage(message);
+                          const bubbleClass = sticker
+                            ? `${fromMe ? 'self-end' : 'self-start'}`
+                            : `rounded-[20px] px-3.5 py-2.5 shadow-sm ${fromMe ? 'self-end text-white' : 'self-start bg-[hsl(var(--card))]'}`;
+                          return (
+                            <div
+                              key={message.id}
+                              className={`max-w-[85%] animate-pop-in text-sm leading-6 ${bubbleClass}`}
+                              style={sticker || !fromMe ? undefined : { background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
+                            >
+                              <MessageContent message={message} authHeaders={{ 'X-Child-Token': deviceToken ?? '' }} />
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                    {privateError && <p className="mt-2 shrink-0 text-sm font-semibold text-[hsl(var(--destructive))]">{privateError}</p>}
+                    {attachError && <p className="mt-2 shrink-0 text-sm font-semibold text-[hsl(var(--destructive))]">{attachError}</p>}
+                    {pendingFile && (
+                      <div className="mt-2 flex shrink-0 items-center gap-2 rounded-full bg-[hsl(var(--muted))] px-3.5 py-2 text-xs font-bold">
+                        {pendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {pendingFile.name}
+                        <button
+                          type="button"
+                          onClick={() => setPendingFile(null)}
+                          aria-label="Remover anexo"
+                          className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+                    <form onSubmit={sendPrivate} className="mt-2 flex shrink-0 items-end gap-1.5">
+                      <div className="relative shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setComposerToolsOpen((current) => !current)}
+                          aria-label={composerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                          data-testid="button-composer-tools"
+                          className={`grid size-11 shrink-0 place-items-center rounded-full border transition-transform ${
+                            composerToolsOpen
+                              ? 'rotate-45 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
+                              : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                          }`}
+                        >
+                          <Plus size={20} />
+                        </button>
+                        {composerToolsOpen && (
+                          <>
+                            <div className="fixed inset-0 z-30" onClick={() => setComposerToolsOpen(false)} />
+                            <div
+                              className="absolute bottom-full left-0 z-40 mb-2 flex flex-col gap-1.5 rounded-2xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-1.5 shadow-lg"
+                              data-testid="panel-composer-tools"
+                            >
+                              <EmojiPicker
+                                onSelect={(emoji) => {
+                                  setPrivateDraft((current) => current + emoji);
+                                  setComposerToolsOpen(false);
+                                }}
+                              />
+                              <AttachmentPicker
+                                onSelect={(file) => {
+                                  setAttachError(null);
+                                  setPendingFile(file);
+                                  setComposerToolsOpen(false);
+                                }}
+                                onError={setAttachError}
+                              />
+                              <StickerPicker
+                                onSelect={(emoji) => {
+                                  void sendSticker(emoji);
+                                  setComposerToolsOpen(false);
+                                }}
+                              />
+                              <AudioRecorderButton
+                                onRecorded={(file) => {
+                                  void sendAudio(file);
+                                  setComposerToolsOpen(false);
+                                }}
+                                onError={setAttachError}
+                                disabled={privateSending}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <textarea
+                        ref={textareaRef}
+                        value={privateDraft}
+                        onChange={(event) => {
+                          setPrivateDraft(event.target.value);
+                          autoGrowTextarea(event.target);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' && !event.shiftKey) {
+                            event.preventDefault();
+                            event.currentTarget.form?.requestSubmit();
+                          }
+                        }}
+                        placeholder={pendingFile ? 'Legenda (opcional)…' : 'Escreva uma mensagem…'}
+                        rows={1}
+                        className="max-h-32 min-h-[44px] flex-1 resize-none rounded-3xl border border-[hsl(var(--border))] bg-transparent px-4 py-2.5 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
+                      />
+                      <button
+                        type="submit"
+                        disabled={(!privateDraft.trim() && !pendingFile) || privateSending}
+                        aria-label="Enviar mensagem"
+                        data-testid="button-send-private-message"
+                        className="grid size-11 shrink-0 place-items-center rounded-full text-white shadow-sm transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
+                        style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
+                      >
+                        {privateSending ? '…' : <Send size={17} />}
+                      </button>
+                    </form>
+                  </>
+                )}
               </div>
             )}
 

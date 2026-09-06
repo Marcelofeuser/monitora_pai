@@ -83,3 +83,46 @@ export async function removeGroupMember(groupId: string, contactId: string, auth
     throw new Error(body.error ?? `remove_group_member_failed_${res.status}`);
   }
 }
+
+// Chat de verdade do grupo (pedido do Marcelo) -- texto, foto/video
+// (campo "file") ou figurinha, mesmo padrao de SendPrivateMessageInput
+// em conversations-api.ts.
+export type GroupMessage = {
+  id: string;
+  groupId: string;
+  senderId: string;
+  type: string;
+  textContent: string | null;
+  contentUrl: string | null;
+  createdAt: string;
+};
+export type GroupConversation = { group: Group; messages: GroupMessage[]; participantNames: Record<string, string> };
+export type SendGroupMessageInput = { textContent: string } | { file: File; caption?: string } | { stickerEmoji: string };
+
+export async function fetchGroupMessages(groupId: string, authToken: string | null): Promise<GroupConversation> {
+  const res = await fetch(`${API_URL}/api/groups/${encodeURIComponent(groupId)}/messages`, { headers: authHeaders(authToken) });
+  if (!res.ok) throw new Error(`fetch_group_messages_failed_${res.status}`);
+  return res.json();
+}
+
+export async function sendGroupMessage(groupId: string, input: SendGroupMessageInput, authToken: string | null): Promise<GroupMessage> {
+  const url = `${API_URL}/api/groups/${encodeURIComponent(groupId)}/messages`;
+  let res: Response;
+  if ('file' in input) {
+    const form = new FormData();
+    form.append('file', input.file);
+    if (input.caption) form.append('textContent', input.caption);
+    res = await fetch(url, { method: 'POST', headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined, body: form });
+  } else if ('stickerEmoji' in input) {
+    const form = new FormData();
+    form.append('stickerEmoji', input.stickerEmoji);
+    res = await fetch(url, { method: 'POST', headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined, body: form });
+  } else {
+    res = await fetch(url, { method: 'POST', headers: authHeaders(authToken), body: JSON.stringify({ textContent: input.textContent }) });
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `send_group_message_failed_${res.status}`);
+  }
+  return res.json();
+}

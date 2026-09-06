@@ -5,8 +5,13 @@ import { createReadStream } from "node:fs";
 import { and, eq } from "drizzle-orm";
 import {
   childDeviceTokensTable,
+  contactDeviceTokensTable,
+  contactsTable,
   conversationsTable,
   db,
+  groupMembersTable,
+  groupMessagesTable,
+  groupsTable,
   messagesTable,
   mirrorLogTable,
 } from "@workspace/db";
@@ -38,6 +43,19 @@ async function resolveChildIdFromHeader(req: Request): Promise<string | null> {
   return row?.childId ?? null;
 }
 
+async function resolveContactUserIdFromHeader(req: Request): Promise<string | null> {
+  const header = req.headers["x-contact-token"];
+  const token = Array.isArray(header) ? header[0] : header;
+  if (!token) return null;
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const [row] = await db
+    .select()
+    .from(contactDeviceTokensTable)
+    .where(eq(contactDeviceTokensTable.tokenHash, tokenHash))
+    .limit(1);
+  return row?.contactUserId ?? null;
+}
+
 /**
  * GET /api/media/:filename
  *
@@ -59,7 +77,8 @@ router.get("/media/:filename", async (req, res) => {
   const auth = getAuth(req);
   const parentUserId = auth.userId ?? null;
   const childId = parentUserId ? null : await resolveChildIdFromHeader(req);
-  if (!parentUserId && !childId) {
+  const contactUserId = parentUserId || childId ? null : await resolveContactUserIdFromHeader(req);
+  if (!parentUserId && !childId && !contactUserId) {
     return res.status(401).json({ error: "not_authenticated" });
   }
 
@@ -69,33 +88,71 @@ router.get("/media/:filename", async (req, res) => {
     .from(messagesTable)
     .where(eq(messagesTable.contentUrl, contentUrl))
     .limit(1);
-  if (!message) return res.status(404).json({ error: "not_found" });
-
-  const [conversation] = await db
-    .select()
-    .from(conversationsTable)
-    .where(eq(conversationsTable.id, message.conversationId))
-    .limit(1);
-  if (!conversation) return res.status(404).json({ error: "not_found" });
 
   let authorized = false;
-  if (childId) {
-    authorized = conversation.participantAId === childId || conversation.participantBId === childId;
-  } else if (parentUserId) {
-    authorized =
-      conversation.participantAId === parentUserId || conversation.participantBId === parentUserId;
-    if (!authorized) {
-      const [mirrored] = await db
+
+  if (message) {
+    const [conversation] = await db
+      .select()
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, message.conversationId))
+      .limit(1);
+    if (!conversation) return res.status(404).json({ error: "not_found" });
+
+    if (childId) {
+      authorized = conversation.participantAId === childId || conversation.participantBId === childId;
+    } else if (contactUserId) {
+      authorized =
+        conversation.participantAId === contactUserId || conversation.participantBId === contactUserId;
+    } else if (parentUserId) {
+      authorized =
+        conversation.participantAId === parentUserId || conversation.participantBId === parentUserId;
+      if (!authorized) {
+        const [mirrored] = await db
+          .select()
+          .from(mirrorLogTable)
+          .where(
+            and(
+              eq(mirrorLogTable.messageId, message.id),
+              eq(mirrorLogTable.mirroredToParentId, parentUserId),
+            ),
+          )
+          .limit(1);
+        authorized = Boolean(mirrored);
+      }
+    }
+  } else {
+    const [groupMessage] = await db
+      .select()
+      .from(groupMessagesTable)
+      .where(eq(groupMessagesTable.contentUrl, contentUrl))
+      .limit(1);
+    if (!groupMessage) return res.status(404).json({ error: "not_found" });
+
+    const [group] = await db
+      .select()
+      .from(groupsTable)
+      .where(eq(groupsTable.id, groupMessage.groupId))
+      .limit(1);
+    if (!group) return res.status(404).json({ error: "not_found" });
+
+    if (parentUserId) {
+      authorized = group.createdByParentId === parentUserId;
+    } else if (childId) {
+      authorized = group.childId === childId;
+    } else if (contactUserId) {
+      const [membership] = await db
         .select()
-        .from(mirrorLogTable)
+        .from(groupMembersTable)
+        .innerJoin(contactsTable, eq(groupMembersTable.contactId, contactsTable.id))
         .where(
           and(
-            eq(mirrorLogTable.messageId, message.id),
-            eq(mirrorLogTable.mirroredToParentId, parentUserId),
+            eq(groupMembersTable.groupId, group.id),
+            eq(contactsTable.contactUserId, contactUserId),
           ),
         )
         .limit(1);
-      authorized = Boolean(mirrored);
+      authorized = Boolean(membership);
     }
   }
 

@@ -61,7 +61,7 @@ type MessageInput = {
 // balão; ou (3) texto puro, o caso de sempre. As duas rotas de envio
 // (Responsável e Criança) compartilham essa mesma lógica de extração —
 // só muda quem está autenticado.
-async function extractMessageInput(req: Request, res: Response): Promise<MessageInput | null> {
+export async function extractMessageInput(req: Request, res: Response): Promise<MessageInput | null> {
   const file = (req as Request & { file?: Express.Multer.File }).file;
   const body = req.body as Record<string, unknown>;
   const rawText = typeof body?.textContent === "string" ? body.textContent.trim() : "";

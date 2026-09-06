@@ -79,6 +79,86 @@ export async function fetchChildContactConversation(
   return res.json();
 }
 
+// ---------------------------------------------------------------------
+// Grupos (chat de grupo de verdade) -- lado da Crianca e lado do Contato.
+// Mesmas rotas /api/child/groups... e /api/contact/groups... criadas em
+// routes/groups.ts, so muda o header de autenticacao de cada lado.
+// ---------------------------------------------------------------------
+
+export type GroupMember = { id: string; contactName: string };
+export type GroupSummary = {
+  id: string;
+  childId: string;
+  name: string;
+  createdByParentId: string;
+  createdAt: string;
+  members: GroupMember[];
+};
+export type GroupMessage = {
+  id: string;
+  groupId: string;
+  senderId: string;
+  type: string;
+  textContent: string | null;
+  contentUrl: string | null;
+  createdAt: string;
+};
+export type GroupConversation = { group: GroupSummary; messages: GroupMessage[]; participantNames: Record<string, string> };
+
+export async function fetchChildGroups(deviceToken: string): Promise<GroupSummary[]> {
+  const res = await fetch(`${API_URL}/api/child/groups`, { headers: { 'X-Child-Token': deviceToken } });
+  if (!res.ok) throw new Error(`fetch_child_groups_failed_${res.status}`);
+  return res.json();
+}
+
+export async function fetchChildGroupMessages(deviceToken: string, groupId: string): Promise<GroupConversation> {
+  const res = await fetch(`${API_URL}/api/child/groups/${encodeURIComponent(groupId)}/messages`, {
+    headers: { 'X-Child-Token': deviceToken },
+  });
+  if (!res.ok) throw new Error(`fetch_child_group_messages_failed_${res.status}`);
+  return res.json();
+}
+
+export async function sendChildGroupMessage(
+  deviceToken: string,
+  groupId: string,
+  input: SendMessageInput,
+): Promise<GroupMessage> {
+  return sendDeviceMessage<GroupMessage>(
+    `/api/child/groups/${encodeURIComponent(groupId)}/messages`,
+    'X-Child-Token',
+    deviceToken,
+    input,
+  );
+}
+
+export async function fetchContactGroups(deviceToken: string): Promise<GroupSummary[]> {
+  const res = await fetch(`${API_URL}/api/contact/groups`, { headers: { 'X-Contact-Token': deviceToken } });
+  if (!res.ok) throw new Error(`fetch_contact_groups_failed_${res.status}`);
+  return res.json();
+}
+
+export async function fetchContactGroupMessages(deviceToken: string, groupId: string): Promise<GroupConversation> {
+  const res = await fetch(`${API_URL}/api/contact/groups/${encodeURIComponent(groupId)}/messages`, {
+    headers: { 'X-Contact-Token': deviceToken },
+  });
+  if (!res.ok) throw new Error(`fetch_contact_group_messages_failed_${res.status}`);
+  return res.json();
+}
+
+export async function sendContactGroupMessage(
+  deviceToken: string,
+  groupId: string,
+  input: SendMessageInput,
+): Promise<GroupMessage> {
+  return sendDeviceMessage<GroupMessage>(
+    `/api/contact/groups/${encodeURIComponent(groupId)}/messages`,
+    'X-Contact-Token',
+    deviceToken,
+    input,
+  );
+}
+
 export async function sendChildContactMessage(
   deviceToken: string,
   contactUserId: string,
@@ -95,12 +175,12 @@ export async function sendChildContactMessage(
 // Helper compartilhado: mesma lógica de texto/anexo/figurinha usada em
 // child-conversations-api.ts, só que parametrizada pelo header e pela URL
 // (evita duplicar 3x o mesmo if/else de FormData vs JSON).
-async function sendDeviceMessage(
+async function sendDeviceMessage<T = PrivateMessage>(
   path: string,
   headerName: 'X-Child-Token' | 'X-Contact-Token',
   deviceToken: string,
   input: SendMessageInput,
-): Promise<PrivateMessage> {
+): Promise<T> {
   let res: Response;
   if ('file' in input) {
     const form = new FormData();

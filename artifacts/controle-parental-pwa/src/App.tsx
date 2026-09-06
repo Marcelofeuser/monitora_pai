@@ -22,6 +22,7 @@ import {
   Plus,
   QrCode,
   RefreshCw,
+  Send,
   Settings,
   ShieldCheck,
   Smartphone,
@@ -50,8 +51,8 @@ import { enableNativeIOSPush, disableNativeIOSPush, isNativeIOSBridgeAvailable }
 import { StickerPicker } from '@/components/sticker-picker';
 import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
-import { fetchGroups, createGroup, deleteGroup, addGroupMember, removeGroupMember } from '@/lib/groups-api';
-import type { Group } from '@/lib/groups-api';
+import { fetchGroups, createGroup, deleteGroup, addGroupMember, removeGroupMember, fetchGroupMessages, sendGroupMessage } from '@/lib/groups-api';
+import type { Group, GroupMessage } from '@/lib/groups-api';
 import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, MirroredMessage, PrivateMessage } from '@/lib/conversations-api';
 import { fetchChildLocation } from '@/lib/location-api';
@@ -814,7 +815,7 @@ function autoGrowPrivateTextarea(el: HTMLTextAreaElement) {
 function Conversations() {
   const [privateOpen, setPrivateOpen] = useState(false);
   const { t } = useLanguage();
-  const { getToken } = useAuth();
+  const { getToken, userId } = useAuth();
   const profile = readProfile();
   const [children, setChildren] = useState<ChildUser[] | null>(null);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
@@ -847,6 +848,20 @@ function Conversations() {
   const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
   const [invitingContactId, setInvitingContactId] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
+
+  // Chat de grupo de verdade (pedido do Marcelo) -- tela cheia, abre ao
+  // clicar na bolinha do grupo. Poll de 5s igual ao canal privado/contato.
+  const [openGroupChatId, setOpenGroupChatId] = useState<string | null>(null);
+  const [groupChatMessages, setGroupChatMessages] = useState<GroupMessage[]>([]);
+  const [groupChatNames, setGroupChatNames] = useState<Record<string, string>>({});
+  const [groupChatLoading, setGroupChatLoading] = useState(false);
+  const [groupChatError, setGroupChatError] = useState<string | null>(null);
+  const [groupDraft, setGroupDraft] = useState('');
+  const [groupSending, setGroupSending] = useState(false);
+  const [groupPendingFile, setGroupPendingFile] = useState<File | null>(null);
+  const [groupAttachError, setGroupAttachError] = useState<string | null>(null);
+  const [groupComposerToolsOpen, setGroupComposerToolsOpen] = useState(false);
+  const groupTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1144,6 +1159,103 @@ function Conversations() {
     }
   }
 
+  // Poll de 5s enquanto o chat de um grupo estiver aberto em tela cheia
+  // (mesmo padrao do canal privado e de ContactChat.tsx).
+  useEffect(() => {
+    if (!openGroupChatId) return;
+    let cancelled = false;
+
+    async function load(showSpinner: boolean) {
+      if (showSpinner) setGroupChatLoading(true);
+      try {
+        const token = await getToken();
+        const data = await fetchGroupMessages(openGroupChatId!, token);
+        if (!cancelled) {
+          setGroupChatMessages(data.messages);
+          setGroupChatNames(data.participantNames);
+          setGroupChatError(null);
+        }
+      } catch (err) {
+        if (!cancelled && showSpinner) {
+          setGroupChatError(err instanceof Error ? err.message : 'Erro ao carregar o chat do grupo.');
+        }
+      } finally {
+        if (!cancelled && showSpinner) setGroupChatLoading(false);
+      }
+    }
+
+    load(true);
+    const intervalId = window.setInterval(() => load(false), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [openGroupChatId, getToken]);
+
+  function openGroupChat(groupId: string) {
+    setGroupChatMessages([]);
+    setGroupChatError(null);
+    setGroupDraft('');
+    setGroupPendingFile(null);
+    setOpenGroupChatId(groupId);
+  }
+
+  function closeGroupChat() {
+    setOpenGroupChatId(null);
+  }
+
+  async function handleSendGroupMessage(event: FormEvent) {
+    event.preventDefault();
+    const text = groupDraft.trim();
+    if ((!text && !groupPendingFile) || !openGroupChatId || groupSending) return;
+    setGroupSending(true);
+    setGroupChatError(null);
+    try {
+      const token = await getToken();
+      const message = groupPendingFile
+        ? await sendGroupMessage(openGroupChatId, { file: groupPendingFile, caption: text || undefined }, token)
+        : await sendGroupMessage(openGroupChatId, { textContent: text }, token);
+      setGroupChatMessages((current) => [...current, message]);
+      setGroupDraft('');
+      setGroupPendingFile(null);
+      if (groupTextareaRef.current) groupTextareaRef.current.style.height = 'auto';
+    } catch (err) {
+      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+    } finally {
+      setGroupSending(false);
+    }
+  }
+
+  async function sendGroupSticker(emoji: string) {
+    if (!openGroupChatId || groupSending) return;
+    setGroupSending(true);
+    setGroupChatError(null);
+    try {
+      const token = await getToken();
+      const message = await sendGroupMessage(openGroupChatId, { stickerEmoji: emoji }, token);
+      setGroupChatMessages((current) => [...current, message]);
+    } catch (err) {
+      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
+    } finally {
+      setGroupSending(false);
+    }
+  }
+
+  async function sendGroupAudio(file: File) {
+    if (!openGroupChatId || groupSending) return;
+    setGroupSending(true);
+    setGroupChatError(null);
+    try {
+      const token = await getToken();
+      const message = await sendGroupMessage(openGroupChatId, { file }, token);
+      setGroupChatMessages((current) => [...current, message]);
+    } catch (err) {
+      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar audio.');
+    } finally {
+      setGroupSending(false);
+    }
+  }
+
   const hasChild = (children?.length ?? 0) > 0;
   const selectedChildName = children?.find((child) => child.id === selectedChildId)?.name ?? null;
   const mediaAuthHeaders: HeadersInit = privateAuthToken ? { Authorization: `Bearer ${privateAuthToken}` } : {};
@@ -1257,6 +1369,22 @@ function Conversations() {
             <div className="border-t border-[hsl(var(--border))] p-6 sm:p-8">
               <h2 className="text-xl font-extrabold">Grupos ({groups.length})</h2>
               <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Um grupo só existe se você criar — escolha entre os contatos já aprovados.</p>
+              {groups.length > 0 && (
+                <div className="mt-4 flex gap-4 overflow-x-auto pb-1" data-testid="row-group-bubbles">
+                  {groups.map((group) => (
+                    <button
+                      key={group.id}
+                      type="button"
+                      onClick={() => openGroupChat(group.id)}
+                      data-testid={`button-open-group-chat-${group.id}`}
+                      className="flex w-16 shrink-0 flex-col items-center gap-1.5"
+                    >
+                      <Avatar name={group.name} />
+                      <span className="w-full truncate text-center text-[11px] font-semibold text-[hsl(var(--muted-foreground))]">{group.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <form onSubmit={handleCreateGroup} className="mt-4 flex flex-col gap-3" data-testid="form-create-group">
                 <input
                   value={groupName}
@@ -1335,7 +1463,7 @@ function Conversations() {
                   })}
                 </ul>
               )}
-              <p className="mt-4 flex items-center gap-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><Info size={13} /> O chat dentro do grupo ainda não está disponível — por enquanto isto só define quem fica autorizado a participar.</p>
+              <p className="mt-4 flex items-center gap-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><Info size={13} /> Toque na bolinha do grupo, no topo, para abrir o chat em tela cheia.</p>
             </div>
           </section>
         )
@@ -1497,6 +1625,136 @@ function Conversations() {
             <button type="button" onClick={closeInviteModal} className="text-sm font-medium underline" data-testid="button-close-invite-modal">
               Fechar
             </button>
+          </div>
+        </div>
+      )}
+      {openGroupChatId && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[hsl(var(--background))]" data-testid="overlay-group-chat">
+          <header className="flex items-center justify-between border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-5 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar name={groups.find((group) => group.id === openGroupChatId)?.name} />
+              <div className="min-w-0">
+                <h1 className="truncate text-base font-bold">{groups.find((group) => group.id === openGroupChatId)?.name ?? 'Grupo'}</h1>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">Chat de grupo</p>
+              </div>
+            </div>
+            <button type="button" onClick={closeGroupChat} aria-label="Fechar chat do grupo" data-testid="button-close-group-chat" className="grid size-10 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+              <X size={20} />
+            </button>
+          </header>
+
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" data-testid="list-group-messages">
+            {groupChatLoading && groupChatMessages.length === 0 ? (
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+            ) : groupChatMessages.length === 0 ? (
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda neste grupo. Escreva a primeira aqui embaixo.</p>
+            ) : (
+              groupChatMessages.map((message) => {
+                const fromMe = message.senderId === userId;
+                const senderName = groupChatNames[message.senderId] ?? '…';
+                const sticker = isStickerMessage(message);
+                const bubbleClass = sticker
+                  ? `${fromMe ? 'self-end' : 'self-start'}`
+                  : `rounded-2xl px-4 py-2.5 shadow-sm ${fromMe ? 'self-end bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'self-start bg-[hsl(var(--card))]'}`;
+                return (
+                  <div key={message.id} data-testid={`row-group-message-${message.id}`} className={`flex max-w-[80%] flex-col ${fromMe ? 'self-end items-end' : 'self-start items-start'}`}>
+                    {!fromMe && (
+                      <p className="mb-1 px-1 text-[11px] font-bold text-[hsl(var(--muted-foreground))]">{senderName}</p>
+                    )}
+                    <div className={`text-sm leading-6 ${bubbleClass}`}>
+                      <MessageContent message={message} authHeaders={mediaAuthHeaders} />
+                      <p className={`mt-1 text-[10px] font-mono-app uppercase tracking-[.08em] ${fromMe && !sticker ? 'text-[hsl(var(--primary-foreground)/.7)]' : 'text-[hsl(var(--muted-foreground))]'}`}>
+                        {new Date(message.createdAt).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4">
+            {groupChatError && <p className="mb-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert" data-testid="status-group-chat-error">{groupChatError}</p>}
+            {groupAttachError && <p className="mb-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{groupAttachError}</p>}
+            {groupPendingFile && (
+              <div className="mb-2 flex items-center gap-2 self-start rounded-xl bg-[hsl(var(--muted)/.6)] px-3 py-2 text-xs font-semibold">
+                {groupPendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {groupPendingFile.name}
+                <button type="button" onClick={() => setGroupPendingFile(null)} aria-label="Remover anexo" className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+                  ×
+                </button>
+              </div>
+            )}
+            <form onSubmit={handleSendGroupMessage} className="flex items-end gap-2">
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setGroupComposerToolsOpen((current) => !current)}
+                  aria-label={groupComposerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                  className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl border transition-transform ${
+                    groupComposerToolsOpen
+                      ? 'rotate-45 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
+                      : 'border-[hsl(var(--input))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                  }`}
+                >
+                  <Plus size={20} />
+                </button>
+                {groupComposerToolsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setGroupComposerToolsOpen(false)} />
+                    <div className="absolute bottom-full left-0 z-40 mb-2 flex flex-col gap-1.5 rounded-2xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-1.5 shadow-lg">
+                      <EmojiPicker
+                        onSelect={(emoji) => {
+                          setGroupDraft((current) => current + emoji);
+                          setGroupComposerToolsOpen(false);
+                        }}
+                      />
+                      <AttachmentPicker
+                        onSelect={(file) => {
+                          setGroupAttachError(null);
+                          setGroupPendingFile(file);
+                          setGroupComposerToolsOpen(false);
+                        }}
+                        onError={setGroupAttachError}
+                      />
+                      <StickerPicker
+                        onSelect={(emoji) => {
+                          void sendGroupSticker(emoji);
+                          setGroupComposerToolsOpen(false);
+                        }}
+                      />
+                      <AudioRecorderButton
+                        onRecorded={(file) => {
+                          void sendGroupAudio(file);
+                          setGroupComposerToolsOpen(false);
+                        }}
+                        onError={setGroupAttachError}
+                        disabled={groupSending}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <textarea
+                ref={groupTextareaRef}
+                value={groupDraft}
+                onChange={(event) => {
+                  setGroupDraft(event.target.value);
+                  autoGrowPrivateTextarea(event.target);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                placeholder={groupPendingFile ? 'Adicione uma legenda (opcional)…' : 'Escreva pro grupo…'}
+                rows={1}
+                className="max-h-32 min-h-[48px] flex-1 resize-none rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--background)/.65)] px-4 py-3 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
+              />
+              <Button type="submit" disabled={(!groupDraft.trim() && !groupPendingFile) || groupSending} testId="button-send-group-message">
+                {groupSending ? 'Enviando…' : 'Enviar'}
+              </Button>
+            </form>
           </div>
         </div>
       )}

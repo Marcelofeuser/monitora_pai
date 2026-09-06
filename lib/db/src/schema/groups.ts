@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
 import { contactsTable } from "./contacts";
+import { messageTypeEnum } from "./messages";
 
 // Grupo pertence a UMA criança (item 8 do pedido: grupo é sempre dentro do
 // grupo familiar dela) e só existe se o Responsável criou — não tem estado
@@ -40,10 +41,37 @@ export const groupMembersTable = pgTable("group_members", {
   addedAt: timestamp("added_at").defaultNow().notNull(),
 });
 
+// Pedido do Marcelo: chat de grupo de verdade (nao so a lista de quem
+// esta autorizado). Participantes possiveis: o Responsavel que criou o
+// grupo, a propria Crianca do grupo, e qualquer Contato membro que ja
+// tenha usersTable.id (ou seja, ja aceitou o convite por link/QR -- ver
+// contactAuth.ts). Um Contato ainda nao conectado fica autorizado no
+// group_members mas nao consegue mandar/ver mensagem ate conectar.
+export const groupMessagesTable = pgTable("group_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  groupId: uuid("group_id")
+    .notNull()
+    .references(() => groupsTable.id, { onDelete: "cascade" }),
+  // TEXT: referencia usersTable.id. Ver comentario em schema/users.ts.
+  senderId: text("sender_id")
+    .notNull()
+    .references(() => usersTable.id),
+  type: messageTypeEnum("type").notNull(),
+  contentUrl: text("content_url"),
+  textContent: text("text_content"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertGroupSchema = createInsertSchema(groupsTable).omit({
+  id: true,
+  createdAt: true,
+});
+export const insertGroupMessageSchema = createInsertSchema(groupMessagesTable).omit({
   id: true,
   createdAt: true,
 });
 export type InsertGroup = z.infer<typeof insertGroupSchema>;
 export type Group = typeof groupsTable.$inferSelect;
 export type GroupMember = typeof groupMembersTable.$inferSelect;
+export type InsertGroupMessage = z.infer<typeof insertGroupMessageSchema>;
+export type GroupMessage = typeof groupMessagesTable.$inferSelect;
