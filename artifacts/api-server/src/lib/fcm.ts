@@ -1,4 +1,5 @@
-import admin from "firebase-admin";
+import { cert, initializeApp, type App } from "firebase-admin/app";
+import { getMessaging } from "firebase-admin/messaging";
 import { eq } from "drizzle-orm";
 import { db, fcmTokensTable } from "@workspace/db";
 import { logger } from "./logger";
@@ -12,10 +13,10 @@ import type { PushPayload } from "./webPush";
 // variável FIREBASE_SERVICE_ACCOUNT_JSON no Railway. Sem ela configurada,
 // notificação nativa simplesmente não é mandada — igual ao padrão do
 // webPush.ts, não derruba o envio de mensagem por causa disso.
-let app: admin.app.App | null = null;
+let app: App | null = null;
 let attempted = false;
 
-function ensureFirebaseApp(): admin.app.App | null {
+function ensureFirebaseApp(): App | null {
   if (app) return app;
   if (attempted) return null;
   attempted = true;
@@ -25,8 +26,8 @@ function ensureFirebaseApp(): admin.app.App | null {
 
   try {
     const serviceAccount = JSON.parse(raw);
-    app = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    app = initializeApp({
+      credential: cert(serviceAccount),
     });
     return app;
   } catch (err) {
@@ -49,7 +50,7 @@ export async function sendFcmToParent(parentUserId: string, payload: PushPayload
   await Promise.all(
     tokens.map(async (row) => {
       try {
-        await firebaseApp.messaging().send({
+        await getMessaging(firebaseApp).send({
           token: row.token,
           notification: { title: payload.title, body: payload.body },
           data: payload.url ? { url: payload.url } : undefined,

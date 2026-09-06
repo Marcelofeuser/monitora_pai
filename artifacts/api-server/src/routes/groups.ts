@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { getAuth } from "@clerk/express";
 import { eq, and, inArray, asc } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -242,7 +242,7 @@ router.get("/groups/:id/messages", async (req, res) => {
  * Ainda so cobre o lado do Responsavel; envio do lado da Crianca/Contato
  * do grupo entra numa proxima etapa.
  */
-router.post("/groups/:id/messages", uploadSingleMediaFile, async (req, res) => {
+router.post("/groups/:id/messages", uploadSingleMediaFile, async (req: Request<{ id: string }>, res) => {
   const auth = getAuth(req);
   if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
 

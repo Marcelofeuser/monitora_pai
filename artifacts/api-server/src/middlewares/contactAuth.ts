@@ -8,7 +8,7 @@ import { db, contactDeviceTokensTable } from "@workspace/db";
 // tem conta Clerk, só o token de dispositivo recebido na confirmação do
 // convite. Header próprio (X-Contact-Token) pra não colidir com
 // X-Child-Token.
-export type ContactAuthedRequest = Request & { contactUserId?: string };
+export type ContactAuthedRequest = Request<Record<string, string>> & { contactUserId?: string };
 
 export const requireContactAuth: RequestHandler = async (
   req: ContactAuthedRequest,

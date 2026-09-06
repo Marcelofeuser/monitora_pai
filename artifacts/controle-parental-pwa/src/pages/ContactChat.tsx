@@ -112,7 +112,7 @@ export function ContactChat() {
     let cancelled = false;
 
     function loadGroups() {
-      fetchContactGroups(deviceToken)
+      fetchContactGroups(deviceToken!)
         .then((data) => {
           if (!cancelled) setGroups(data);
         })
@@ -135,7 +135,7 @@ export function ContactChat() {
     async function loadGroupMessages(showSpinner: boolean) {
       if (showSpinner) setGroupChatLoading(true);
       try {
-        const data = await fetchContactGroupMessages(deviceToken, selectedGroupId!);
+        const data = await fetchContactGroupMessages(deviceToken!, selectedGroupId!);
         if (!cancelled) {
           setGroupChatMessages(data.messages);
           setGroupChatNames(data.participantNames);

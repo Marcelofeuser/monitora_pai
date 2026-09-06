@@ -8,7 +8,7 @@ import { db, childDeviceTokensTable } from "@workspace/db";
 // guardado no aparelho dela (localStorage) e mandado no header
 // X-Child-Token nas rotas que ela precisa chamar. Aqui a gente valida esse
 // token contra o hash salvo no banco e anexa o childId na request.
-export type ChildAuthedRequest = Request & { childId?: string };
+export type ChildAuthedRequest = Request<Record<string, string>> & { childId?: string };
 
 export const requireChildAuth: RequestHandler = async (
   req: ChildAuthedRequest,
