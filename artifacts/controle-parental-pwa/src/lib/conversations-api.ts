@@ -41,6 +41,8 @@ export type ApprovedContact = {
   // inviteContact abaixo e routes/contacts.ts) -- até lá é null, e ele
   // ainda não tem como conversar de verdade com a Criança.
   contactUserId: string | null;
+  // Long-press > favoritar (pedido do Marcelo) -- avatar vira estrela.
+  isFavorite: boolean;
 };
 
 export async function fetchApprovedContacts(
@@ -190,6 +192,42 @@ export async function deleteContact(contactId: string, authToken: string | null)
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `delete_contact_failed_${res.status}`);
   }
+}
+
+// Renomear e/ou favoritar (long-press na bolinha do contato). Ver
+// blockContact abaixo pro "bloquear" do mesmo menu.
+export async function updateContact(
+  contactId: string,
+  updates: { contactName?: string; isFavorite?: boolean },
+  authToken: string | null,
+): Promise<ApprovedContact> {
+  const res = await fetch(`${API_URL}/api/contacts/${encodeURIComponent(contactId)}`, {
+    method: 'PATCH',
+    headers: authHeaders(authToken),
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `update_contact_failed_${res.status}`);
+  }
+  return res.json();
+}
+
+// "Bloquear pessoa" do long-press -- reaproveita o status "revoked" que já
+// existia pra revogar acesso (ver PATCH /contacts/:id/decision). O contato
+// some das listas de Convites/Conversas/Grupos (que só mostram
+// status=approved), mas a linha continua no banco -- histórico auditável.
+export async function blockContact(contactId: string, authToken: string | null): Promise<ApprovedContact> {
+  const res = await fetch(`${API_URL}/api/contacts/${encodeURIComponent(contactId)}/decision`, {
+    method: 'PATCH',
+    headers: authHeaders(authToken),
+    body: JSON.stringify({ decision: 'revoked' }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `block_contact_failed_${res.status}`);
+  }
+  return res.json();
 }
 
 export type ContactInvite = {

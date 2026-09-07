@@ -183,6 +183,46 @@ router.patch("/contacts/:id/decision", async (req, res) => {
   return res.json(updated);
 });
 
+const updateContactSchema = z.object({
+  contactName: z.string().min(1).max(120).optional(),
+  isFavorite: z.boolean().optional(),
+});
+
+/**
+ * PATCH /api/contacts/:id
+ * Renomear e/ou favoritar (item do pedido: long-press na bolinha do
+ * contato > "renomear" e "favoritar", esse último vira avatar em estrela
+ * no frontend). Separado de /decision (que só mexe em status
+ * pending/approved/denied/revoked) -- "bloquear" no long-press usa aquela
+ * rota com decision="revoked", não esta.
+ */
+router.patch("/contacts/:id", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const parsed = updateContactSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+  }
+  if (parsed.data.contactName === undefined && parsed.data.isFavorite === undefined) {
+    return res.status(400).json({ error: "nothing_to_update" });
+  }
+
+  const [contact] = await db.select().from(contactsTable).where(eq(contactsTable.id, req.params.id)).limit(1);
+  if (!contact) return res.status(404).json({ error: "contact_not_found" });
+
+  const isParent = await assertIsParentOfChild(auth.userId, contact.childId);
+  if (!isParent) return res.status(403).json({ error: "not_the_parent_of_this_child" });
+
+  const [updated] = await db
+    .update(contactsTable)
+    .set(parsed.data)
+    .where(eq(contactsTable.id, contact.id))
+    .returning();
+
+  return res.json(updated);
+});
+
 /**
  * DELETE /api/contacts/:id
  * Exclui um contato de verdade (não é o mesmo que "revoked" — aquilo só

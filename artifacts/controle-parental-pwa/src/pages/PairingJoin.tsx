@@ -11,6 +11,7 @@ import {
   fetchChildGroups,
   fetchChildGroupMessages,
   sendChildGroupMessage,
+  createChildGroup,
 } from '@/lib/contact-conversations-api';
 import type { ChildContact, GroupSummary, GroupMessage } from '@/lib/contact-conversations-api';
 import { ThemeSwitcher } from '@/lib/theme';
@@ -23,7 +24,7 @@ import { fetchChildScreenTimeStatus, sendScreenTimeHeartbeat } from '@/lib/scree
 import type { ChildLockStatus } from '@/lib/screen-time-api';
 import { enablePushNotifications, disablePushNotifications, isPushSupported } from '@/lib/push';
 import { getRelationshipInfo } from '@/lib/relationship';
-import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin, Plus, Maximize2, Minimize2 } from 'lucide-react';
+import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin, Plus, Maximize2, Minimize2, X } from 'lucide-react';
 
 /**
  * Rota /join?token=... — é para onde o link do QR code aponta.
@@ -89,6 +90,14 @@ export function PairingJoin() {
   const groupTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const groupListRef = useRef<HTMLDivElement | null>(null);
   const groupStickToBottomRef = useRef(true);
+  // "Criar grupos" pelo lado da Criança (pedido do Marcelo: antes só o
+  // Responsável criava) -- painel simples de nome + escolher entre os
+  // contatos já aprovados, chamando POST /child/groups (backend já pronto).
+  const [groupCreatorOpen, setGroupCreatorOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupContactIds, setNewGroupContactIds] = useState<string[]>([]);
+  const [creatingChildGroup, setCreatingChildGroup] = useState(false);
+  const [childGroupError, setChildGroupError] = useState<string | null>(null);
   const [screenLock, setScreenLock] = useState<ChildLockStatus | null>(null);
   const [parentName, setParentName] = useState<string | null>(null);
   const [parentRelationship, setParentRelationship] = useState<string | null>(null);
@@ -316,6 +325,37 @@ export function PairingJoin() {
     setGroupDraft('');
     setGroupPendingFile(null);
     setSelectedGroupId(groupId);
+  }
+
+  function openGroupCreator() {
+    setNewGroupName('');
+    setNewGroupContactIds([]);
+    setChildGroupError(null);
+    setGroupCreatorOpen(true);
+  }
+
+  function toggleNewGroupContact(contactId: string) {
+    setNewGroupContactIds((current) =>
+      current.includes(contactId) ? current.filter((id) => id !== contactId) : [...current, contactId],
+    );
+  }
+
+  async function handleCreateChildGroup() {
+    const name = newGroupName.trim();
+    const token = deviceToken ?? localStorage.getItem(DEVICE_TOKEN_KEY);
+    if (!name || newGroupContactIds.length === 0 || !token || creatingChildGroup) return;
+    setCreatingChildGroup(true);
+    setChildGroupError(null);
+    try {
+      const group = await createChildGroup(token, name, newGroupContactIds);
+      setGroups((current) => [...current, { ...group, members: newGroupContactIds.map((id) => ({ id, contactName: contacts.find((c) => c.id === id)?.contactName ?? '' })) }]);
+      setGroupCreatorOpen(false);
+      selectGroupChat(group.id);
+    } catch (err) {
+      setChildGroupError(err instanceof Error ? err.message : 'Erro ao criar o grupo.');
+    } finally {
+      setCreatingChildGroup(false);
+    }
   }
 
   async function handleSendGroupMessage(event: FormEvent) {
@@ -808,6 +848,21 @@ export function PairingJoin() {
                       <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{group.name}</span>
                     </button>
                   ))}
+                  {/* "Criar grupos" pelo lado da Criança (pedido do
+                      Marcelo) -- mesma bolinha "+" do WhatsApp, no fim
+                      da fileira. */}
+                  <button
+                    type="button"
+                    onClick={openGroupCreator}
+                    aria-label="Criar grupo"
+                    data-testid="button-open-group-creator"
+                    className="flex shrink-0 flex-col items-center gap-1"
+                  >
+                    <span className="grid size-11 place-items-center rounded-full border-2 border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]">
+                      <Plus size={18} />
+                    </span>
+                    <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">Grupo</span>
+                  </button>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Sparkles size={18} className="shrink-0 text-[hsl(var(--secondary))]" />
@@ -1126,6 +1181,67 @@ export function PairingJoin() {
           </>
         )}
       </div>
+
+      {/* Painel "Criar grupo" pelo lado da Criança (pedido do Marcelo) --
+          nome + escolher entre os contatos já aprovados, chama
+          POST /child/groups direto (mesma regra do lado do Responsável:
+          só entre contatos já aprovados dela). */}
+      {groupCreatorOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50 p-3" data-testid="overlay-group-creator">
+          <div className="max-h-[85vh] w-full overflow-y-auto rounded-[26px] bg-[hsl(var(--card))] p-5 text-left shadow-card">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-kid text-lg font-extrabold">Criar grupo</h2>
+              <button
+                type="button"
+                onClick={() => setGroupCreatorOpen(false)}
+                aria-label="Fechar"
+                data-testid="button-close-group-creator"
+                className="grid size-9 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <input
+              value={newGroupName}
+              onChange={(event) => setNewGroupName(event.target.value)}
+              placeholder="Nome do grupo (ex: Amigas da escola)"
+              data-testid="input-new-group-name"
+              className="h-11 w-full rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
+            />
+            <p className="mb-2 mt-4 text-xs font-bold text-[hsl(var(--muted-foreground))]">Quem participa:</p>
+            {contacts.length === 0 ? (
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">Você ainda não tem nenhum contato conectado.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {contacts.map((contact) => {
+                  const checked = newGroupContactIds.includes(contact.id);
+                  return (
+                    <button
+                      key={contact.id}
+                      type="button"
+                      onClick={() => toggleNewGroupContact(contact.id)}
+                      data-testid={`button-new-group-toggle-${contact.id}`}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${checked ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]'}`}
+                    >
+                      {contact.contactName}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {childGroupError && <p className="mt-3 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{childGroupError}</p>}
+            <button
+              type="button"
+              onClick={() => { void handleCreateChildGroup(); }}
+              disabled={!newGroupName.trim() || newGroupContactIds.length === 0 || creatingChildGroup}
+              data-testid="button-create-child-group"
+              className="mt-4 h-11 w-full rounded-full bg-[hsl(var(--primary))] text-sm font-extrabold text-[hsl(var(--primary-foreground))] disabled:opacity-60"
+            >
+              {creatingChildGroup ? 'Criando…' : 'Criar grupo'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, pgEnum, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, pgEnum, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -29,6 +29,11 @@ export const contactsTable = pgTable("contacts", {
   }>(),
   requestedAt: timestamp("requested_at").defaultNow().notNull(),
   decidedAt: timestamp("decided_at"),
+  // Long-press na bolinha do contato > favoritar (pedido do Marcelo): vira
+  // avatar em estrela na lista (ver shape='star' em Avatar, App.tsx).
+  // "Bloquear" não ganhou coluna nova -- reaproveita status="revoked", que
+  // já existia (ver PATCH /contacts/:id/decision).
+  isFavorite: boolean("is_favorite").notNull().default(false),
 });
 
 export const insertContactSchema = createInsertSchema(contactsTable).omit({

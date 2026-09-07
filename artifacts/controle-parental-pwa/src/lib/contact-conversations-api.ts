@@ -111,6 +111,22 @@ export async function fetchChildGroups(deviceToken: string): Promise<GroupSummar
   return res.json();
 }
 
+// "Criar grupos" pelo lado da Criança (pedido do Marcelo: antes só o
+// Responsável criava) -- backend em POST /child/groups já valida que todo
+// contactId é um contato aprovado dela (mesma regra de sempre).
+export async function createChildGroup(deviceToken: string, name: string, contactIds: string[]): Promise<GroupSummary> {
+  const res = await fetch(`${API_URL}/api/child/groups`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Child-Token': deviceToken },
+    body: JSON.stringify({ name, contactIds }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `create_child_group_failed_${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchChildGroupMessages(deviceToken: string, groupId: string): Promise<GroupConversation> {
   const res = await fetch(`${API_URL}/api/child/groups/${encodeURIComponent(groupId)}/messages`, {
     headers: { 'X-Child-Token': deviceToken },

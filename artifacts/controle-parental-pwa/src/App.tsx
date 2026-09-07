@@ -3,7 +3,9 @@ import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRight,
+  Ban,
   Bell,
+  Camera,
   Check,
   ChevronRight,
   CircleHelp,
@@ -19,6 +21,7 @@ import {
   Menu,
   MessageCircle,
   Navigation,
+  Pencil,
   Plus,
   QrCode,
   RefreshCw,
@@ -26,6 +29,8 @@ import {
   Settings,
   ShieldCheck,
   Smartphone,
+  Star,
+  Trash2,
   UserPlus,
   UserRound,
   Users,
@@ -54,8 +59,10 @@ import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
 import { fetchGroups, createGroup, uploadGroupPhoto, deleteGroup, addGroupMember, removeGroupMember, fetchGroupMessages, sendGroupMessage } from '@/lib/groups-api';
 import type { Group, GroupMessage } from '@/lib/groups-api';
-import { fetchChildren, fetchApprovedContacts, fetchParentContactConversation, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact } from '@/lib/conversations-api';
+import { fetchChildren, fetchApprovedContacts, fetchParentContactConversation, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact, updateContact, blockContact } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, PrivateMessage } from '@/lib/conversations-api';
+import { useLongPress } from '@/hooks/use-long-press';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { fetchChildLocation } from '@/lib/location-api';
 import type { ChildLocation } from '@/lib/location-api';
 import { fetchScreenTime, setDailyLimit, setChildLock } from '@/lib/screen-time-api';
@@ -838,6 +845,42 @@ function Avatar({ name, dark = false, shape = 'circle', photoUrl }: { name?: str
   );
 }
 
+// Linhas das listas verticais de Conversas/Grupos (pedido do Marcelo: bolinhas
+// em coluna, não em linha) -- cada uma isolada em componente próprio porque
+// useLongPress é hook e não pode ser chamado dentro de um .map() direto
+// (violaria a ordem de hooks se a lista mudar de tamanho).
+function ContactRow({ contact, onOpen, onLongPress }: { contact: ApprovedContact; onOpen: () => void; onLongPress: () => void }) {
+  const longPress = useLongPress(onLongPress);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      data-testid={`button-open-contact-mirror-${contact.id}`}
+      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[hsl(var(--muted)/.5)]"
+      {...longPress}
+    >
+      <Avatar name={contact.contactName} shape={contact.isFavorite ? 'star' : 'circle'} />
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{contact.contactName}</span>
+    </button>
+  );
+}
+
+function GroupRow({ group, onOpen, onLongPress }: { group: Group; onOpen: () => void; onLongPress: () => void }) {
+  const longPress = useLongPress(onLongPress);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      data-testid={`button-open-group-chat-${group.id}`}
+      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[hsl(var(--muted)/.5)]"
+      {...longPress}
+    >
+      <Avatar name={group.name} shape="balloon" photoUrl={group.photoUrl} />
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{group.name}</span>
+    </button>
+  );
+}
+
 function PageIntro({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {
   return (
     <div className="animate-rise-in mb-9 flex flex-col justify-between gap-5 border-b border-[hsl(var(--border))] pb-8 md:flex-row md:items-end">
@@ -967,6 +1010,17 @@ function Conversations() {
   // link ja copia, ou compartilhar (abre as opcoes nativas do aparelho) --
   // antes so mostrava o link em texto puro, sem nenhuma acao.
   const [inviteCopied, setInviteCopied] = useState(false);
+
+  // Menus de long-press (2s) na bolinha do contato e no balão do grupo --
+  // pedido do Marcelo. Um sheet de cada vez, guardado pelo próprio objeto
+  // (não só o id) pra renderizar nome/foto sem precisar re-buscar na lista.
+  const [contactSheetTarget, setContactSheetTarget] = useState<ApprovedContact | null>(null);
+  const [contactSheetBusy, setContactSheetBusy] = useState(false);
+  const [contactSheetError, setContactSheetError] = useState<string | null>(null);
+  const [groupSheetTarget, setGroupSheetTarget] = useState<Group | null>(null);
+  const [groupSheetBusy, setGroupSheetBusy] = useState(false);
+  const [groupSheetError, setGroupSheetError] = useState<string | null>(null);
+  const [groupSheetAddOpen, setGroupSheetAddOpen] = useState(false);
 
   // Chat de grupo de verdade (pedido do Marcelo) -- tela cheia, abre ao
   // clicar na bolinha do grupo. Poll de 5s igual ao canal privado/contato.
@@ -1205,6 +1259,61 @@ function Conversations() {
     }
   }
 
+  // Long-press na bolinha > "favoritar" (vira avatar em estrela, ver
+  // shape='star' em Avatar) e "bloquear" (revoga o acesso -- reaproveita
+  // status="revoked", já existente; o contato some das listas de Convites/
+  // Conversas/Grupos, que só mostram status=approved). "Renomear" logo
+  // abaixo; "Excluir" reusa handleDeleteContact (já tem confirmação).
+  async function handleToggleFavorite(contact: ApprovedContact) {
+    setContactSheetBusy(true);
+    setContactSheetError(null);
+    try {
+      const token = await getToken();
+      const updated = await updateContact(contact.id, { isFavorite: !contact.isFavorite }, token);
+      setApprovedContacts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setContactSheetTarget(updated);
+    } catch (err) {
+      setContactSheetError(err instanceof Error ? err.message : 'Erro ao favoritar.');
+    } finally {
+      setContactSheetBusy(false);
+    }
+  }
+
+  async function handleRenameContact(contact: ApprovedContact) {
+    const name = window.prompt('Novo nome do contato:', contact.contactName)?.trim();
+    if (!name || name === contact.contactName) return;
+    setContactSheetBusy(true);
+    setContactSheetError(null);
+    try {
+      const token = await getToken();
+      const updated = await updateContact(contact.id, { contactName: name }, token);
+      setApprovedContacts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setContactSheetTarget(updated);
+    } catch (err) {
+      setContactSheetError(err instanceof Error ? err.message : 'Erro ao renomear.');
+    } finally {
+      setContactSheetBusy(false);
+    }
+  }
+
+  async function handleBlockContact(contact: ApprovedContact) {
+    if (!window.confirm(`Bloquear "${contact.contactName}"? A pessoa deixa de poder conversar com a criança — some das listas de Convites, Conversas e Grupos.`)) {
+      return;
+    }
+    setContactSheetBusy(true);
+    setContactSheetError(null);
+    try {
+      const token = await getToken();
+      await blockContact(contact.id, token);
+      setApprovedContacts((current) => current.filter((item) => item.id !== contact.id));
+      setContactSheetTarget(null);
+    } catch (err) {
+      setContactSheetError(err instanceof Error ? err.message : 'Erro ao bloquear.');
+    } finally {
+      setContactSheetBusy(false);
+    }
+  }
+
   // Convite por link/QR (pedido do Marcelo: "a Lorena recebe um link com
   // qrcode, ela basta clicar que já faz o pré cadastro dela feito") -- só
   // faz sentido pra quem ainda não é um usuário de verdade (contactUserId
@@ -1327,6 +1436,28 @@ function Conversations() {
       );
     } catch (err) {
       setGroupError(err instanceof Error ? err.message : 'Erro ao remover do grupo.');
+    }
+  }
+
+  // Long-press no balão > "trocar foto", chamado pelo menu do grupo.
+  // "Ver informações" é só a própria sheet (nome + foto + membros, sem
+  // rota nova); "adicionar pessoas" e "excluir grupo" reusam
+  // handleAddGroupMember/handleDeleteGroup, já existentes acima.
+  async function handleGroupSheetPhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !groupSheetTarget) return;
+    setGroupSheetBusy(true);
+    setGroupSheetError(null);
+    try {
+      const token = await getToken();
+      const updated = await uploadGroupPhoto(groupSheetTarget.id, file, token);
+      setGroups((current) => current.map((group) => (group.id === updated.id ? { ...group, photoUrl: updated.photoUrl } : group)));
+      setGroupSheetTarget((current) => (current ? { ...current, photoUrl: updated.photoUrl } : current));
+    } catch (err) {
+      setGroupSheetError(err instanceof Error ? err.message : 'Erro ao trocar a foto.');
+    } finally {
+      setGroupSheetBusy(false);
     }
   }
 
@@ -1574,16 +1705,12 @@ function Conversations() {
               ) : (
                 <div className="mt-4 flex flex-col gap-1" data-testid="row-contact-mirror-bubbles">
                   {approvedContacts.filter((contact) => contact.contactUserId).map((contact) => (
-                    <button
+                    <ContactRow
                       key={contact.id}
-                      type="button"
-                      onClick={() => openContactMirror(contact.contactUserId!)}
-                      data-testid={`button-open-contact-mirror-${contact.id}`}
-                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[hsl(var(--muted)/.5)]"
-                    >
-                      <Avatar name={contact.contactName} />
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{contact.contactName}</span>
-                    </button>
+                      contact={contact}
+                      onOpen={() => openContactMirror(contact.contactUserId!)}
+                      onLongPress={() => { setContactSheetError(null); setContactSheetTarget(contact); }}
+                    />
                   ))}
                 </div>
               )}
@@ -1594,16 +1721,12 @@ function Conversations() {
               {groups.length > 0 && (
                 <div className="mt-4 flex flex-col gap-1" data-testid="row-group-bubbles">
                   {groups.map((group) => (
-                    <button
+                    <GroupRow
                       key={group.id}
-                      type="button"
-                      onClick={() => openGroupChat(group.id)}
-                      data-testid={`button-open-group-chat-${group.id}`}
-                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[hsl(var(--muted)/.5)]"
-                    >
-                      <Avatar name={group.name} shape="balloon" photoUrl={group.photoUrl} />
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{group.name}</span>
-                    </button>
+                      group={group}
+                      onOpen={() => openGroupChat(group.id)}
+                      onLongPress={() => { setGroupSheetError(null); setGroupSheetAddOpen(false); setGroupSheetTarget(group); }}
+                    />
                   ))}
                 </div>
               )}
@@ -2078,6 +2201,133 @@ function Conversations() {
           <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-6 py-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" /> Espelho: você só acompanha, quem manda mensagem aqui é {contactMirrorChildName ?? 'a criança'} e a pessoa aprovada.</div>
         </div>
       )}
+
+      {/* Long-press (2s) na bolinha do contato -- pedido do Marcelo:
+          bloquear / renomear / favoritar / excluir. */}
+      <Sheet open={!!contactSheetTarget} onOpenChange={(open) => { if (!open) setContactSheetTarget(null); }}>
+        <SheetContent side="bottom" className="mx-auto max-w-[480px] rounded-t-[26px]" data-testid="sheet-contact-actions">
+          {contactSheetTarget && (
+            <>
+              <SheetHeader>
+                <div className="flex items-center gap-3">
+                  <Avatar name={contactSheetTarget.contactName} shape={contactSheetTarget.isFavorite ? 'star' : 'circle'} />
+                  <SheetTitle>{contactSheetTarget.contactName}</SheetTitle>
+                </div>
+              </SheetHeader>
+              {contactSheetError && <p className="mt-2 text-sm font-semibold text-[hsl(var(--destructive))]">{contactSheetError}</p>}
+              <div className="mt-4 flex flex-col gap-1">
+                {/* contactSheetTarget! nos onClick abaixo: dentro de uma
+                    closure aninhada (o corpo da arrow function), o guard
+                    "contactSheetTarget &&" do JSX não estreita o tipo de
+                    volta pra não-nulo -- mesmo padrão documentado em
+                    CreateGroupWizard/ContactChat.tsx. */}
+                <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-block" onClick={() => { void handleBlockContact(contactSheetTarget!); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)] disabled:opacity-60">
+                  <Ban size={18} /> Bloquear pessoa
+                </button>
+                <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-rename" onClick={() => { void handleRenameContact(contactSheetTarget!); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)] disabled:opacity-60">
+                  <Pencil size={18} /> Renomear
+                </button>
+                <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-favorite" onClick={() => { void handleToggleFavorite(contactSheetTarget!); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)] disabled:opacity-60">
+                  <Star size={18} /> {contactSheetTarget.isFavorite ? 'Remover dos favoritos' : 'Favoritar'}
+                </button>
+                <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-delete" onClick={() => { const target = contactSheetTarget!; setContactSheetTarget(null); void handleDeleteContact(target); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)]">
+                  <Trash2 size={18} /> Excluir contato
+                </button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Long-press (2s) no balão do grupo -- pedido do Marcelo: ver
+          informações / trocar foto / adicionar pessoas / excluir grupo. */}
+      <Sheet
+        open={!!groupSheetTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setGroupSheetTarget(null);
+            setGroupSheetAddOpen(false);
+          }
+        }}
+      >
+        <SheetContent side="bottom" className="mx-auto max-w-[480px] rounded-t-[26px]" data-testid="sheet-group-actions">
+          {groupSheetTarget && (() => {
+            // target = groupSheetTarget!: dentro desta IIFE (uma closure
+            // aninhada) o guard "groupSheetTarget &&" do JSX não estreita
+            // de volta -- mesmo padrão documentado em CreateGroupWizard.
+            // Um "!" só aqui em cima e o resto do bloco (inclusive os
+            // onClick, closures ainda mais aninhadas) usa "target", que já
+            // não é mais um union com null e não precisa de mais nenhum "!".
+            const target = groupSheetTarget!;
+            const memberIds = new Set(target.members.map((member) => member.id));
+            const availableToAdd = approvedContacts.filter((contact) => !memberIds.has(contact.id));
+            return (
+              <>
+                <SheetHeader>
+                  <div className="flex items-center gap-3">
+                    <Avatar name={target.name} shape="balloon" photoUrl={target.photoUrl} />
+                    <div>
+                      <SheetTitle>{target.name}</SheetTitle>
+                      <p className="text-xs text-[hsl(var(--muted-foreground))]">{target.members.length} {target.members.length === 1 ? 'pessoa' : 'pessoas'}</p>
+                    </div>
+                  </div>
+                </SheetHeader>
+                {groupSheetError && <p className="mt-2 text-sm font-semibold text-[hsl(var(--destructive))]">{groupSheetError}</p>}
+                {target.members.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {target.members.map((member) => (
+                      <span key={member.id} className="rounded-full bg-[hsl(var(--muted)/.6)] px-2.5 py-1 text-xs font-bold">{member.contactName}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-4 flex flex-col gap-1">
+                  <label className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)]">
+                    <Camera size={18} /> {groupSheetBusy ? 'Enviando…' : 'Trocar foto'}
+                    <input type="file" accept="image/*" className="hidden" disabled={groupSheetBusy} onChange={handleGroupSheetPhotoChange} data-testid="input-group-sheet-photo" />
+                  </label>
+                  <button type="button" data-testid="button-group-sheet-add" onClick={() => setGroupSheetAddOpen((current) => !current)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)]">
+                    <UserPlus size={18} /> Adicionar pessoas
+                  </button>
+                  {groupSheetAddOpen && (
+                    <div className="ml-9 flex flex-wrap gap-2 pb-2">
+                      {availableToAdd.length === 0 ? (
+                        <p className="text-xs text-[hsl(var(--muted-foreground))]">Todos os Convites já estão nesse grupo.</p>
+                      ) : (
+                        availableToAdd.map((contact) => (
+                          <button
+                            key={contact.id}
+                            type="button"
+                            data-testid={`button-group-sheet-add-${contact.id}`}
+                            onClick={() => {
+                              void handleAddGroupMember(target.id, contact.id);
+                              setGroupSheetTarget((current) => (current ? { ...current, members: [...current.members, { id: contact.id, contactName: contact.contactName }] } : current));
+                            }}
+                            className="rounded-full border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-bold text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary))] hover:text-[hsl(var(--primary))]"
+                          >
+                            + {contact.contactName}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    data-testid="button-group-sheet-delete"
+                    onClick={() => {
+                      if (!window.confirm(`Excluir o grupo "${target.name}"? Essa ação não pode ser desfeita.`)) return;
+                      setGroupSheetTarget(null);
+                      void handleDeleteGroup(target.id);
+                    }}
+                    className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)]"
+                  >
+                    <Trash2 size={18} /> Excluir grupo
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
