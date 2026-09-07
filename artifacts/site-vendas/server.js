@@ -19,7 +19,12 @@ app.use(
 );
 
 // Pagina unica por enquanto -- qualquer rota desconhecida cai na home.
-app.get("*", (_req, res) => {
+// OBS (07/09): Express 5 trocou o "path-to-regexp" pra uma versao que nao
+// aceita mais "*" sozinho como rota (dava crash no boot: "Missing parameter
+// name at index 1: *"). app.use sem path cobre a mesma coisa (qualquer
+// requisicao que nao bateu no express.static acima) sem depender da sintaxe
+// de wildcard do path-to-regexp.
+app.use((_req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
