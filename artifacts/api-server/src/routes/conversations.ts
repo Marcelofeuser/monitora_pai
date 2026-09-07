@@ -9,6 +9,7 @@ import { kindForMime, maxBytesForMime, saveMedia } from "../lib/mediaStorage";
 import { isAllowedSticker } from "../lib/stickers";
 import { notifyChildOfActivity, notifyParentOfActivity } from "../lib/notify";
 import { mirrorAndNotify } from "../lib/mirror";
+import { isGuardianOfChild } from "../lib/guardians";
 
 const router: IRouter = Router();
 
@@ -116,13 +117,15 @@ router.get("/conversations/private", async (req, res) => {
   const childId = String(req.query.childId ?? "");
   if (!childId) return res.status(400).json({ error: "missing_child_id" });
 
-  const [child] = await db
-    .select()
-    .from(usersTable)
-    .where(and(eq(usersTable.id, childId), eq(usersTable.parentId, auth.userId)))
-    .limit(1);
-  if (!child) return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  if (!(await isGuardianOfChild(auth.userId, childId))) {
+    return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  }
 
+  // Item 13 do pedido (multiplos Responsaveis): cada guardian tem seu
+  // proprio canal privado 1:1 com a Crianca (participantAId = auth.userId
+  // de quem esta logado agora, nao um "dono" fixo) -- getOrCreatePrivateConversation
+  // ja funciona certo aqui sem mudanca nenhuma, so a checagem de acima
+  // precisava aceitar guardians adicionais.
   const conversation = await getOrCreatePrivateConversation(auth.userId, childId);
   const messages = await listMessages(conversation.id);
   return res.json({ conversation, messages });
@@ -140,12 +143,9 @@ router.post("/conversations/private/messages", uploadSingleMediaFile, async (req
   const childId = typeof req.body?.childId === "string" ? req.body.childId : "";
   if (!childId) return res.status(400).json({ error: "missing_child_id" });
 
-  const [child] = await db
-    .select()
-    .from(usersTable)
-    .where(and(eq(usersTable.id, childId), eq(usersTable.parentId, auth.userId)))
-    .limit(1);
-  if (!child) return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  if (!(await isGuardianOfChild(auth.userId, childId))) {
+    return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  }
 
   const input = await extractMessageInput(req, res);
   if (!input) return;
@@ -345,7 +345,7 @@ router.post(
       })
       .returning();
 
-    await mirrorAndNotify({ conversation, messageId: message.id, senderId: childId, parentId: child.parentId });
+    await mirrorAndNotify({ conversation, messageId: message.id, senderId: childId, childId });
 
     return res.status(201).json(message);
   },
@@ -373,7 +373,7 @@ router.get("/parent/contacts/:contactUserId/messages", async (req, res) => {
   if (!contactRow) return res.status(404).json({ error: "not_found" });
 
   const [child] = await db.select().from(usersTable).where(eq(usersTable.id, contactRow.childId)).limit(1);
-  if (!child || child.parentId !== auth.userId) {
+  if (!child || !(await isGuardianOfChild(auth.userId, contactRow.childId))) {
     return res.status(403).json({ error: "not_the_parent_of_this_child" });
   }
 
@@ -439,7 +439,7 @@ router.post(
       })
       .returning();
 
-    await mirrorAndNotify({ conversation, messageId: message.id, senderId: contactUserId, parentId: child.parentId });
+    await mirrorAndNotify({ conversation, messageId: message.id, senderId: contactUserId, childId: contactRow.childId });
 
     return res.status(201).json(message);
   },

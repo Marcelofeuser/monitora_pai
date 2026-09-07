@@ -24,9 +24,22 @@ export const groupsTable = pgTable("groups", {
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  // Apesar do nome do campo, guarda o usersTable.id de quem criou -- pode
+  // ser o Responsavel OU a propria Crianca (pedido do Marcelo: "pode
+  // disponibilizar essa opcao a crianca tambem"). Nao precisou mudar o
+  // nome da coluna nem migrar dado existente: a Crianca ja tem uma linha
+  // em usersTable (mesma referencia usada em groupMessagesTable.senderId).
   createdByParentId: text("created_by_parent_id")
     .notNull()
     .references(() => usersTable.id),
+  // Foto do grupo (pedido: fluxo de criacao tem passo "colocar foto").
+  // Nulo = usa o avatar-balao com iniciais, igual hoje.
+  photoUrl: text("photo_url"),
+  // Item 13 do checklist: replica pro grupo o mesmo debounce de 30min já
+  // usado no canal 1:1 (conversationsTable.lastNotifiedAt) -- antes o
+  // grupo mandava notificação sempre, a cada mensagem. Nulo = nunca
+  // notificado ainda. Ver notifyParentOfGroupMessage em routes/groups.ts.
+  lastNotifiedAt: timestamp("last_notified_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

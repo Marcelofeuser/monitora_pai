@@ -4,30 +4,30 @@ import { eq, and, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import {
   db,
-  usersTable,
   screenTimeSettingsTable,
   screenTimeUsageTable,
   childLocksTable,
 } from "@workspace/db";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
+import { isGuardianOfChild } from "../lib/guardians";
 
 const router: IRouter = Router();
 
-// "YYYY-MM-DD" no fuso do servidor (Railway roda em UTC) — não é o fuso do
-// Marcelo, então a virada do dia pode ficar ~3h adiantada em relação ao
-// horário de Brasília. Aceitável pra um contador de uso diário; não vale a
-// complexidade de guardar fuso por criança nesta fase.
+// Item 12 do checklist: antes calculava "YYYY-MM-DD" em UTC
+// (new Date().toISOString()), o que deixava a virada do dia ~3h adiantada
+// em relacao ao horario de Brasilia (Railway roda em UTC). Corrigido pra
+// calcular a data corrida no fuso America/Sao_Paulo -- 'en-CA' porque essa
+// localidade formata datas como YYYY-MM-DD nativamente.
+const BRAZIL_TIMEZONE = "America/Sao_Paulo";
 function todayDateString(): string {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: BRAZIL_TIMEZONE }).format(new Date());
 }
 
+// Item 13 do pedido (multiplos Responsaveis): delega pro helper
+// compartilhado, que tambem aceita guardians adicionais, nao so o dono
+// original -- ver artifacts/api-server/src/lib/guardians.ts.
 async function assertIsParentOfChild(parentId: string, childId: string): Promise<boolean> {
-  const [child] = await db
-    .select()
-    .from(usersTable)
-    .where(and(eq(usersTable.id, childId), eq(usersTable.parentId, parentId)))
-    .limit(1);
-  return Boolean(child);
+  return isGuardianOfChild(parentId, childId);
 }
 
 async function getUsageMinutes(childId: string, date: string): Promise<number> {

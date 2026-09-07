@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { randomBytes, randomUUID, createHash } from "crypto";
-import { eq, and, or, asc, isNull, gt } from "drizzle-orm";
+import { eq, and, or, asc, isNull, gt, inArray } from "drizzle-orm";
 import {
   db,
   contactsTable,
@@ -13,26 +13,30 @@ import {
 } from "@workspace/db";
 import { z } from "zod/v4";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
+import { isGuardianOfChild, getGuardianChildIds } from "../lib/guardians";
 
 const router: IRouter = Router();
 
+// Item 13 do pedido (multiplos Responsaveis): a checagem de autorizacao
+// deste arquivo era uma comparacao direta com usersTable.parentId (so o
+// dono original passava). Trocada por isGuardianOfChild em todas as rotas
+// abaixo -- ver artifacts/api-server/src/lib/guardians.ts.
 async function assertIsParentOfChild(parentId: string, childId: string) {
-  const [child] = await db
-    .select()
-    .from(usersTable)
-    .where(and(eq(usersTable.id, childId), eq(usersTable.parentId, parentId)))
-    .limit(1);
-  return Boolean(child);
+  return isGuardianOfChild(parentId, childId);
 }
 
 /**
  * GET /api/children
- * Lista as crianças vinculadas ao Responsável autenticado — usado pelo
- * frontend para saber qual childId consultar nas telas de Conversas/Localização.
+ * Lista as crianças que o Responsável autenticado enxerga (dono ou
+ * guardian adicional -- ver lib/guardians.ts) — usado pelo frontend para
+ * saber qual childId consultar nas telas de Conversas/Localização.
  */
 router.get("/children", async (req, res) => {
   const auth = getAuth(req);
   if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const childIds = await getGuardianChildIds(auth.userId);
+  if (childIds.length === 0) return res.json([]);
 
   // ORDER BY createdAt: sem isso a ordem não era garantida — com mais de
   // uma criança vinculada, o frontend (que sempre olha children[0]) podia
@@ -41,7 +45,7 @@ router.get("/children", async (req, res) => {
   const children = await db
     .select()
     .from(usersTable)
-    .where(and(eq(usersTable.role, "child"), eq(usersTable.parentId, auth.userId)))
+    .where(and(eq(usersTable.role, "child"), inArray(usersTable.id, childIds)))
     .orderBy(asc(usersTable.createdAt));
 
   return res.json(children);

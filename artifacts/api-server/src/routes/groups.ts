@@ -4,21 +4,21 @@ import { eq, and, inArray, asc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, usersTable, contactsTable, groupsTable, groupMembersTable, groupMessagesTable } from "@workspace/db";
 import { uploadSingleMediaFile } from "../middlewares/mediaUpload";
+import { kindForMime, maxBytesForMime, saveMedia } from "../lib/mediaStorage";
 import { extractMessageInput } from "./conversations";
 import { sendPushToChild, sendPushToParent } from "../lib/webPush";
 import { sendFcmToParent } from "../lib/fcm";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
 import { requireContactAuth, type ContactAuthedRequest } from "../middlewares/contactAuth";
+import { isGuardianOfChild, getGuardiansOfChild } from "../lib/guardians";
 
 const router: IRouter = Router();
 
+// Item 13 do pedido (multiplos Responsaveis): delega pro helper
+// compartilhado, que tambem aceita guardians adicionais, nao so
+// createdByParentId/dono original -- ver lib/guardians.ts.
 async function assertIsParentOfChild(parentId: string, childId: string): Promise<boolean> {
-  const [child] = await db
-    .select()
-    .from(usersTable)
-    .where(and(eq(usersTable.id, childId), eq(usersTable.parentId, parentId)))
-    .limit(1);
-  return Boolean(child);
+  return isGuardianOfChild(parentId, childId);
 }
 
 /**
@@ -115,6 +115,37 @@ router.delete("/groups/:id", async (req, res) => {
 
   await db.delete(groupsTable).where(eq(groupsTable.id, group.id));
   return res.json({ ok: true });
+});
+
+/**
+ * POST /api/groups/:id/photo
+ * Responsável (ou outro guardian): define/troca a foto do grupo -- passo
+ * do fluxo de criação ("colocar foto") e também usado pra trocar depois
+ * pelo menu do balão. Multipart, campo "file", só imagem.
+ */
+router.post("/groups/:id/photo", uploadSingleMediaFile, async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const [group] = await db.select().from(groupsTable).where(eq(groupsTable.id, req.params.id)).limit(1);
+  if (!group) return res.status(404).json({ error: "not_found" });
+  if (!(await assertIsParentOfChild(auth.userId, group.childId))) {
+    return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  }
+
+  const file = (req as typeof req & { file?: Express.Multer.File }).file;
+  if (!file) return res.status(400).json({ error: "missing_file" });
+  if (kindForMime(file.mimetype) !== "photo") return res.status(400).json({ error: "unsupported_media_type" });
+  if (file.size > maxBytesForMime(file.mimetype)) return res.status(413).json({ error: "file_too_large" });
+
+  const saved = await saveMedia(file.buffer, file.mimetype);
+  const [updated] = await db
+    .update(groupsTable)
+    .set({ photoUrl: saved.url })
+    .where(eq(groupsTable.id, group.id))
+    .returning();
+
+  return res.json(updated);
 });
 
 const addMemberSchema = z.object({ contactId: z.string().uuid() });
@@ -277,13 +308,31 @@ router.post("/groups/:id/messages", uploadSingleMediaFile, async (req: Request<{
   return res.status(201).json(message);
 });
 
-// Avisa o Responsavel (os dois canais, igual notify.ts) quando quem
-// mandou NAO foi ele -- Crianca ou Contato escrevendo no grupo. Grupo
-// nao tem debounce de 30min feito ainda (ao contrario do canal 1:1);
-// como sao poucas mensagens numa familia, manda sempre por enquanto.
-async function notifyParentOfGroupMessage(group: { name: string; createdByParentId: string }, senderName: string): Promise<void> {
+const GROUP_RENOTIFY_INTERVAL_MS = 30 * 60 * 1000;
+
+// Avisa TODOS os Responsaveis da crianca do grupo (dono + guardians
+// adicionais -- item 13 do pedido) quando quem mandou NAO foi um deles --
+// Crianca ou Contato escrevendo no grupo. Mesmo debounce de 30min do canal
+// 1:1 (ver notify.ts) -- antes o grupo mandava notificacao sempre, a cada
+// mensagem (item 13 do checklist "O que FALTA").
+async function notifyParentOfGroupMessage(
+  group: { id: string; name: string; childId: string; lastNotifiedAt: Date | null },
+  senderName: string,
+): Promise<void> {
+  if (group.lastNotifiedAt) {
+    const elapsed = Date.now() - group.lastNotifiedAt.getTime();
+    if (elapsed < GROUP_RENOTIFY_INTERVAL_MS) return;
+  }
+
+  // Marca ANTES de mandar -- mesmo motivo do notify.ts: evita reenvio
+  // duplicado se duas mensagens chegarem quase juntas.
+  await db.update(groupsTable).set({ lastNotifiedAt: new Date() }).where(eq(groupsTable.id, group.id));
+
+  const guardians = await getGuardiansOfChild(group.childId);
   const payload = { title: group.name, body: `${senderName}: nova mensagem no grupo`, url: "/conversations" };
-  await Promise.all([sendPushToParent(group.createdByParentId, payload), sendFcmToParent(group.createdByParentId, payload)]);
+  await Promise.all(
+    guardians.flatMap((g) => [sendPushToParent(g.id, payload), sendFcmToParent(g.id, payload)]),
+  );
 }
 
 async function assertChildInGroup(childId: string, groupId: string) {
@@ -301,6 +350,66 @@ async function assertContactInGroup(contactUserId: string, groupId: string) {
     .limit(1);
   return row?.group ?? null;
 }
+
+/**
+ * POST /api/child/groups
+ * Pedido do Marcelo: nao so o Responsavel cria grupo, a Crianca tambem
+ * pode criar os grupos que ela quiser (mesma regra de sempre: so entre os
+ * contatos ja aprovados dela). createdByParentId recebe o usersTable.id da
+ * propria Crianca -- ver comentario no schema (groups.ts) sobre por que
+ * isso nao precisou de coluna nova.
+ */
+router.post("/child/groups", requireChildAuth, async (req: ChildAuthedRequest, res) => {
+  const childId = req.childId as string;
+  const parsed = z.object({ name: z.string().min(1).max(80), contactIds: z.array(z.string().uuid()).min(1).max(50) }).safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+  }
+  const { name, contactIds } = parsed.data;
+
+  const approvedContacts = await db
+    .select({ id: contactsTable.id })
+    .from(contactsTable)
+    .where(
+      and(
+        eq(contactsTable.childId, childId),
+        eq(contactsTable.status, "approved"),
+        inArray(contactsTable.id, contactIds),
+      ),
+    );
+  if (approvedContacts.length !== contactIds.length) {
+    return res.status(400).json({ error: "contacts_not_approved_for_this_child" });
+  }
+
+  const [group] = await db.insert(groupsTable).values({ childId, name, createdByParentId: childId }).returning();
+  await db.insert(groupMembersTable).values(contactIds.map((contactId) => ({ groupId: group.id, contactId })));
+
+  return res.status(201).json(group);
+});
+
+/**
+ * POST /api/child/groups/:id/photo
+ * Mesma logica de /api/groups/:id/photo, so que pra Crianca colocar foto
+ * num grupo que ela mesma criou (ou de que participa).
+ */
+router.post("/child/groups/:id/photo", requireChildAuth, uploadSingleMediaFile, async (req: ChildAuthedRequest, res) => {
+  const group = await assertChildInGroup(req.childId as string, req.params.id);
+  if (!group) return res.status(404).json({ error: "not_found" });
+
+  const file = (req as typeof req & { file?: Express.Multer.File }).file;
+  if (!file) return res.status(400).json({ error: "missing_file" });
+  if (kindForMime(file.mimetype) !== "photo") return res.status(400).json({ error: "unsupported_media_type" });
+  if (file.size > maxBytesForMime(file.mimetype)) return res.status(413).json({ error: "file_too_large" });
+
+  const saved = await saveMedia(file.buffer, file.mimetype);
+  const [updated] = await db
+    .update(groupsTable)
+    .set({ photoUrl: saved.url })
+    .where(eq(groupsTable.id, group.id))
+    .returning();
+
+  return res.json(updated);
+});
 
 /**
  * GET /api/child/groups

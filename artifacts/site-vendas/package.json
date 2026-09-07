@@ -1,0 +1,13 @@
+{
+  "name": "@workspace/site-vendas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo \"site-vendas: paginas estaticas, sem build\"",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

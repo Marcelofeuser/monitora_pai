@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { eq, and, desc } from "drizzle-orm";
-import { db, locationsTable, usersTable } from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
+import { db, locationsTable } from "@workspace/db";
 import { z } from "zod/v4";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
+import { isGuardianOfChild } from "../lib/guardians";
 
 const router: IRouter = Router();
 
@@ -49,12 +50,9 @@ router.get("/location/:childId", async (req, res) => {
   if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
 
   const childId = req.params.childId;
-  const [child] = await db
-    .select()
-    .from(usersTable)
-    .where(and(eq(usersTable.id, childId), eq(usersTable.parentId, auth.userId)))
-    .limit(1);
-  if (!child) return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  if (!(await isGuardianOfChild(auth.userId, childId))) {
+    return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  }
 
   const [latest] = await db
     .select()

@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ampara — Cuide de perto, mesmo de longe</title>
+<meta name="description" content="Ampara é o app que ajuda famílias brasileiras a acompanhar a vida digital dos filhos com respeito: chat espelhado, localização, tempo de tela e contatos aprovados, tudo num só lugar." />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="canonical" href="https://amparakids.com/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Ampara — Cuide de perto, mesmo de longe" />
+<meta property="og:description" content="Acompanhe conversas, localização e tempo de tela dos seus filhos com transparência e respeito à família." />
+<meta property="og:url" content="https://amparakids.com/" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Baloo+2:wght@600;700;800&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --cream: #F7F2E8;
+    --cream-2: #FBF7EF;
+    --ink: #24343A;
+    --ink-soft: #55636A;
+    --teal: #1F4C4A;
+    --teal-2: #2A615E;
+    --gold: #E7B867;
+    --gold-2: #D9A63F;
+    --line: #E4D9C4;
+    --radius-lg: 26px;
+    --radius-md: 16px;
+    --shadow: 0 18px 40px -18px rgba(31, 76, 74, 0.28);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Manrope', system-ui, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; display: block; }
+  a { color: inherit; }
+  .serif { font-family: 'Newsreader', Georgia, serif; }
+  .kids { font-family: 'Baloo 2', 'Manrope', sans-serif; }
+
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Header */
+  header.site {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(247, 242, 232, 0.88);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 0;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+    color: var(--ink);
+  }
+  .brand svg { flex: none; }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--ink-soft);
+  }
+  .nav-links a { text-decoration: none; }
+  .nav-links a:hover { color: var(--teal); }
+  .nav-cta { display: flex; align-items: center; gap: 12px; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 12px 22px;
+    text-decoration: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-primary { background: var(--teal); color: var(--cream-2); box-shadow: var(--shadow); }
+  .btn-primary:hover { background: var(--teal-2); }
+  .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+  .btn-ghost:hover { border-color: var(--teal); }
+  .btn-sm { padding: 9px 16px; font-size: 14px; }
+
+  /* Hero */
+  .hero {
+    padding: 72px 0 56px;
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 48px;
+    align-items: center;
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(231, 184, 103, 0.28);
+    color: #8A5A16;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 7px 14px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    font-size: 46px;
+    line-height: 1.08;
+    margin: 0 0 20px;
+    letter-spacing: -0.02em;
+    font-weight: 800;
+  }
+  .hero h1 em {
+    font-style: normal;
+    font-family: 'Newsreader', serif;
+    font-weight: 600;
+    color: var(--teal);
+    font-style: italic;
+  }
+  .hero p.lead {
+    font-size: 19px;
+    color: var(--ink-soft);
+    max-width: 46ch;
+    margin: 0 0 30px;
+  }
+  .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+  .hero-note { font-size: 14px; color: var(--ink-soft); }
+
+  .hero-card {
+    background: var(--cream-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: 22px;
+    position: relative;
+  }
+  .phone-mock {
+    background: var(--teal);
+    border-radius: 22px;
+    padding: 18px;
+    color: var(--cream);
+  }
+  .phone-mock .ph-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 14px;
+  }
+  .avatar-dot {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; color: var(--teal); font-size: 14px;
+  }
+  .bubble {
+    background: rgba(247, 242, 232, 0.12);
+    border-radius: 14px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 8px;
+    max-width: 82%;
+  }
+  .bubble.me {
+    background: var(--gold);
+    color: var(--teal);
+    margin-left: auto;
+    font-weight: 600;
+  }
+  .chip-row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .chip {
+    background: rgba(247, 242, 232, 0.14);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* Sections generic */
+  section { padding: 72px 0; }
+  .section-head { text-align: center; max-width: 620px; margin: 0 auto 44px; }
+  .section-head .eyebrow { margin-bottom: 14px; }
+  .section-head h2 {
+    font-size: 34px;
+    letter-spacing: -0.01em;
+    margin: 0 0 14px;
+    font-weight: 800;
+  }
+  .section-head p { color: var(--ink-soft); font-size: 17px; margin: 0; }
+
+  /* Como funciona */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+  }
+  .step {
+    background: var(--cream-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 28px 24px;
+  }
+  .step-num {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    background: var(--teal);
+    color: var(--cream);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800;
+    margin-bottom: 16px;
+  }
+  .step h3 { margin: 0 0 8px; font-size: 18px; }
+  .step p { margin: 0; color: var(--ink-soft); font-size: 15px; }
+
+  /* Features */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+  }
+  .feature {
+    background: var(--cream-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 26px;
+  }
+  .feature .ico {
+    width: 46px; height: 46px;
+    border-radius: 12px;
+    background: rgba(31, 76, 74, 0.08);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 16px;
+    color: var(--teal);
+  }
+  .feature h3 { margin: 0 0 8px; font-size: 17px; }
+  .feature p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+
+  /* Privacidade */
+  .privacy {
+    background: var(--teal);
+    color: var(--cream);
+    border-radius: 32px;
+    padding: 56px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    align-items: center;
+  }
+  .privacy h2 { font-size: 30px; margin: 0 0 16px; font-weight: 800; letter-spacing: -0.01em; }
+  .privacy p { color: rgba(247, 242, 232, 0.82); font-size: 16px; margin: 0 0 20px; }
+  .privacy ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+  .privacy li { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; }
+  .privacy li svg { flex: none; margin-top: 2px; color: var(--gold); }
+
+  /* Pricing */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+    align-items: stretch;
+  }
+  .price-card {
+    position: relative;
+    background: var(--cream-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: 34px 28px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+  }
+  .price-card.featured {
+    border: 2px solid var(--gold);
+    background: linear-gradient(180deg, rgba(231,184,103,0.14), var(--cream-2) 40%);
+  }
+  .price-card .badge-top {
+    position: absolute;
+    top: -13px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--gold);
+    color: var(--teal);
+    font-weight: 800;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 5px 14px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .price-card .plan-name {
+    font-weight: 700;
+    color: var(--teal);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+  .price-value {
+    font-size: 40px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 6px 0 4px;
+  }
+  .price-value span { font-size: 15px; font-weight: 600; color: var(--ink-soft); }
+  .price-card .price-caption { color: var(--ink-soft); font-size: 13.5px; margin-bottom: 22px; min-height: 34px; }
+  .price-feats { list-style: none; padding: 0; margin: 0 0 26px; display: grid; gap: 11px; text-align: left; flex: 1; }
+  .price-feats li { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--ink); }
+  .price-feats li svg { flex: none; margin-top: 3px; color: var(--teal); }
+  .promo-banner {
+    background: rgba(31, 76, 74, 0.08);
+    border: 1px dashed var(--teal);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+    color: var(--teal);
+    font-weight: 600;
+    margin-bottom: 20px;
+    text-align: left;
+  }
+  .pricing-note {
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    margin-top: 28px;
+  }
+  @media (max-width: 880px) {
+    .pricing-grid { grid-template-columns: 1fr; }
+    .price-card.featured { order: -1; }
+  }
+
+  /* FAQ */
+  .faq { max-width: 760px; margin: 0 auto; display: grid; gap: 14px; }
+  .faq-item {
+    background: var(--cream-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 4px 22px;
+  }
+  .faq-item summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 16px;
+    padding: 18px 0;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item summary .plus { color: var(--teal); font-size: 20px; font-weight: 800; }
+  .faq-item[open] summary .plus { transform: rotate(45deg); }
+  .faq-item p { margin: 0 0 20px; color: var(--ink-soft); font-size: 15px; }
+
+  /* CTA final */
+  .cta-final {
+    text-align: center;
+    background: linear-gradient(135deg, rgba(231,184,103,0.35), rgba(31,76,74,0.08));
+    border-radius: 32px;
+    padding: 64px 24px;
+  }
+  .cta-final h2 { font-size: 32px; margin: 0 0 14px; font-weight: 800; }
+  .cta-final p { color: var(--ink-soft); font-size: 17px; margin: 0 0 28px; }
+
+  footer.site {
+    border-top: 1px solid var(--line);
+    padding: 40px 0 32px;
+    margin-top: 40px;
+  }
+  .footer-grid {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 24px;
+  }
+  .footer-links { display: flex; gap: 24px; flex-wrap: wrap; font-size: 14px; color: var(--ink-soft); }
+  .footer-links a { text-decoration: none; }
+  .footer-links a:hover { color: var(--teal); }
+  .footer-bottom {
+    margin-top: 28px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  @media (max-width: 880px) {
+    .hero { grid-template-columns: 1fr; padding-top: 44px; }
+    .hero h1 { font-size: 34px; }
+    .steps, .features { grid-template-columns: 1fr; }
+    .privacy { grid-template-columns: 1fr; padding: 36px 26px; border-radius: 24px; }
+    .nav-links { display: none; }
+    section { padding: 52px 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap nav">
+    <a class="brand" href="/">
+      <svg width="34" height="34" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="180" height="180" rx="42" fill="#E7B867"/>
+        <path d="M90 35L133 51V84C133 112 114 132 90 144C66 132 47 112 47 84V51L90 35Z" fill="#1F4C4A"/>
+        <path d="M70 88L83 101L111 72" stroke="#F7F2E8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Ampara
+    </a>
+    <nav class="nav-links">
+      <a href="#como-funciona">Como funciona</a>
+      <a href="#recursos">Recursos</a>
+      <a href="#privacidade">Privacidade</a>
+      <a href="#preco">Preço</a>
+      <a href="#faq">Dúvidas</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn btn-ghost btn-sm" href="https://responsavel.amparakids.com/sign-in">Entrar</a>
+      <a class="btn btn-primary btn-sm" href="https://responsavel.amparakids.com/sign-up">Criar conta grátis</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <div>
+      <span class="eyebrow">Feito para famílias brasileiras</span>
+      <h1>Cuide de perto, <em>mesmo de longe.</em></h1>
+      <p class="lead">
+        O Ampara ajuda você a acompanhar a vida digital do seu filho com transparência:
+        conversas espelhadas, localização, tempo de tela e contatos aprovados —
+        tudo num só app, sem instalar nada complicado.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://responsavel.amparakids.com/sign-up">Começar agora</a>
+        <a class="btn btn-ghost" href="#como-funciona">Ver como funciona</a>
+      </div>
+      <p class="hero-note">Grátis para criar a conta. Sem cartão de crédito.</p>
+    </div>
+
+    <div class="hero-card">
+      <div class="phone-mock">
+        <div class="ph-header">
+          <span class="avatar-dot">M</span>
+          Mariana · online agora
+        </div>
+        <div class="bubble">Cheguei na casa da vovó, tá tudo bem por aqui 💛</div>
+        <div class="bubble me">Que bom, filha! Bom te ver por aí. Te amo.</div>
+        <div class="bubble">Adicionei uma amiga nova, já pedi aprovação pra você</div>
+        <div class="chip-row">
+          <span class="chip">📍 Localização atualizada</span>
+          <span class="chip">⏱️ 42 min de tela hoje</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section id="como-funciona">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Como funciona</span>
+        <h2>Em 3 passos você já está acompanhando</h2>
+        <p>Sem burocracia, sem instalar nada nos aplicativos que seu filho já usa.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Crie sua conta</h3>
+          <p>Cadastro rápido como Responsável — leva menos de dois minutos.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Convide seu filho</h3>
+          <p>Gere um link ou QR code e conecte o Ampara Kids ao celular dele.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Acompanhe tudo</h3>
+          <p>Conversas, localização, tempo de tela e contatos, direto do seu painel.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="recursos">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Recursos</span>
+        <h2>Tudo que uma família precisa, num só lugar</h2>
+        <p>Construído pra dar tranquilidade a você sem tirar a autonomia do seu filho.</p>
+      </div>
+      <div class="features">
+        <div class="feature">
+          <div class="ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3>Chat espelhado</h3>
+          <p>Veja as conversas do seu filho com contatos e grupos aprovados — a conversa privada entre vocês dois continua só de vocês.</p>
+        </div>
+        <div class="feature">
+          <div class="ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <h3>Localização em tempo real</h3>
+          <p>Saiba onde seu filho está, com atualização automática ao longo do dia.</p>
+        </div>
+        <div class="feature">
+          <div class="ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          </div>
+          <h3>Controle de tempo de tela</h3>
+          <p>Defina limites diários e bloqueie o celular na hora, quando for preciso.</p>
+        </div>
+        <div class="feature">
+          <div class="ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3>Contatos e grupos aprovados</h3>
+          <p>Novos contatos e grupos passam pela sua aprovação antes de entrar na vida do seu filho.</p>
+        </div>
+        <div class="feature">
+          <div class="ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3>Vários responsáveis, um só espaço</h3>
+          <p>A partir do plano Pró, convide o outro pai ou mãe pra acompanhar junto — mesmo espaço, mesmas crianças.</p>
+        </div>
+        <div class="feature">
+          <div class="ico">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </div>
+          <h3>Notificações inteligentes</h3>
+          <p>Avisos relevantes na hora certa, sem lotar seu celular de alertas repetidos.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="privacidade">
+    <div class="wrap">
+      <div class="privacy">
+        <div>
+          <span class="eyebrow" style="background: rgba(247,242,232,0.16); color: var(--gold);">Privacidade</span>
+          <h2>Acompanhar não é vigiar</h2>
+          <p>
+            O Ampara foi pensado pra dar segurança à família sem virar espionagem.
+            A conversa privada entre você e seu filho nunca é espelhada — ela é só de vocês dois.
+          </p>
+        </div>
+        <ul>
+          <li>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>
+            <span>Conversa privada pai/mãe e filho nunca é espelhada</span>
+          </li>
+          <li>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>
+            <span>Dados protegidos e acessíveis só pelos responsáveis do espaço</span>
+          </li>
+          <li>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>
+            <span>Contatos e grupos passam por aprovação antes de qualquer conversa</span>
+          </li>
+          <li>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg>
+            <span>Cobrança por plano de crianças/responsáveis — nunca por quem a criança pode falar com</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="preco">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Preço</span>
+        <h2>Escolha o plano da sua família</h2>
+        <p>Cobrança mensal, cancele quando quiser. Quanto mais crianças e responsáveis, maior o plano.</p>
+      </div>
+      <div class="pricing-grid">
+
+        <div class="price-card">
+          <div class="plan-name">Basic</div>
+          <div class="price-value">R$ 19,90 <span>/ mês</span></div>
+          <p class="price-caption">Até 2 crianças · + R$ 9,90/mês por criança adicional</p>
+          <ul class="price-feats">
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Chat espelhado ilimitado</li>
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Localização em tempo real</li>
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Controle de tempo de tela</li>
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Convites e grupos aprovados</li>
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Até 2 crianças, 1 responsável</li>
+          </ul>
+          <a class="btn btn-ghost" style="width:100%; border-color: var(--teal);" href="https://responsavel.amparakids.com/sign-up">Começar agora</a>
+        </div>
+
+        <div class="price-card featured">
+          <span class="badge-top">Em implantação</span>
+          <div class="plan-name">Pró</div>
+          <div class="price-value">R$ 49,90 <span>/ mês</span></div>
+          <p class="price-caption">Até 3 crianças e 2 responsáveis · ligação e chamada de vídeo</p>
+          <div class="promo-banner">
+            🎁 Os 50 primeiros da lista de espera pagam o valor do Basic
+            (R$ 19,90/mês) nos 3 primeiros meses de assinatura.
+          </div>
+          <ul class="price-feats">
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Tudo do plano Basic</li>
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Ligação e chamada de vídeo (em breve)</li>
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Até 3 crianças</li>
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> 2 responsáveis no mesmo espaço</li>
+          </ul>
+          <a class="btn btn-primary" style="width:100%;" href="mailto:contato@amparakids.com?subject=Lista%20de%20espera%20-%20Ampara%20Pr%C3%B3&body=Quero%20entrar%20na%20lista%20de%20espera%20do%20plano%20Pr%C3%B3!">Entrar na lista de espera</a>
+        </div>
+
+        <div class="price-card">
+          <div class="plan-name">Full</div>
+          <div class="price-value">R$ 79,90 <span>/ mês</span></div>
+          <p class="price-caption">Crianças e responsáveis ilimitados</p>
+          <ul class="price-feats">
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Tudo do plano Pró</li>
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Quantas crianças você quiser</li>
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Quantos responsáveis você quiser</li>
+            <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg> Suporte prioritário</li>
+          </ul>
+          <a class="btn btn-ghost" style="width:100%; border-color: var(--teal);" href="https://responsavel.amparakids.com/sign-up">Começar agora</a>
+        </div>
+
+      </div>
+      <p class="pricing-note">O plano Pró está em implantação — quem entrar na lista de espera garante o preço promocional assim que o recurso de chamada de vídeo for lançado.</p>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Dúvidas frequentes</span>
+        <h2>Perguntas que toda família faz</h2>
+      </div>
+      <div class="faq">
+        <details class="faq-item">
+          <summary>Preciso instalar algo complicado no celular do meu filho? <span class="plus">+</span></summary>
+          <p>Não. Basta abrir o link ou escanear o QR code de convite no celular dele — o Ampara Kids funciona direto no navegador, sem loja de aplicativos.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Funciona em Android e iPhone? <span class="plus">+</span></summary>
+          <p>Sim, o Ampara funciona nos dois — tanto o app do Responsável quanto o Ampara Kids.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Meu filho vai saber que estou acompanhando? <span class="plus">+</span></summary>
+          <p>Sim — o Ampara é transparente por design. Seu filho sabe que está conectado ao espaço da família, e a conversa privada entre vocês nunca é espelhada.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Posso adicionar o outro pai ou mãe pra acompanhar junto? <span class="plus">+</span></summary>
+          <p>Sim. Você pode convidar outro responsável pra dividir o mesmo espaço e acompanhar as mesmas crianças, sem custo adicional.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Como funciona a cobrança? <span class="plus">+</span></summary>
+          <p>Você escolhe um plano — Basic, Pró ou Full — de acordo com quantas crianças e responsáveis vão usar o Ampara. A cobrança nunca depende de quantos contatos ou grupos aprovados a criança tem.</p>
+        </details>
+        <details class="faq-item">
+          <summary>O que é a lista de espera do plano Pró? <span class="plus">+</span></summary>
+          <p>O plano Pró (com ligação e chamada de vídeo) está em implantação. Quem entrar na lista de espera agora garante uma condição especial: os 50 primeiros pagam o valor do Basic (R$ 19,90/mês) nos 3 primeiros meses assim que o plano for lançado.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="cta-final">
+        <h2>Comece a acompanhar hoje</h2>
+        <p>Crie sua conta gratuitamente e conecte seu filho em poucos minutos.</p>
+        <a class="btn btn-primary" href="https://responsavel.amparakids.com/sign-up">Criar conta grátis</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="footer-grid">
+      <a class="brand" href="/" style="font-size:18px;">
+        <svg width="28" height="28" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="180" height="180" rx="42" fill="#E7B867"/>
+          <path d="M90 35L133 51V84C133 112 114 132 90 144C66 132 47 112 47 84V51L90 35Z" fill="#1F4C4A"/>
+          <path d="M70 88L83 101L111 72" stroke="#F7F2E8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Ampara
+      </a>
+      <nav class="footer-links">
+        <a href="#recursos">Recursos</a>
+        <a href="#privacidade">Privacidade</a>
+        <a href="#preco">Preço</a>
+        <a href="#faq">Dúvidas</a>
+        <a href="https://responsavel.amparakids.com/sign-in">Entrar</a>
+      </nav>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; <span id="year"></span> Ampara. Todos os direitos reservados.</span>
+      <span>Goiânia, Brasil</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+
+</body>
+</html>

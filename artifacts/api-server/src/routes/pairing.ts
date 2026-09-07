@@ -4,6 +4,7 @@ import { randomBytes, randomUUID, createHash } from "crypto";
 import { eq, and, isNull, gt } from "drizzle-orm";
 import { db, pairingTokensTable, usersTable, childDeviceTokensTable } from "@workspace/db";
 import { ensureParentUser } from "../lib/parentUser";
+import { ensureGuardian, isGuardianOfChild } from "../lib/guardians";
 import { z } from "zod/v4";
 
 const router: IRouter = Router();
@@ -91,11 +92,10 @@ router.post("/pairing/reconnect", async (req, res) => {
     return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
   }
 
-  const [child] = await db
-    .select()
-    .from(usersTable)
-    .where(and(eq(usersTable.id, parsed.data.childId), eq(usersTable.parentId, auth.userId)))
-    .limit(1);
+  if (!(await isGuardianOfChild(auth.userId, parsed.data.childId))) {
+    return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  }
+  const [child] = await db.select().from(usersTable).where(eq(usersTable.id, parsed.data.childId)).limit(1);
   if (!child) return res.status(403).json({ error: "not_the_parent_of_this_child" });
 
   const token = generateToken();
@@ -188,6 +188,12 @@ router.post("/pairing/confirm", async (req, res) => {
     .update(pairingTokensTable)
     .set({ usedAt: new Date(), resultingChildUserId: childUser.id })
     .where(eq(pairingTokensTable.id, pairing.id));
+
+  // Item 13 do pedido (multiplos Responsaveis): garante que quem gerou o
+  // QR fica registrado como 'owner' em child_guardians desde o primeiro
+  // pareamento -- sem isso, so o fallback preguicoso de isGuardianOfChild
+  // cobriria essa crianca.
+  await ensureGuardian(childUser.id, pairing.parentId, "owner");
 
   // A Criança não tem conta Clerk — este é o único momento em que ela
   // recebe uma credencial. O aparelho dela guarda o token bruto (nunca

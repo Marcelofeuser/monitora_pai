@@ -21,6 +21,7 @@ import {
   mediaFileExists,
   mediaFilePath,
 } from "../lib/mediaStorage";
+import { isGuardianOfChild } from "../lib/guardians";
 
 const router: IRouter = Router();
 
@@ -137,7 +138,10 @@ router.get("/media/:filename", async (req, res) => {
     if (!group) return res.status(404).json({ error: "not_found" });
 
     if (parentUserId) {
-      authorized = group.createdByParentId === parentUserId;
+      // Item 13 do pedido (multiplos Responsaveis): antes so o dono
+      // original (createdByParentId) via midia de grupo -- um guardian
+      // adicional tomava 404 mesmo tendo acesso a criança.
+      authorized = await isGuardianOfChild(parentUserId, group.childId);
     } else if (childId) {
       authorized = group.childId === childId;
     } else if (contactUserId) {

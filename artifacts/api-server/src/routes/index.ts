@@ -10,6 +10,7 @@ import notificationsRouter from "./notifications";
 import screenTimeRouter from "./screenTime";
 import groupsRouter from "./groups";
 import meRouter from "./me";
+import guardiansRouter from "./guardians";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(notificationsRouter);
 router.use(screenTimeRouter);
 router.use(groupsRouter);
 router.use(meRouter);
+router.use(guardiansRouter);
 
 export default router;

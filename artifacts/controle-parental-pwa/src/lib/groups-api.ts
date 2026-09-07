@@ -18,6 +18,7 @@ export type Group = {
   childId: string;
   name: string;
   createdByParentId: string;
+  photoUrl: string | null;
   createdAt: string;
   members: GroupMember[];
 };
@@ -44,6 +45,24 @@ export async function createGroup(
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `create_group_failed_${res.status}`);
+  }
+  return res.json();
+}
+
+// Ultimo passo do fluxo de criacao ("colocar foto") -- chamado logo depois
+// de createGroup, com o id do grupo recem-criado. Tambem usado pelo menu
+// de long-press do balao pra trocar a foto depois.
+export async function uploadGroupPhoto(groupId: string, file: File, authToken: string | null): Promise<Group> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_URL}/api/groups/${encodeURIComponent(groupId)}/photo`, {
+    method: 'POST',
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `upload_group_photo_failed_${res.status}`);
   }
   return res.json();
 }

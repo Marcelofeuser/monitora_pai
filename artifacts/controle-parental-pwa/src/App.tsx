@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
+import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRight,
@@ -42,6 +42,7 @@ import { PairingGenerate } from '@/pages/PairingGenerate';
 import { PairingJoin } from '@/pages/PairingJoin';
 import { ContactJoin } from '@/pages/ContactJoin';
 import { ContactChat } from '@/pages/ContactChat';
+import { GuardianJoin } from '@/pages/GuardianJoin';
 import QRCode from 'qrcode';
 import { ThemeProvider, ThemeSwitcher } from '@/lib/theme';
 import { EmojiPicker } from '@/components/emoji-picker';
@@ -51,7 +52,7 @@ import { enableNativeIOSPush, disableNativeIOSPush, isNativeIOSBridgeAvailable }
 import { StickerPicker } from '@/components/sticker-picker';
 import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
-import { fetchGroups, createGroup, deleteGroup, addGroupMember, removeGroupMember, fetchGroupMessages, sendGroupMessage } from '@/lib/groups-api';
+import { fetchGroups, createGroup, uploadGroupPhoto, deleteGroup, addGroupMember, removeGroupMember, fetchGroupMessages, sendGroupMessage } from '@/lib/groups-api';
 import type { Group, GroupMessage } from '@/lib/groups-api';
 import { fetchChildren, fetchApprovedContacts, fetchParentContactConversation, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, PrivateMessage } from '@/lib/conversations-api';
@@ -60,6 +61,8 @@ import type { ChildLocation } from '@/lib/location-api';
 import { fetchScreenTime, setDailyLimit, setChildLock } from '@/lib/screen-time-api';
 import type { ScreenTimeStatus } from '@/lib/screen-time-api';
 import { fetchMe, updateMyRelationship } from '@/lib/me-api';
+import { fetchGuardians, createGuardianInvite, removeGuardian, acceptGuardianInvite } from '@/lib/guardians-api';
+import type { GuardianInfo } from '@/lib/guardians-api';
 import { RELATIONSHIP_OPTIONS } from '@/lib/relationship';
 import type { ParentRelationship } from '@/lib/relationship';
 import { Toaster } from '@/components/ui/toaster';
@@ -125,7 +128,7 @@ const pt = {
     identifierLabel: 'Telefone ou outro identificador (opcional)', identifierPlaceholder: 'Opcional',
     request: 'Pedir aprovação', pending: 'pendente', approved: 'aprovado', denied: 'negado', revoked: 'revogado', textOnly: 'somente texto',
     pendingTitle: 'Pedidos pendentes', pendingEmpty: 'Nenhum pedido pendente neste dispositivo.',
-    approvedTitle: 'Contatos aprovados', approvedEmpty: 'Nenhum contato aprovado ainda.',
+    approvedTitle: 'Contatos aprovados', approvedEmpty: 'Nenhum convite feito ainda.',
     historyTitle: 'Negados e revogados', historyEmpty: 'Nenhum contato negado ou revogado.',
     approve: 'Aprovar', deny: 'Negar', approveTextOnly: 'Aprovar somente texto', revoke: 'Revogar',
     channelsTitle: 'Canais disponíveis', channelsEmpty: 'Nenhum canal disponível. Um adulto responsável precisa aprovar um contato primeiro.',
@@ -137,10 +140,14 @@ const pt = {
   },
   tutorial: {
     skip: 'Pular tutorial', back: 'Voltar', next: 'Próximo', finish: 'Ir para o painel', stepOf: 'passo {current} de {total}',
+    // Item 15 do checklist: os passos "Perfil da criança" (child-profile) e
+    // "Atividade compartilhada" (activity) apontavam pros blocos "Status do
+    // espaço" e "Localização" removidos do Dashboard na simplificação da
+    // Visão Geral (07/09) -- sem elemento correspondente, o GuidedTour só
+    // deixa de desenhar o destaque (spotlight), mas o passo de texto sem
+    // nenhum realce visual ficava confuso. Removidos.
     parent: [
       { title: 'Bem-vindo ao Ampara', text: 'Este é um espaço claro para cuidar, conversar e compartilhar somente o que sua família escolher.', target: 'dashboard' },
-      { title: 'Perfil da criança', text: 'Confira o perfil da criança e mantenha os dados reais da família neste espaço.', target: 'child-profile' },
-      { title: 'Atividade compartilhada', text: 'Conversas aprovadas e localização aparecem no painel quando forem compartilhadas de verdade.', target: 'activity' },
       { title: 'Aprove contatos', text: 'Antes de conversar, revise cada pedido e escolha entre aprovar, limitar a texto, negar ou revogar.', target: 'approved-contacts' },
       { title: 'Chat privado', text: 'A conversa entre Responsável e Criança fica separada e nunca é espelhada.', target: 'private-channel' },
     ],
@@ -574,17 +581,67 @@ const navItems = [
   { href: '/dashboard', label: 'Overview', icon: House },
   { href: '/pair', label: 'Pair', icon: QrCode },
   { href: '/conversations', label: 'Conversations', icon: MessageCircle },
+  { href: '/groups/new', label: 'Criar grupos', icon: Users },
   { href: '/location', label: 'Location', icon: MapPin },
   { href: '/screen-time', label: 'Screen time', icon: Hourglass },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
+
+const PENDING_GUARDIAN_INVITE_KEY = 'amparo-pending-guardian-invite';
 
 function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const { t } = useLanguage();
   const { signOut } = useClerk();
+  const { getToken } = useAuth();
   const profile = readProfile();
+  const [guardianAcceptedMessage, setGuardianAcceptedMessage] = useState<string | null>(null);
+
+  // Item 13 do pedido (multiplos Responsaveis): quando alguem aceita um
+  // convite de Responsavel sem ainda ter conta (GuardianJoin.tsx guarda o
+  // token aqui antes de mandar pro /sign-in ou /sign-up), confirma o
+  // convite pendente assim que a pessoa cai logada em QUALQUER tela do
+  // app -- AppShell envolve todas as rotas autenticadas.
+  useEffect(() => {
+    let pendingToken: string | null = null;
+    try {
+      pendingToken = localStorage.getItem(PENDING_GUARDIAN_INVITE_KEY);
+    } catch {
+      pendingToken = null;
+    }
+    if (!pendingToken) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const authToken = await getToken();
+        // pendingToken! -- o guard "if (!pendingToken) return" acima não
+        // estreita o tipo dentro desta função assíncrona aninhada (mesmo
+        // padrão já visto em ContactChat.tsx).
+        const result = await acceptGuardianInvite(pendingToken!, authToken);
+        if (!cancelled) {
+          setGuardianAcceptedMessage(
+            result.childrenCount === 1
+              ? 'Você agora também é Responsável por 1 criança deste espaço.'
+              : `Você agora também é Responsável por ${result.childrenCount} crianças deste espaço.`,
+          );
+        }
+      } catch {
+        // Convite invalido/expirado/ja usado/ja aceito -- nao ha nada pra
+        // mostrar, so evita tentar de novo a cada navegacao.
+      } finally {
+        try {
+          localStorage.removeItem(PENDING_GUARDIAN_INVITE_KEY);
+        } catch {
+          // ignora
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+
   return (
     <div className="texture min-h-[100dvh] bg-[hsl(var(--background))]">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[252px] flex-col bg-[hsl(var(--sidebar))] px-5 py-7 text-[hsl(var(--sidebar-foreground))] lg:flex">
@@ -640,7 +697,18 @@ function AppShell({ children }: { children: ReactNode }) {
           <div className="hidden lg:block"><p className="font-mono-app text-[10px] uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]">{t.shell.familySpace} / {profile?.familyName || t.shell.familyNotSet}</p></div>
           <div className="flex items-center gap-3"><LanguageSwitcher /><ThemeSwitcher /><span className="hidden items-center gap-2 text-xs font-bold text-[hsl(var(--muted-foreground))] sm:flex"><span className="size-2 rounded-full bg-[hsl(var(--primary))]" /> {t.shell.localPrivate}</span></div>
         </header>
-        <main className="mx-auto max-w-[1280px] px-5 pb-9 pt-9 sm:px-8 lg:px-12 lg:pb-12 lg:pt-12">{children}</main>
+        <main className="mx-auto max-w-[1280px] px-5 pb-9 pt-9 sm:px-8 lg:px-12 lg:pb-12 lg:pt-12">
+          {guardianAcceptedMessage && (
+            <div
+              role="status"
+              data-testid="banner-guardian-invite-accepted"
+              className="mb-6 rounded-2xl border border-[hsl(var(--primary)/.3)] bg-[hsl(var(--primary)/.08)] p-4 text-sm font-semibold text-[hsl(var(--primary))]"
+            >
+              {guardianAcceptedMessage}
+            </div>
+          )}
+          {children}
+        </main>
       </div>
 
       <GuidedTour profile={profile} />
@@ -728,9 +796,46 @@ function NavItem({ item, active, onClick, mobile = false }: { item: typeof navIt
   );
 }
 
-function Avatar({ name, dark = false }: { name?: string; dark?: boolean }) {
+// shape: 'circle' pra contato 1:1 (padrao), 'balloon' pra grupo (balao de
+// festa, pra diferenciar rapidamente na lista -- pedido do Marcelo) e
+// 'star' pro avatar favoritado (fica pra quando o long-press/favoritar for
+// implementado, ja deixando o Avatar pronto pra receber o shape certo).
+// photoUrl: se vier preenchido (grupo com foto), mostra a imagem em vez
+// das iniciais, respeitando o mesmo recorte (circulo/balao/estrela).
+function Avatar({ name, dark = false, shape = 'circle', photoUrl }: { name?: string; dark?: boolean; shape?: 'circle' | 'balloon' | 'star'; photoUrl?: string | null }) {
   const initials = name?.trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase() || '?';
-  return <span className={`grid size-10 shrink-0 place-items-center rounded-full text-xs font-extrabold ${dark ? 'bg-[hsl(var(--sidebar-primary)/.22)] text-[hsl(var(--sidebar-primary))]' : 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]'}`} data-testid="avatar-profile">{initials}</span>;
+  const tone = dark ? 'bg-[hsl(var(--sidebar-primary)/.22)] text-[hsl(var(--sidebar-primary))]' : 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]';
+
+  if (shape === 'balloon') {
+    return (
+      <span className="relative inline-grid size-10 shrink-0 place-items-center" data-testid="avatar-profile">
+        {photoUrl ? (
+          <img src={photoUrl} alt={name ?? 'Grupo'} className="size-10 -rotate-6 rounded-[50%_50%_50%_4px] object-cover" />
+        ) : (
+          <span className={`grid size-10 -rotate-6 place-items-center rounded-[50%_50%_50%_4px] text-xs font-extrabold ${tone}`}>{initials}</span>
+        )}
+        <span className={`absolute bottom-[-3px] left-1/2 h-1.5 w-1.5 -translate-x-1/2 rotate-45 ${dark ? 'bg-[hsl(var(--sidebar-primary)/.22)]' : 'bg-[hsl(var(--accent))]'}`} />
+      </span>
+    );
+  }
+
+  if (shape === 'star') {
+    return (
+      <span
+        className={`grid size-10 shrink-0 place-items-center text-xs font-extrabold ${photoUrl ? '' : tone}`}
+        style={{ clipPath: 'polygon(50% 0%, 63% 35%, 100% 38%, 72% 60%, 82% 96%, 50% 76%, 18% 96%, 28% 60%, 0% 38%, 37% 35%)' }}
+        data-testid="avatar-profile"
+      >
+        {photoUrl ? <img src={photoUrl} alt={name ?? ''} className="size-10 object-cover" /> : initials}
+      </span>
+    );
+  }
+
+  return (
+    <span className={`grid size-10 shrink-0 place-items-center overflow-hidden rounded-full text-xs font-extrabold ${photoUrl ? '' : tone}`} data-testid="avatar-profile">
+      {photoUrl ? <img src={photoUrl} alt={name ?? ''} className="size-10 object-cover" /> : initials}
+    </span>
+  );
 }
 
 function PageIntro({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {
@@ -758,6 +863,12 @@ function SetupNotice() {
   );
 }
 
+// Pedido do Marcelo (redesign): a home passa a ter SÓ a mensagem de
+// boas-vindas + 2 botões fixos no rodapé -- "Espelho" (acompanhar as
+// conversas da criança, era o card "Conversas" antigo) e "Chat" (chat
+// próprio do Responsável, novo). O resto das páginas (Vincular, Local,
+// Tempo de tela, Configurações) já mora no hambúrguer -- isso não mudou,
+// só tirei o card daqui pra sobrar só a saudação.
 function Dashboard() {
   const { t } = useLanguage();
   const profile = readProfile();
@@ -765,16 +876,17 @@ function Dashboard() {
     <>
       <PageIntro eyebrow={t.dashboard.eyebrow} title={profile ? t.dashboard.greeting.replace('{name}', profile.displayName) : t.dashboard.title} description={profile ? t.dashboard.description : t.dashboard.noProfileDescription} />
       <SetupNotice />
-      {/* Pedido do Marcelo: tirar o resto dos blocos da Visao Geral (ja
-          acessiveis pelo hamburguer) e deixar so o card de Conversas
-          (tone="gold", o "mostarda") + o botao fixo de Chat abaixo. */}
-      <section className="mt-5 max-w-[460px]" data-tour="dashboard">
-        <ActionCard icon={MessageCircle} tone="gold" eyebrow={t.dashboard.connectEyebrow} title={t.dashboard.connectTitle} text={t.dashboard.connectText} href="/conversations" action={t.dashboard.connectAction} />
-      </section>
-      <div aria-hidden="true" className="h-24" />
-      <div className="fixed inset-x-0 bottom-6 z-20 flex justify-center px-4 lg:pl-[252px]">
+      <div aria-hidden="true" data-tour="dashboard" className="h-28" />
+      <div className="fixed inset-x-0 bottom-6 z-20 flex justify-center gap-3 px-4 lg:pl-[252px]">
         <Link
           href="/conversations"
+          data-testid="button-dashboard-open-mirror"
+          className="flex items-center gap-2 rounded-full border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] px-6 py-3.5 text-sm font-extrabold shadow-[0_12px_32px_rgba(24,48,48,.14)] transition-transform hover:scale-105 active:scale-95"
+        >
+          <EyeOff size={18} className="text-[hsl(var(--primary))]" /> Espelho
+        </Link>
+        <Link
+          href="/meu-chat"
           data-testid="button-dashboard-open-chat"
           className="flex items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-7 py-3.5 text-sm font-extrabold text-[hsl(var(--primary-foreground))] shadow-[0_12px_32px_rgba(24,48,48,.28)] transition-transform hover:scale-105 active:scale-95"
         >
@@ -851,6 +963,10 @@ function Conversations() {
   const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
   const [invitingContactId, setInvitingContactId] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  // Item do pedido: "convites" precisa de botao de copiar link, clicar no
+  // link ja copia, ou compartilhar (abre as opcoes nativas do aparelho) --
+  // antes so mostrava o link em texto puro, sem nenhuma acao.
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   // Chat de grupo de verdade (pedido do Marcelo) -- tela cheia, abre ao
   // clicar na bolinha do grupo. Poll de 5s igual ao canal privado/contato.
@@ -1117,6 +1233,37 @@ function Conversations() {
     setInviteQrDataUrl(null);
     setInviteJoinUrl(null);
     setInviteExpiresAt(null);
+    setInviteCopied(false);
+  }
+
+  async function copyInviteLink() {
+    if (!inviteJoinUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteJoinUrl);
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+    } catch {
+      // clipboard pode falhar (permissao, contexto nao seguro etc.) --
+      // o link continua selecionavel/copiavel manualmente no texto.
+    }
+  }
+
+  async function shareInviteLink() {
+    if (!inviteJoinUrl || !inviteTarget) return;
+    const shareData = {
+      title: 'Convite do Ampara',
+      text: `${inviteTarget.contactName}, aqui está seu convite para o Ampara:`,
+      url: inviteJoinUrl,
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch {
+        // usuario cancelou o compartilhamento -- sem erro pra mostrar
+      }
+    } else {
+      void copyInviteLink();
+    }
   }
 
   async function handleCreateGroup(event: FormEvent) {
@@ -1355,7 +1502,7 @@ function Conversations() {
         ) : (
           <section className="overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] shadow-card">
             <div className="border-b border-[hsl(var(--border))] p-6 sm:p-8">
-              <h2 className="text-xl font-extrabold">Contatos aprovados ({approvedContacts.length})</h2>
+              <h2 className="text-xl font-extrabold">Convites ({approvedContacts.length})</h2>
               <form onSubmit={addContact} className="mt-4 flex items-center gap-2" data-testid="form-add-contact">
                 <input
                   value={newContactName}
@@ -1425,17 +1572,17 @@ function Conversations() {
               {approvedContacts.filter((contact) => contact.contactUserId).length === 0 ? (
                 <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">Nenhum contato conectado ainda. Assim que alguém aceitar o convite, a conversa aparece aqui.</p>
               ) : (
-                <div className="mt-4 flex gap-4 overflow-x-auto pb-1" data-testid="row-contact-mirror-bubbles">
+                <div className="mt-4 flex flex-col gap-1" data-testid="row-contact-mirror-bubbles">
                   {approvedContacts.filter((contact) => contact.contactUserId).map((contact) => (
                     <button
                       key={contact.id}
                       type="button"
                       onClick={() => openContactMirror(contact.contactUserId!)}
                       data-testid={`button-open-contact-mirror-${contact.id}`}
-                      className="flex w-16 shrink-0 flex-col items-center gap-1.5"
+                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[hsl(var(--muted)/.5)]"
                     >
                       <Avatar name={contact.contactName} />
-                      <span className="w-full truncate text-center text-[11px] font-semibold text-[hsl(var(--muted-foreground))]">{contact.contactName}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{contact.contactName}</span>
                     </button>
                   ))}
                 </div>
@@ -1445,17 +1592,17 @@ function Conversations() {
               <h2 className="text-xl font-extrabold">Grupos ({groups.length})</h2>
               <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Um grupo só existe se você criar — escolha entre os contatos já aprovados.</p>
               {groups.length > 0 && (
-                <div className="mt-4 flex gap-4 overflow-x-auto pb-1" data-testid="row-group-bubbles">
+                <div className="mt-4 flex flex-col gap-1" data-testid="row-group-bubbles">
                   {groups.map((group) => (
                     <button
                       key={group.id}
                       type="button"
                       onClick={() => openGroupChat(group.id)}
                       data-testid={`button-open-group-chat-${group.id}`}
-                      className="flex w-16 shrink-0 flex-col items-center gap-1.5"
+                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[hsl(var(--muted)/.5)]"
                     >
-                      <Avatar name={group.name} />
-                      <span className="w-full truncate text-center text-[11px] font-semibold text-[hsl(var(--muted-foreground))]">{group.name}</span>
+                      <Avatar name={group.name} shape="balloon" photoUrl={group.photoUrl} />
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{group.name}</span>
                     </button>
                   ))}
                 </div>
@@ -1703,8 +1850,34 @@ function Conversations() {
               {inviteExpiresAt && <> Válido por 7 dias.</>}
             </p>
             {inviteJoinUrl && (
-              <p className="break-all rounded-xl bg-[hsl(var(--muted)/.5)] px-3 py-2 text-xs text-[hsl(var(--muted-foreground))]">{inviteJoinUrl}</p>
+              <button
+                type="button"
+                onClick={() => { void copyInviteLink(); }}
+                data-testid="button-copy-invite-link"
+                title="Clique para copiar o link"
+                className="w-full break-all rounded-xl bg-[hsl(var(--muted)/.5)] px-3 py-2 text-left text-xs text-[hsl(var(--muted-foreground))] transition-colors hover:bg-[hsl(var(--muted))]"
+              >
+                {inviteJoinUrl}
+              </button>
             )}
+            <div className="flex w-full items-center gap-2">
+              <button
+                type="button"
+                onClick={() => { void copyInviteLink(); }}
+                data-testid="button-copy-invite-link-action"
+                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-md border border-[hsl(var(--border))] text-sm font-bold transition-colors hover:border-[hsl(var(--primary))]"
+              >
+                {inviteCopied ? 'Copiado!' : 'Copiar link'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { void shareInviteLink(); }}
+                data-testid="button-share-invite-link"
+                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-md bg-[hsl(var(--primary))] text-sm font-bold text-[hsl(var(--primary-foreground))]"
+              >
+                Compartilhar
+              </button>
+            </div>
             <button type="button" onClick={closeInviteModal} className="text-sm font-medium underline" data-testid="button-close-invite-modal">
               Fechar
             </button>
@@ -1905,6 +2078,204 @@ function Conversations() {
           <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-6 py-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" /> Espelho: você só acompanha, quem manda mensagem aqui é {contactMirrorChildName ?? 'a criança'} e a pessoa aprovada.</div>
         </div>
       )}
+    </>
+  );
+}
+
+// Pedido do Marcelo: "Criar grupos" vira item do hambúrguer, com um
+// fluxo de passos -- 1) nome do grupo, 2) adicionar pessoas (contatos já
+// aprovados/Convites), 3) colocar foto (opcional), 4) botão criar. O grupo
+// criado já aparece na hora na lista de conversas (mesma tela /conversations
+// que já lê `groups` do backend).
+function CreateGroupWizard() {
+  const { getToken } = useAuth();
+  const [, setLocation] = useLocation();
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [children, setChildren] = useState<ChildUser[] | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [approvedContacts, setApprovedContacts] = useState<ApprovedContact[]>([]);
+  const [groupName, setGroupName] = useState('');
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const list = await fetchChildren(token);
+        if (cancelled) return;
+        setChildren(list);
+        if (list.length > 0) setSelectedChildId(list[0].id);
+      } catch {
+        if (!cancelled) setError('Não foi possível carregar suas crianças.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getToken]);
+
+  useEffect(() => {
+    if (!selectedChildId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        // selectedChildId! -- o guard "if (!selectedChildId) return" acima
+        // nao estreita o tipo dentro desta funcao assincrona aninhada
+        // (mesmo padrao documentado em ContactChat.tsx/App.tsx).
+        const contacts = await fetchApprovedContacts(selectedChildId!, token);
+        if (!cancelled) setApprovedContacts(contacts.filter((contact) => contact.contactUserId));
+      } catch {
+        if (!cancelled) setError('Não foi possível carregar os convites já aceitos.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedChildId, getToken]);
+
+  function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    setPhotoFile(file);
+    setPhotoPreview(file ? URL.createObjectURL(file) : null);
+  }
+
+  async function handleCreate() {
+    if (!selectedChildId || !groupName.trim() || selectedContactIds.length === 0 || creating) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const group = await createGroup(selectedChildId, groupName.trim(), selectedContactIds, token);
+      if (photoFile) {
+        try {
+          await uploadGroupPhoto(group.id, photoFile, token);
+        } catch {
+          // grupo já foi criado -- se a foto falhar, segue mesmo assim,
+          // dá pra tentar de novo depois pelo menu do balão.
+        }
+      }
+      setLocation('/conversations');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao criar o grupo.');
+      setCreating(false);
+    }
+  }
+
+  const canGoStep2 = groupName.trim().length > 0 && !!selectedChildId;
+  const canGoStep3 = selectedContactIds.length > 0;
+
+  return (
+    <>
+      <PageIntro eyebrow="hambúrguer" title="Criar grupos" description="Nome, depois quem participa, depois (se quiser) uma foto — o grupo aparece na sua lista de conversas assim que for criado." />
+      <section className="max-w-[560px] overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] shadow-card">
+        <div className="flex items-center gap-2 border-b border-[hsl(var(--border))] px-6 py-4">
+          {[1, 2, 3].map((n) => (
+            <span key={n} className={`h-1.5 flex-1 rounded-full ${step >= n ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`} />
+          ))}
+        </div>
+        <div className="p-6 sm:p-8">
+          {error && <p className="mb-4 text-sm font-semibold text-[hsl(var(--destructive))]" role="alert">{error}</p>}
+
+          {step === 1 && (
+            <div className="flex flex-col gap-4">
+              <h2 className="text-lg font-extrabold">1. Nome do grupo</h2>
+              {children && children.length > 1 && (
+                <div className="flex flex-wrap gap-2">
+                  {children.map((child) => (
+                    <button key={child.id} type="button" onClick={() => setSelectedChildId(child.id)} className={`rounded-full border px-3 py-1.5 text-xs font-bold ${selectedChildId === child.id ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]'}`}>
+                      {child.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input
+                value={groupName}
+                onChange={(event) => setGroupName(event.target.value)}
+                placeholder="Nome do grupo (ex: Família)"
+                data-testid="input-wizard-group-name"
+                className="h-11 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
+              />
+              <Button className="w-fit" disabled={!canGoStep2} onClick={() => setStep(2)} testId="button-wizard-next-1">Próximo <ArrowRight size={15} /></Button>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="flex flex-col gap-4">
+              <h2 className="text-lg font-extrabold">2. Quem participa</h2>
+              {approvedContacts.length === 0 ? (
+                <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhum convite aceito ainda para essa criança. Aceite um convite primeiro em "Convites".</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {approvedContacts.map((contact) => {
+                    const checked = selectedContactIds.includes(contact.id);
+                    return (
+                      <button
+                        key={contact.id}
+                        type="button"
+                        onClick={() => setSelectedContactIds((current) => (checked ? current.filter((id) => id !== contact.id) : [...current, contact.id]))}
+                        data-testid={`button-wizard-toggle-contact-${contact.id}`}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${checked ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]'}`}
+                      >
+                        {contact.contactName}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setStep(1)} testId="button-wizard-back-2">Voltar</Button>
+                <Button disabled={!canGoStep3} onClick={() => setStep(3)} testId="button-wizard-next-2">Próximo <ArrowRight size={15} /></Button>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="flex flex-col gap-4">
+              <h2 className="text-lg font-extrabold">3. Foto do grupo (opcional)</h2>
+              <div className="flex items-center gap-4">
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Pré-visualização" className="size-16 rounded-[50%_50%_50%_4px] object-cover" />
+                ) : (
+                  <Avatar name={groupName} shape="balloon" />
+                )}
+                <label className="flex h-11 cursor-pointer items-center justify-center rounded-md border border-[hsl(var(--border))] px-4 text-sm font-bold hover:border-[hsl(var(--primary))]">
+                  Colocar foto
+                  <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} data-testid="input-wizard-group-photo" />
+                </label>
+              </div>
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setStep(2)} testId="button-wizard-back-3">Voltar</Button>
+                <Button disabled={creating} onClick={() => { void handleCreate(); }} testId="button-wizard-create">{creating ? 'Criando…' : 'Criar grupo'}</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    </>
+  );
+}
+
+// Pedido do Marcelo: chat próprio do Responsável, pra conversar com quem
+// ele quiser (mesmo modelo do chat da Criança). Backend de mensagem
+// direta Responsável<->Convite ainda não existe (hoje o que existe é só o
+// espelho, somente-leitura, da conversa da criança) -- fica como próximo
+// passo dedicado. Por enquanto a tela já existe e explica isso, em vez de
+// fingir uma função que não funciona de verdade.
+function MyChat() {
+  return (
+    <>
+      <PageIntro eyebrow="seu chat" title="Chat" description="Seu próprio espaço para conversar com quem você quiser da família — separado do espelho da criança." />
+      <EmptyState
+        icon={MessageCircle}
+        eyebrow="em construção"
+        title="Ainda vem por aqui"
+        text="O chat próprio do Responsável está em construção — vai funcionar igual ao chat da criança, com os mesmos Convites da família. Por enquanto, use o Espelho para acompanhar as conversas dela."
+        actionLabel="Ver Convites"
+        onAction={() => { window.location.href = '/conversations'; }}
+        testId="button-my-chat-empty-action"
+      />
     </>
   );
 }
@@ -2228,6 +2599,157 @@ function ScreenTimePage() {
   );
 }
 
+// Item 13 do pedido (multiplos Responsaveis): gera/mostra o link de
+// convite pra um 2o Responsavel entrar no mesmo espaco, e lista quem ja
+// tem acesso -- mesmo espirito da secao de convite de Contato (ver
+// Conversations()), so que aqui o convidado vira um Responsavel de
+// verdade (conta Clerk propria), nao um Contato.
+function GuardiansSection() {
+  const { getToken, userId } = useAuth();
+  const [guardians, setGuardians] = useState<GuardianInfo[] | null>(null);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function loadGuardians() {
+    try {
+      const token = await getToken();
+      const list = await fetchGuardians(token);
+      setGuardians(list);
+    } catch {
+      setGuardians([]);
+    }
+  }
+
+  useEffect(() => {
+    void loadGuardians();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleInvite() {
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const invite = await createGuardianInvite(token);
+      setInviteUrl(invite.joinUrl);
+      setCopied(false);
+    } catch {
+      setError('Não foi possível gerar o convite agora. Tente de novo.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCopy() {
+    if (!inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2200);
+    } catch {
+      // Clipboard pode falhar (sem permissão, contexto não seguro) — o
+      // link continua visível pra copiar manualmente.
+    }
+  }
+
+  async function handleRemove(parentId: string) {
+    if (!window.confirm('Remover o acesso deste Responsável ao espaço da família?')) return;
+    try {
+      const token = await getToken();
+      await removeGuardian(parentId, token);
+      await loadGuardians();
+    } catch {
+      setError('Não foi possível remover agora. Tente de novo.');
+    }
+  }
+
+  return (
+    <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7">
+      <div className="flex items-start gap-4">
+        <IconBox icon={Users} tone="teal" />
+        <div className="flex-1">
+          <h2 className="text-lg font-extrabold">Responsáveis</h2>
+          <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+            Convide outro adulto responsável (o outro pai/mãe, avó, etc.) para acompanhar o mesmo espaço — as mesmas
+            crianças, conversas, localização e tempo de uso.
+          </p>
+
+          {guardians && guardians.length > 0 && (
+            <ul className="mt-4 space-y-2">
+              {guardians.map((g) => (
+                <li
+                  key={g.id}
+                  data-testid={`row-guardian-${g.id}`}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-[hsl(var(--border))] px-3 py-2"
+                >
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <span>{g.name}</span>
+                    {g.id === userId && <span className="text-[hsl(var(--muted-foreground))]">(você)</span>}
+                    {g.role === 'owner' && (
+                      <span className="rounded-full bg-[hsl(var(--muted))] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
+                        dono original
+                      </span>
+                    )}
+                  </div>
+                  {g.role !== 'owner' && g.id !== userId && (
+                    <button
+                      type="button"
+                      onClick={() => { void handleRemove(g.id); }}
+                      data-testid={`button-remove-guardian-${g.id}`}
+                      className="text-xs font-bold text-[hsl(var(--destructive))] underline underline-offset-4"
+                    >
+                      Remover
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {error && <p className="mt-3 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{error}</p>}
+
+          {inviteUrl ? (
+            <div className="mt-4 flex flex-col gap-2">
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                Envie este link pra pessoa — ao entrar ou criar conta, ela já ganha acesso ao espaço:
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={inviteUrl}
+                  data-testid="input-guardian-invite-url"
+                  className="min-w-0 flex-1 truncate rounded-md border border-[hsl(var(--border))] bg-transparent px-3 py-2 text-xs"
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <button
+                  type="button"
+                  onClick={() => { void handleCopy(); }}
+                  data-testid="button-copy-guardian-invite"
+                  className="shrink-0 rounded-md bg-[hsl(var(--primary))] px-3 py-2 text-xs font-bold text-[hsl(var(--primary-foreground))]"
+                >
+                  {copied ? 'Copiado!' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => { void handleInvite(); }}
+              data-testid="button-invite-guardian"
+              className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-4 text-xs font-bold text-[hsl(var(--primary-foreground))] disabled:opacity-60"
+            >
+              {busy ? 'Gerando link…' : 'Convidar novo Responsável'} <UserPlus size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function SettingsPage() {
   const { t } = useLanguage();
   const { getToken } = useAuth();
@@ -2368,6 +2890,7 @@ function SettingsPage() {
           <div className="mt-7 flex flex-wrap items-center gap-4"><Button type="submit" testId="button-save-settings">{t.settings.save} <Check size={16} /></Button>{saved && <span className="text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-settings-saved">{t.settings.saved}</span>}</div>
         </form>
         <div className="space-y-5">
+           <GuardiansSection />
            <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Users} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.relationshipTitle}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.relationshipText}</p><div className="mt-4 flex flex-wrap gap-2">{RELATIONSHIP_OPTIONS.filter((opt) => opt.value !== 'responsavel').map((opt) => (<button key={opt.value} type="button" disabled={relationshipBusy} onClick={() => { void chooseRelationship(opt.value); }} data-testid={`button-relationship-${opt.value}`} className={`min-h-9 rounded-full border px-4 text-xs font-bold transition-colors disabled:opacity-60 ${relationship === opt.value ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'border-[hsl(var(--card-border))] bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]'}`}>{opt.label}</button>))}</div>{relationshipSaved && <span className="mt-3 block text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-relationship-saved">{t.settings.relationshipSaved}</span>}</div></div></section>
            <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={CircleHelp} tone="teal" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.tutorialTitle}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.tutorialText}</p><button type="button" onClick={() => { window.dispatchEvent(new Event('amparo:start-tour')); }} data-testid="button-restart-tour" className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-4 text-xs font-bold text-[hsl(var(--primary-foreground))]">{t.settings.tutorialAction} <ArrowRight size={14} /></button></div></div></section>
           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Bell} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.notifications}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.notificationsText}</p>{notificationsError && <p className="mt-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{notificationsError}</p>}</div><button role="switch" aria-checked={notifications} disabled={notificationsBusy} onClick={() => { void toggleNotifications(); }} data-testid="switch-notifications" className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60 ${notifications ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${notifications ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></section>
@@ -2452,7 +2975,7 @@ function SignUpPage() {
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route path="/join-contact" component={ContactJoin} /><Route path="/contact" component={ContactChat} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/groups/new" component={CreateGroupRoute} /><Route path="/meu-chat" component={MyChatRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route path="/join-contact" component={ContactJoin} /><Route path="/aceitar-responsavel" component={GuardianJoin} /><Route path="/contact" component={ContactChat} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 // /join não exige o Responsável logado — é a rota que o QR code abre no
 // aparelho da Criança, que ainda não tem conta. /pair é o gerador do QR,
@@ -2484,6 +3007,8 @@ function PairingRoute() { return <RequireSignedIn><AppShell><PairingGenerate /><
 // o /pair tinha antes, em vez de mandar pro login.
 function DashboardRoute() { return <RequireSignedIn><AppShell><Dashboard /></AppShell></RequireSignedIn>; }
 function ConversationsRoute() { return <RequireSignedIn><AppShell><Conversations /></AppShell></RequireSignedIn>; }
+function CreateGroupRoute() { return <RequireSignedIn><AppShell><CreateGroupWizard /></AppShell></RequireSignedIn>; }
+function MyChatRoute() { return <RequireSignedIn><AppShell><MyChat /></AppShell></RequireSignedIn>; }
 function LocationRoute() { return <RequireSignedIn><AppShell><LocationPage /></AppShell></RequireSignedIn>; }
 function ScreenTimeRoute() { return <RequireSignedIn><AppShell><ScreenTimePage /></AppShell></RequireSignedIn>; }
 function SettingsRoute() { return <RequireSignedIn><AppShell><SettingsPage /></AppShell></RequireSignedIn>; }

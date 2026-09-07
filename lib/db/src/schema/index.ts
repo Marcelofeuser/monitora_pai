@@ -8,3 +8,4 @@ export * from "./notifications";
 export * from "./screenTime";
 export * from "./groups";
 export * from "./contactAuth";
+export * from "./guardians";
