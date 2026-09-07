@@ -55,20 +55,27 @@ export async function fetchApprovedContacts(
   return res.json();
 }
 
-export type MirroredMessage = {
-  message: {
-    id: string;
-    type: string;
-    textContent: string | null;
-    contentUrl: string | null;
-    createdAt: string;
-  };
-  mirroredAt: string;
+// Pedido do Marcelo: "o chat e um espelho do chat da crianca" -- toda
+// pessoa aprovada aparece pro Responsavel como uma conversa de verdade
+// (bolinha + historico), nao mais uma lista solta de mensagens sem dono
+// (era o que fetchMirroredMessages/MirroredMessage faziam antes -- removidos
+// junto com essa troca).
+export type ParentContactConversation = {
+  conversation: { id: string; participantAId: string; participantBId: string };
+  messages: PrivateMessage[];
+  contactName: string;
+  childName: string;
 };
 
-export async function fetchMirroredMessages(authToken: string | null): Promise<MirroredMessage[]> {
-  const res = await fetch(`${API_URL}/api/messages/mirrored`, { headers: authHeaders(authToken) });
-  if (!res.ok) throw new Error(`fetch_mirrored_failed_${res.status}`);
+export async function fetchParentContactConversation(
+  contactUserId: string,
+  authToken: string | null,
+): Promise<ParentContactConversation> {
+  const res = await fetch(
+    `${API_URL}/api/parent/contacts/${encodeURIComponent(contactUserId)}/messages`,
+    { headers: authHeaders(authToken) },
+  );
+  if (!res.ok) throw new Error(`fetch_parent_contact_conversation_failed_${res.status}`);
   return res.json();
 }
 

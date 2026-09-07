@@ -53,8 +53,8 @@ import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
 import { fetchGroups, createGroup, deleteGroup, addGroupMember, removeGroupMember, fetchGroupMessages, sendGroupMessage } from '@/lib/groups-api';
 import type { Group, GroupMessage } from '@/lib/groups-api';
-import { fetchChildren, fetchApprovedContacts, fetchMirroredMessages, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact } from '@/lib/conversations-api';
-import type { ChildUser, ApprovedContact, MirroredMessage, PrivateMessage } from '@/lib/conversations-api';
+import { fetchChildren, fetchApprovedContacts, fetchParentContactConversation, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact } from '@/lib/conversations-api';
+import type { ChildUser, ApprovedContact, PrivateMessage } from '@/lib/conversations-api';
 import { fetchChildLocation } from '@/lib/location-api';
 import type { ChildLocation } from '@/lib/location-api';
 import { fetchScreenTime, setDailyLimit, setChildLock } from '@/lib/screen-time-api';
@@ -765,28 +765,22 @@ function Dashboard() {
     <>
       <PageIntro eyebrow={t.dashboard.eyebrow} title={profile ? t.dashboard.greeting.replace('{name}', profile.displayName) : t.dashboard.title} description={profile ? t.dashboard.description : t.dashboard.noProfileDescription} />
       <SetupNotice />
-      <section className="grid gap-5 lg:grid-cols-[1.25fr_.75fr]" data-tour="activity">
-        <div className="relative min-h-[330px] overflow-hidden rounded-[26px] bg-[hsl(var(--primary))] p-7 text-[hsl(var(--primary-foreground))]" data-tour="child-profile">
-          <div className="absolute -right-16 -top-16 size-64 rounded-full border border-[hsl(var(--accent)/.25)]" /><div className="absolute -right-5 top-[-5px] size-44 rounded-full border border-[hsl(var(--accent)/.2)]" />
-          <div className="relative flex h-full flex-col justify-between">
-            <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.15em] text-[hsl(var(--primary-foreground)/.65)]"><span className="size-2 rounded-full bg-[hsl(var(--accent))]" /> {t.dashboard.sharedTruth}</span><ShieldCheck size={24} className="text-[hsl(var(--accent))]" /></div>
-            <div className="mt-20 max-w-[480px]"><p className="font-display text-[clamp(2.5rem,5vw,4.2rem)] leading-[.92] tracking-[-.06em]">{t.dashboard.noReport}<br /><em className="text-[hsl(var(--accent))]">{t.dashboard.goodNews}</em></p><p className="mt-5 max-w-[370px] text-sm leading-6 text-[hsl(var(--primary-foreground)/.7)]">{t.dashboard.emptyExplanation}</p></div>
-          </div>
-        </div>
-        <div className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7">
-          <div className="flex items-center justify-between"><div><p className="font-mono-app text-[10px] uppercase tracking-[.16em] text-[hsl(var(--muted-foreground))]">{t.dashboard.status}</p><h2 className="mt-2 text-xl font-extrabold">{t.dashboard.quietReady}</h2></div><IconBox icon={WifiOff} tone="slate" /></div>
-          <div className="mt-7 space-y-0">
-            <StatusRow icon={UserRound} label={t.dashboard.profile} value={profile ? t.dashboard.profileDone : t.dashboard.profileNeeds} done={!!profile} />
-            <StatusRow icon={MessageCircle} label={t.nav.conversations} value={t.dashboard.approved} />
-            <StatusRow icon={MapPin} label={t.nav.location} value={t.dashboard.noChildLocation} />
-          </div>
-          <p className="mt-7 border-t border-[hsl(var(--border))] pt-5 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.dashboard.onlyShows}</p>
-        </div>
-      </section>
-      <section className="mt-5 grid gap-5 md:grid-cols-2" data-tour="dashboard">
+      {/* Pedido do Marcelo: tirar o resto dos blocos da Visao Geral (ja
+          acessiveis pelo hamburguer) e deixar so o card de Conversas
+          (tone="gold", o "mostarda") + o botao fixo de Chat abaixo. */}
+      <section className="mt-5 max-w-[460px]" data-tour="dashboard">
         <ActionCard icon={MessageCircle} tone="gold" eyebrow={t.dashboard.connectEyebrow} title={t.dashboard.connectTitle} text={t.dashboard.connectText} href="/conversations" action={t.dashboard.connectAction} />
-        <ActionCard icon={Navigation} tone="teal" eyebrow={t.dashboard.locationEyebrow} title={t.dashboard.locationTitle} text={t.dashboard.locationText} href="/location" action={t.dashboard.locationAction} />
       </section>
+      <div aria-hidden="true" className="h-24" />
+      <div className="fixed inset-x-0 bottom-6 z-20 flex justify-center px-4 lg:pl-[252px]">
+        <Link
+          href="/conversations"
+          data-testid="button-dashboard-open-chat"
+          className="flex items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-7 py-3.5 text-sm font-extrabold text-[hsl(var(--primary-foreground))] shadow-[0_12px_32px_rgba(24,48,48,.28)] transition-transform hover:scale-105 active:scale-95"
+        >
+          <MessageCircle size={18} /> Chat
+        </Link>
+      </div>
     </>
   );
 }
@@ -822,7 +816,17 @@ function Conversations() {
   const [addContactError, setAddContactError] = useState<string | null>(null);
   const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
   const [deleteContactError, setDeleteContactError] = useState<string | null>(null);
-  const [mirroredMessages, setMirroredMessages] = useState<MirroredMessage[]>([]);
+  // Chat espelhado por contato (pedido do Marcelo: "o chat e um espelho
+  // do chat da crianca" -- toda pessoa aprovada vira uma conversa de
+  // verdade aqui, nao so uma lista solta). So-leitura: o Responsavel
+  // nunca manda mensagem por aqui, so acompanha.
+  const [openContactMirrorId, setOpenContactMirrorId] = useState<string | null>(null);
+  const [contactMirrorMessages, setContactMirrorMessages] = useState<PrivateMessage[]>([]);
+  const [contactMirrorChildName, setContactMirrorChildName] = useState<string | null>(null);
+  const [contactMirrorLoading, setContactMirrorLoading] = useState(false);
+  const [contactMirrorError, setContactMirrorError] = useState<string | null>(null);
+  const contactMirrorListRef = useRef<HTMLDivElement | null>(null);
+  const contactMirrorStickToBottomRef = useRef(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([]);
   const [privateLoading, setPrivateLoading] = useState(false);
@@ -868,6 +872,7 @@ function Conversations() {
   // no fim, igual WhatsApp.
   useEffect(() => { privateStickToBottomRef.current = true; }, [selectedChildId]);
   useEffect(() => { groupStickToBottomRef.current = true; }, [openGroupChatId]);
+  useEffect(() => { contactMirrorStickToBottomRef.current = true; }, [openContactMirrorId]);
 
   useEffect(() => {
     const el = privateListRef.current;
@@ -880,6 +885,11 @@ function Conversations() {
   }, [groupChatMessages]);
 
   useEffect(() => {
+    const el = contactMirrorListRef.current;
+    if (el && contactMirrorStickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [contactMirrorMessages]);
+
+  useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
@@ -888,8 +898,6 @@ function Conversations() {
         if (cancelled) return;
         setChildren(kids);
         setSelectedChildId((current) => current ?? kids[0]?.id ?? null);
-        const mirrored = await fetchMirroredMessages(token);
-        if (!cancelled) setMirroredMessages(mirrored);
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar conversas.');
       }
@@ -1220,6 +1228,47 @@ function Conversations() {
     setOpenGroupChatId(null);
   }
 
+  useEffect(() => {
+    if (!openContactMirrorId) return;
+    let cancelled = false;
+
+    async function load(showSpinner: boolean) {
+      if (showSpinner) setContactMirrorLoading(true);
+      try {
+        const token = await getToken();
+        const data = await fetchParentContactConversation(openContactMirrorId!, token);
+        if (!cancelled) {
+          setContactMirrorMessages(data.messages);
+          setContactMirrorChildName(data.childName);
+          setContactMirrorError(null);
+        }
+      } catch (err) {
+        if (!cancelled && showSpinner) {
+          setContactMirrorError(err instanceof Error ? err.message : 'Erro ao carregar a conversa.');
+        }
+      } finally {
+        if (!cancelled && showSpinner) setContactMirrorLoading(false);
+      }
+    }
+
+    load(true);
+    const intervalId = window.setInterval(() => load(false), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [openContactMirrorId, getToken]);
+
+  function openContactMirror(contactUserId: string) {
+    setContactMirrorMessages([]);
+    setContactMirrorError(null);
+    setOpenContactMirrorId(contactUserId);
+  }
+
+  function closeContactMirror() {
+    setOpenContactMirrorId(null);
+  }
+
   async function handleSendGroupMessage(event: FormEvent) {
     event.preventDefault();
     const text = groupDraft.trim();
@@ -1371,15 +1420,25 @@ function Conversations() {
               )}
             </div>
             <div className="p-6 sm:p-8">
-              <h2 className="text-xl font-extrabold">Mensagens espelhadas ({mirroredMessages.length})</h2>
-              {mirroredMessages.length === 0 ? (
-                <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem espelhada ainda.</p>
+              <h2 className="text-xl font-extrabold">Conversas ({approvedContacts.filter((contact) => contact.contactUserId).length})</h2>
+              <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">O chat aqui é um espelho da conversa de cada pessoa aprovada com a criança — só leitura.</p>
+              {approvedContacts.filter((contact) => contact.contactUserId).length === 0 ? (
+                <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">Nenhum contato conectado ainda. Assim que alguém aceitar o convite, a conversa aparece aqui.</p>
               ) : (
-                <ul className="mt-4 flex flex-col gap-2">
-                  {mirroredMessages.map((entry) => (
-                    <li key={entry.message.id} className="rounded-xl bg-[hsl(var(--muted)/.5)] px-4 py-3 text-sm" data-testid={`row-mirrored-message-${entry.message.id}`}>{entry.message.textContent ?? (entry.message.type === 'video' ? 'Vídeo enviado' : entry.message.type === 'photo' ? 'Foto enviada' : `[${entry.message.type}]`)}</li>
+                <div className="mt-4 flex gap-4 overflow-x-auto pb-1" data-testid="row-contact-mirror-bubbles">
+                  {approvedContacts.filter((contact) => contact.contactUserId).map((contact) => (
+                    <button
+                      key={contact.id}
+                      type="button"
+                      onClick={() => openContactMirror(contact.contactUserId!)}
+                      data-testid={`button-open-contact-mirror-${contact.id}`}
+                      className="flex w-16 shrink-0 flex-col items-center gap-1.5"
+                    >
+                      <Avatar name={contact.contactName} />
+                      <span className="w-full truncate text-center text-[11px] font-semibold text-[hsl(var(--muted-foreground))]">{contact.contactName}</span>
+                    </button>
                   ))}
-                </ul>
+                </div>
               )}
             </div>
             <div className="border-t border-[hsl(var(--border))] p-6 sm:p-8">
@@ -1788,6 +1847,62 @@ function Conversations() {
               </Button>
             </form>
           </div>
+        </div>
+      )}
+      {openContactMirrorId && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[hsl(var(--background))]" data-testid="overlay-contact-mirror">
+          <header className="flex items-center justify-between border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-5 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar name={approvedContacts.find((contact) => contact.contactUserId === openContactMirrorId)?.contactName} />
+              <div className="min-w-0">
+                <h1 className="truncate text-base font-bold">{approvedContacts.find((contact) => contact.contactUserId === openContactMirrorId)?.contactName ?? 'Contato'}</h1>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">Espelho da conversa com {contactMirrorChildName ?? 'a criança'} — só leitura</p>
+              </div>
+            </div>
+            <button type="button" onClick={closeContactMirror} aria-label="Fechar conversa" data-testid="button-close-contact-mirror" className="grid size-10 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+              <X size={20} />
+            </button>
+          </header>
+
+          <div
+            ref={contactMirrorListRef}
+            onScroll={(event) => {
+              const el = event.currentTarget;
+              contactMirrorStickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+            }}
+            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+            data-testid="list-contact-mirror-messages"
+          >
+            {contactMirrorLoading && contactMirrorMessages.length === 0 ? (
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+            ) : contactMirrorMessages.length === 0 ? (
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda nessa conversa.</p>
+            ) : (
+              contactMirrorMessages.map((message) => {
+                const fromContact = message.senderId === openContactMirrorId;
+                const senderName = fromContact
+                  ? approvedContacts.find((contact) => contact.contactUserId === openContactMirrorId)?.contactName ?? 'Contato'
+                  : contactMirrorChildName ?? 'Criança';
+                const sticker = isStickerMessage(message);
+                const bubbleClass = sticker
+                  ? `${fromContact ? 'self-end' : 'self-start'}`
+                  : `rounded-2xl px-4 py-2.5 shadow-sm ${fromContact ? 'self-end bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'self-start bg-[hsl(var(--card))]'}`;
+                return (
+                  <div key={message.id} data-testid={`row-contact-mirror-message-${message.id}`} className={`flex max-w-[80%] flex-col ${fromContact ? 'self-end items-end' : 'self-start items-start'}`}>
+                    <p className="mb-1 px-1 text-[11px] font-bold text-[hsl(var(--muted-foreground))]">{senderName}</p>
+                    <div className={`text-sm leading-6 ${bubbleClass}`}>
+                      <MessageContent message={message} authHeaders={mediaAuthHeaders} />
+                      <p className={`mt-1 text-[10px] font-mono-app uppercase tracking-[.08em] ${fromContact && !sticker ? 'text-[hsl(var(--primary-foreground)/.7)]' : 'text-[hsl(var(--muted-foreground))]'}`}>
+                        {new Date(message.createdAt).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          {contactMirrorError && <p className="shrink-0 px-4 pb-2 text-sm font-semibold text-[hsl(var(--destructive))]">{contactMirrorError}</p>}
+          <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-6 py-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" /> Espelho: você só acompanha, quem manda mensagem aqui é {contactMirrorChildName ?? 'a criança'} e a pessoa aprovada.</div>
         </div>
       )}
     </>

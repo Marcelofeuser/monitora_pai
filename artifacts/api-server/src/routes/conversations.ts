@@ -352,6 +352,37 @@ router.post(
 );
 
 /**
+ * GET /api/parent/contacts/:contactUserId/messages
+ * Responsavel: visao so-leitura do espelho da conversa Crianca <->
+ * Contato aprovado (pedido do Marcelo -- "o chat e um espelho do chat
+ * da crianca": toda pessoa aprovada que ele adiciona tem que aparecer
+ * pra ele tambem como uma conversa de verdade, nao so uma lista solta
+ * de mensagens misturadas). O Responsavel nunca e participante dessa
+ * conversa -- so visualiza, nao tem rota de POST aqui.
+ */
+router.get("/parent/contacts/:contactUserId/messages", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+  const contactUserId = req.params.contactUserId;
+
+  const [contactRow] = await db
+    .select()
+    .from(contactsTable)
+    .where(and(eq(contactsTable.contactUserId, contactUserId), eq(contactsTable.status, "approved")))
+    .limit(1);
+  if (!contactRow) return res.status(404).json({ error: "not_found" });
+
+  const [child] = await db.select().from(usersTable).where(eq(usersTable.id, contactRow.childId)).limit(1);
+  if (!child || child.parentId !== auth.userId) {
+    return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  }
+
+  const conversation = await getOrCreateContactConversation(contactRow.childId, contactUserId);
+  const messages = await listMessages(conversation.id);
+  return res.json({ conversation, messages, contactName: contactRow.contactName, childName: child.name });
+});
+
+/**
  * GET /api/contact/conversations/with-child
  * Contato (token de dispositivo, ver contactAuth.ts): conversa com a
  * Criança dele -- um Contato só tem UMA Criança (a do convite que
