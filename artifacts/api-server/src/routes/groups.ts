@@ -123,7 +123,11 @@ router.delete("/groups/:id", async (req, res) => {
  * do fluxo de criação ("colocar foto") e também usado pra trocar depois
  * pelo menu do balão. Multipart, campo "file", só imagem.
  */
-router.post("/groups/:id/photo", uploadSingleMediaFile, async (req, res) => {
+// Express<Request> tipado explicitamente: o multer (uploadSingleMediaFile)
+// na cadeia quebra a inferencia automatica de req.params a partir do path
+// literal (mesma armadilha ja documentada no projeto -- ver POST
+// /groups/:id/messages, algumas linhas abaixo, que ja usa esse padrao).
+router.post("/groups/:id/photo", uploadSingleMediaFile, async (req: Request<{ id: string }>, res) => {
   const auth = getAuth(req);
   if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
 
