@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Política de Privacidade e Termos de Uso — Ampara</title>
+<meta name="description" content="Política de Privacidade e Termos de Uso do Ampara / Ampara Kids — como tratamos os dados da sua família, em conformidade com a LGPD e o ECA Digital." />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="canonical" href="https://amparakids.com/privacidade.html" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --cream: #F7F2E8;
+    --cream-2: #FBF7EF;
+    --ink: #24343A;
+    --ink-soft: #55636A;
+    --teal: #1F4C4A;
+    --teal-2: #2A615E;
+    --gold: #E7B867;
+    --gold-2: #D9A63F;
+    --line: #E4D9C4;
+    --radius-lg: 26px;
+    --radius-md: 16px;
+    --shadow: 0 18px 40px -18px rgba(31, 76, 74, 0.28);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Manrope', system-ui, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--teal); }
+  .serif { font-family: 'Newsreader', Georgia, serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  header.site {
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(247, 242, 232, 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; max-width: 1120px; margin: 0 auto; padding-left: 24px; padding-right: 24px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); }
+  .brand svg { flex: none; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; font-weight: 700; font-size: 14px; padding: 10px 18px; text-decoration: none; background: var(--teal); color: var(--cream-2); }
+
+  main { padding: 56px 0 96px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(231, 184, 103, 0.28); color: #8A5A16;
+    font-weight: 700; font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase;
+    padding: 7px 14px; border-radius: 999px; margin-bottom: 18px;
+  }
+  h1 { font-family: 'Newsreader', Georgia, serif; font-size: 40px; line-height: 1.12; margin: 0 0 12px; letter-spacing: -0.01em; }
+  .updated { color: var(--ink-soft); font-size: 14px; margin: 0 0 40px; }
+
+  .doc-card {
+    background: var(--cream-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: 40px clamp(20px, 5vw, 56px);
+  }
+
+  nav.toc {
+    background: rgba(31,76,74,0.05);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 20px 24px;
+    margin-bottom: 40px;
+  }
+  nav.toc p { margin: 0 0 10px; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--teal); }
+  nav.toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 24px; }
+  nav.toc li { margin-bottom: 6px; font-size: 14px; break-inside: avoid; }
+  nav.toc a { text-decoration: none; font-weight: 600; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section.part { margin-top: 44px; }
+  section.part:first-of-type { margin-top: 0; }
+  h2 { font-family: 'Newsreader', Georgia, serif; font-size: 26px; color: var(--teal); margin: 0 0 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+  section.part:first-of-type h2 { border-top: none; padding-top: 0; }
+  h3 { font-size: 16px; font-weight: 800; margin: 24px 0 8px; }
+  p { margin: 0 0 14px; font-size: 15.5px; }
+  ul, ol.items { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 6px; font-size: 15.5px; }
+  strong { font-weight: 800; }
+  .box {
+    background: rgba(31,76,74,0.06);
+    border-left: 3px solid var(--teal);
+    border-radius: 0 12px 12px 0;
+    padding: 14px 18px;
+    margin: 0 0 16px;
+    font-size: 14.5px;
+    color: var(--ink-soft);
+  }
+  .contact-card {
+    display: flex; flex-wrap: wrap; gap: 24px; justify-content: space-between;
+    background: var(--teal); color: var(--cream-2);
+    border-radius: var(--radius-md); padding: 24px 28px; margin-top: 8px;
+  }
+  .contact-card h3 { color: var(--cream-2); margin-top: 0; }
+  .contact-card a { color: var(--gold); font-weight: 700; }
+  .contact-card p { margin: 0; font-size: 14px; opacity: 0.9; }
+
+  footer.site { border-top: 1px solid var(--line); padding: 32px 0; }
+  .footer-bottom { max-width: 1120px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--ink-soft); font-size: 13px; }
+
+  @media (max-width: 640px) {
+    h1 { font-size: 30px; }
+    nav.toc ol { columns: 1; }
+    .doc-card { padding: 28px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="nav">
+    <a class="brand" href="/">
+      <svg width="30" height="30" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="180" height="180" rx="42" fill="#E7B867"/>
+        <path d="M90 35L133 51V84C133 112 114 132 90 144C66 132 47 112 47 84V51L90 35Z" fill="#1F4C4A"/>
+        <path d="M70 88L83 101L111 72" stroke="#F7F2E8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Ampara
+    </a>
+    <a class="btn" href="/">Voltar ao site</a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <span class="eyebrow">Documento legal</span>
+    <h1>Política de Privacidade<br>e Termos de Uso</h1>
+    <p class="updated">Última atualização: 8 de setembro de 2026</p>
+
+    <div class="doc-card">
+
+      <nav class="toc">
+        <p>Sumário</p>
+        <ol>
+          <li><a href="#quem-somos">1. Quem somos</a></li>
+          <li><a href="#termos-de-uso">2. Termos de Uso</a></li>
+          <li><a href="#dados-coletados">3. Dados que coletamos</a></li>
+          <li><a href="#finalidade">4. Para que usamos os dados</a></li>
+          <li><a href="#base-legal">5. Base legal (LGPD)</a></li>
+          <li><a href="#compartilhamento">6. Com quem compartilhamos</a></li>
+          <li><a href="#seguranca">7. Segurança</a></li>
+          <li><a href="#retencao">8. Retenção e exclusão de dados</a></li>
+          <li><a href="#direitos">9. Seus direitos como titular</a></li>
+          <li><a href="#criancas">10. Crianças e adolescentes (ECA Digital)</a></li>
+          <li><a href="#cookies">11. Cookies e armazenamento local</a></li>
+          <li><a href="#alteracoes">12. Alterações desta política</a></li>
+          <li><a href="#contato">13. Contato</a></li>
+        </ol>
+      </nav>
+
+      <section class="part" id="quem-somos">
+        <h2>1. Quem somos</h2>
+        <p>
+          O Ampara e o Ampara Kids (juntos, "<strong>Ampara</strong>" ou "a Plataforma") são operados por:
+        </p>
+        <ul>
+          <li><strong>Razão social:</strong> SEVENGO SMART TECNOLOGY INOVA SIMPLES (I.S.)</li>
+          <li><strong>CNPJ:</strong> 65.280.576/0001-03</li>
+          <li><strong>Endereço:</strong> Avenida das Varandas, Q05 L14 CS06 — Cond. Vale das Brisas 1, Sítios Vale das Brisas, Senador Canedo/GO, CEP 75262-268</li>
+        </ul>
+        <p>
+          Para efeitos da Lei Geral de Proteção de Dados (Lei 13.709/2018, "LGPD"), a SevenGo Smart Tecnology é a
+          <strong>controladora</strong> dos dados pessoais tratados através do Ampara.
+        </p>
+      </section>
+
+      <section class="part" id="termos-de-uso">
+        <h2>2. Termos de Uso</h2>
+
+        <h3>2.1 Aceite</h3>
+        <p>Ao criar uma conta ou usar o Ampara, você concorda com estes Termos de Uso e com a Política de Privacidade descrita neste documento.</p>
+
+        <h3>2.2 Quem pode usar</h3>
+        <p>
+          O Ampara é destinado a <strong>responsáveis legais maiores de 18 anos</strong> que desejam acompanhar a vida
+          digital de crianças e adolescentes sob sua guarda ou responsabilidade (filhos, netos, sobrinhos, tutelados).
+        </p>
+        <div class="box">
+          Em conformidade com o ECA Digital (Lei 15.211/2025), a conta de uma Criança <strong>nunca é criada por ela mesma</strong>
+          — é sempre um Responsável adulto quem cadastra o perfil, gera o vínculo do aparelho e permanece com o controle
+          sobre tempo de uso, contatos autorizados e relatórios de atividade.
+        </div>
+
+        <h3>2.3 Uso permitido</h3>
+        <p>
+          O Ampara existe para apoiar o exercício da responsabilidade parental. Você concorda em usar a Plataforma
+          exclusivamente para acompanhar crianças e adolescentes sob sua guarda legal — nunca para monitorar cônjuges,
+          outros adultos, ou qualquer pessoa sem relação de tutela/guarda e sem base legal para tanto.
+        </p>
+
+        <h3>2.4 O que não é permitido</h3>
+        <ul>
+          <li>Usar a Plataforma para vigiar adultos ou terceiros sem relação de guarda/tutela com você;</li>
+          <li>Tentar acessar dados de crianças que não estão sob sua responsabilidade;</li>
+          <li>Contornar, desativar ou manipular mecanismos de segurança da Plataforma;</li>
+          <li>Revender, sublicenciar ou compartilhar seu acesso com terceiros não autorizados.</li>
+        </ul>
+
+        <h3>2.5 Planos e cobrança</h3>
+        <p>
+          O Ampara é oferecido nos planos descritos em <a href="/#preco">amparakids.com/#preco</a>, com cobrança recorrente
+          conforme o plano escolhido. Você pode cancelar a qualquer momento; o cancelamento interrompe cobranças futuras
+          e não gera reembolso proporcional ao período já pago, salvo disposição legal em contrário.
+        </p>
+
+        <h3>2.6 Disponibilidade e suporte</h3>
+        <p>
+          Fazemos o possível para manter a Plataforma disponível continuamente, mas não garantimos operação ininterrupta —
+          manutenções e instabilidades pontuais podem ocorrer. Dúvidas ou problemas: <a href="mailto:privacidade@amparakids.com">privacidade@amparakids.com</a>.
+        </p>
+
+        <h3>2.7 Suspensão e encerramento</h3>
+        <p>
+          Podemos suspender ou encerrar contas que violem estes Termos. Você pode encerrar sua conta a qualquer momento
+          e solicitar a exclusão definitiva dos dados associados (ver seção 8).
+        </p>
+
+        <h3>2.8 Lei aplicável e foro</h3>
+        <p>
+          Estes Termos são regidos pelas leis brasileiras. Fica eleito o foro do domicílio do consumidor para dirimir
+          eventuais controvérsias, conforme o Código de Defesa do Consumidor.
+        </p>
+      </section>
+
+      <section class="part" id="dados-coletados">
+        <h2>3. Dados que coletamos</h2>
+
+        <h3>Do Responsável</h3>
+        <ul>
+          <li>Nome e e-mail (via nosso provedor de autenticação);</li>
+          <li>Relação declarada com a criança (pai, mãe, avó, tio, etc.);</li>
+          <li>Dados de pagamento, quando aplicável — processados por provedores especializados, não armazenados por nós.</li>
+        </ul>
+
+        <h3>Da Criança (sempre cadastrada por um Responsável)</h3>
+        <ul>
+          <li>Nome e idade (a idade é opcional);</li>
+          <li>Localização do dispositivo, quando a funcionalidade está ativa;</li>
+          <li>Mensagens trocadas com contatos aprovados e em grupos (texto, fotos, vídeos, áudio, figurinhas);</li>
+          <li>Lista de contatos aprovados e grupos dos quais participa;</li>
+          <li>Tempo de uso do dispositivo/app.</li>
+        </ul>
+        <div class="box">
+          A conversa privada entre o Responsável e a Criança <strong>não é espelhada para outros Responsáveis ou terceiros</strong>
+          — ela existe nos nossos servidores para que o serviço funcione (entregar e armazenar as mensagens), mas não é
+          usada para nenhuma outra finalidade nem compartilhada comercialmente.
+        </div>
+
+        <h3>Dados técnicos</h3>
+        <ul>
+          <li>Endereço IP, identificadores de dispositivo e registros de acesso, usados para segurança, prevenção de fraude e depuração técnica.</li>
+        </ul>
+      </section>
+
+      <section class="part" id="finalidade">
+        <h2>4. Para que usamos os dados</h2>
+        <ul>
+          <li>Prestar o serviço: espelhamento de conversas, localização, controle de tempo de tela, gestão de contatos e grupos;</li>
+          <li>Segurança da criança: moderação e remoção de conteúdo prejudicial quando notificados, prevenção de abuso;</li>
+          <li>Comunicação com o Responsável: notificações de atividade, suporte, avisos de cobrança;</li>
+          <li>Cumprimento de obrigações legais, incluindo as previstas no ECA Digital e na LGPD.</li>
+        </ul>
+      </section>
+
+      <section class="part" id="base-legal">
+        <h2>5. Base legal (LGPD)</h2>
+        <ul>
+          <li><strong>Consentimento do Responsável</strong> — coletado de forma explícita, com data e hora registradas, no momento em que o perfil da Criança é criado, e a cada novo Responsável que passa a ter acesso ao mesmo espaço familiar;</li>
+          <li><strong>Cumprimento de obrigação legal</strong>, quando aplicável (ex.: exigências do ECA Digital);</li>
+          <li><strong>Legítimo interesse</strong> do controlador para segurança da Plataforma e prevenção de fraude, sempre subordinado ao melhor interesse da criança.</li>
+        </ul>
+      </section>
+
+      <section class="part" id="compartilhamento">
+        <h2>6. Com quem compartilhamos</h2>
+        <p><strong>Não vendemos dados pessoais a terceiros.</strong> Compartilhamos dados apenas com:</p>
+        <ul>
+          <li>Provedores de infraestrutura estritamente necessários para operar o serviço (hospedagem, autenticação, envio de notificações), sob obrigações contratuais de confidencialidade e segurança;</li>
+          <li>Autoridades competentes, quando exigido por lei ou ordem judicial;</li>
+          <li>Em situações de risco à segurança da criança ou de terceiros, na medida necessária para proteger sua integridade.</li>
+        </ul>
+      </section>
+
+      <section class="part" id="seguranca">
+        <h2>7. Segurança</h2>
+        <ul>
+          <li>Todas as conexões são feitas por HTTPS/TLS;</li>
+          <li>Senhas e tokens de acesso são armazenados com hash, nunca em texto puro;</li>
+          <li>Cada dispositivo (Criança ou Contato aprovado) recebe uma credencial própria, única e revogável;</li>
+          <li>Acesso aos dados de uma Criança é restrito apenas aos Responsáveis vinculados a ela.</li>
+        </ul>
+        <p>
+          Adotamos medidas técnicas e administrativas de segurança proporcionais ao risco, conforme o art. 46 da LGPD.
+          Não afirmamos usar criptografia de ponta a ponta: o próprio funcionamento do Ampara — espelhar conversas para
+          o Responsável e permitir moderação de conteúdo — exige que as mensagens sejam processadas pelos nossos
+          servidores, sob controles de acesso rígidos, e não apenas entre os dispositivos das partes.
+        </p>
+      </section>
+
+      <section class="part" id="retencao">
+        <h2>8. Retenção e exclusão de dados</h2>
+        <p>Mantemos os dados enquanto a conta estiver ativa e for necessário para prestar o serviço.</p>
+        <p>
+          Ao excluir o perfil de uma Criança, <strong>todos</strong> os dados associados — mensagens, mídia (fotos, vídeos,
+          áudios), localização, contatos e grupos — são apagados de forma <strong>definitiva e irreversível</strong>,
+          incluindo os arquivos armazenados em nosso servidor.
+        </p>
+        <p>Você pode solicitar essa exclusão a qualquer momento diretamente pelo app ou pelo canal de contato abaixo.</p>
+      </section>
+
+      <section class="part" id="direitos">
+        <h2>9. Seus direitos como titular de dados</h2>
+        <p>Nos termos do art. 18 da LGPD, você pode solicitar a qualquer momento:</p>
+        <ul>
+          <li>Confirmação da existência de tratamento e acesso aos seus dados;</li>
+          <li>Correção de dados incompletos, inexatos ou desatualizados;</li>
+          <li>Anonimização, bloqueio ou eliminação de dados desnecessários ou tratados em desconformidade com a lei;</li>
+          <li>Portabilidade dos dados a outro fornecedor de serviço;</li>
+          <li>Informação sobre com quem compartilhamos seus dados;</li>
+          <li>Revogação do consentimento, a qualquer momento.</li>
+        </ul>
+        <p>Para exercer qualquer um desses direitos, escreva para <a href="mailto:privacidade@amparakids.com">privacidade@amparakids.com</a> — buscamos responder em até 15 dias corridos.</p>
+      </section>
+
+      <section class="part" id="criancas">
+        <h2>10. Crianças e adolescentes (ECA Digital)</h2>
+        <p>Em conformidade com a Lei 15.211/2025 (ECA Digital), o Ampara garante que:</p>
+        <ul>
+          <li>A conta de uma Criança é sempre criada e vinculada por um Responsável adulto — a criança nunca se auto-cadastra;</li>
+          <li>O Responsável mantém controle sobre tempo de uso, contatos autorizados, compras e recebe relatórios periódicos de atividade;</li>
+          <li>As configurações de privacidade vêm restritivas por padrão: nenhum contato conversa com a Criança sem aprovação prévia, e grupos só existem se criados/autorizados por um Responsável;</li>
+          <li>Conteúdo notificado como prejudicial é avaliado e removido com prioridade.</li>
+        </ul>
+      </section>
+
+      <section class="part" id="cookies">
+        <h2>11. Cookies e armazenamento local</h2>
+        <p>
+          Usamos armazenamento local no navegador/app apenas para manter sua sessão ativa e lembrar preferências
+          (como tema claro/escuro). Não usamos cookies de rastreamento publicitário de terceiros.
+        </p>
+      </section>
+
+      <section class="part" id="alteracoes">
+        <h2>12. Alterações desta política</h2>
+        <p>
+          Podemos atualizar este documento periodicamente. A data no topo da página sempre indica a versão mais
+          recente. Mudanças materiais serão comunicadas por e-mail ou aviso dentro do app.
+        </p>
+      </section>
+
+      <section class="part" id="contato">
+        <h2>13. Contato</h2>
+        <div class="contact-card">
+          <div>
+            <h3>Canal do titular de dados</h3>
+            <p>Dúvidas, solicitações de acesso, correção ou exclusão de dados:</p>
+          </div>
+          <div>
+            <a href="mailto:privacidade@amparakids.com">privacidade@amparakids.com</a>
+            <p style="margin-top:6px;">SEVENGO SMART TECNOLOGY INOVA SIMPLES (I.S.) — CNPJ 65.280.576/0001-03</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="footer-bottom">
+    <span>&copy; <span id="year"></span> Ampara. Todos os direitos reservados.</span>
+    <span>Goiânia, Brasil</span>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+
+</body>
+</html>

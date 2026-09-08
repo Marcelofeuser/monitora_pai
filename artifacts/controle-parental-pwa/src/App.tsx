@@ -20,6 +20,7 @@ import {
   MapPin,
   Menu,
   MessageCircle,
+  MoreVertical,
   Navigation,
   Pencil,
   Plus,
@@ -1687,6 +1688,24 @@ function Conversations() {
                           className="text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--destructive))] disabled:opacity-60"
                         >
                           <X size={16} />
+                        </button>
+                        {/* Botão de mais opções (renomear/bloquear/favoritar)
+                            -- pedido do Marcelo: antes esse menu (mesmo Sheet
+                            de baixo, "sheet-contact-actions") só abria via
+                            segurar 2s na lista "Conversas", que só mostra
+                            contato JÁ conectado -- quem ainda não aceitou o
+                            convite (só aparece aqui em Convites) não tinha
+                            NENHUM jeito de renomear/bloquear/favoritar. Reusa
+                            o mesmo Sheet e as mesmas funções (funcionam com
+                            qualquer ApprovedContact, conectado ou não). */}
+                        <button
+                          type="button"
+                          onClick={() => { setContactSheetError(null); setContactSheetTarget(contact); }}
+                          aria-label={`Mais opções para ${contact.contactName}`}
+                          data-testid={`button-contact-more-${contact.id}`}
+                          className="text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
+                        >
+                          <MoreVertical size={16} />
                         </button>
                       </div>
                     </li>
