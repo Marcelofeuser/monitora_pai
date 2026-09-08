@@ -24,7 +24,7 @@ import { fetchChildScreenTimeStatus, sendScreenTimeHeartbeat } from '@/lib/scree
 import type { ChildLockStatus } from '@/lib/screen-time-api';
 import { enablePushNotifications, disablePushNotifications, isPushSupported } from '@/lib/push';
 import { getRelationshipInfo } from '@/lib/relationship';
-import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin, Plus, Maximize2, Minimize2, X } from 'lucide-react';
+import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin, Plus, Maximize2, Minimize2, X, ArrowLeft, ChevronRight } from 'lucide-react';
 
 /**
  * Rota /join?token=... — é para onde o link do QR code aponta.
@@ -106,6 +106,10 @@ export function PairingJoin() {
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [composerToolsOpen, setComposerToolsOpen] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(false);
+  // Lista de conversas em coluna (estilo WhatsApp), em vez da fileira
+  // horizontal de bolinhas de antes -- pedido do Marcelo. Começa aberta:
+  // a Criança vê a lista primeiro e toca numa conversa pra abrir.
+  const [chatListOpen, setChatListOpen] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const privateListRef = useRef<HTMLDivElement | null>(null);
   const privateStickToBottomRef = useRef(true);
@@ -312,11 +316,13 @@ export function PairingJoin() {
   function selectParentChat() {
     setSelectedGroupId(null);
     setSelectedContactUserId(null);
+    setChatListOpen(false);
   }
 
   function selectContactChat(contactUserId: string) {
     setSelectedGroupId(null);
     setSelectedContactUserId(contactUserId);
+    setChatListOpen(false);
   }
 
   function selectGroupChat(groupId: string) {
@@ -325,6 +331,7 @@ export function PairingJoin() {
     setGroupDraft('');
     setGroupPendingFile(null);
     setSelectedGroupId(groupId);
+    setChatListOpen(false);
   }
 
   function openGroupCreator() {
@@ -801,95 +808,124 @@ export function PairingJoin() {
                 }
                 data-testid="panel-private-chat"
               >
-                {/* Bolinhas de conversa (Responsável + Contatos que já
-                    aceitaram convite) -- pedido do Marcelo, igual ao
-                    WhatsApp. Fica visível mesmo em tela cheia, pra dar
-                    pra trocar de conversa sem sair do modo expandido. */}
-                <div className="mb-2 flex shrink-0 gap-3 overflow-x-auto pb-1">
-                  <button
-                    type="button"
-                    onClick={selectParentChat}
-                    data-testid="button-select-chat-parent"
-                    className={`flex shrink-0 flex-col items-center gap-1 ${selectedGroupId === null && selectedContactUserId === null ? '' : 'opacity-60'}`}
-                  >
-                    <span
-                      className="grid size-11 place-items-center rounded-full text-sm font-extrabold text-white shadow-sm"
-                      style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
-                    >
-                      {(parentName ?? relationshipInfo.label).trim().slice(0, 1).toUpperCase()}
-                    </span>
-                    <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{parentName ?? relationshipInfo.label}</span>
-                  </button>
-                  {contacts.map((contact) => (
+                {chatListOpen ? (
+                  /* Lista de conversas em COLUNA (Responsável + Contatos +
+                     Grupos), igual ao WhatsApp -- antes era uma fileira
+                     horizontal de bolinhas, trocada por pedido do Marcelo.
+                     Toca numa linha pra abrir a conversa cheia. */
+                  <>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Sparkles size={18} className="shrink-0 text-[hsl(var(--secondary))]" />
+                      <h2 className="font-kid min-w-0 flex-1 truncate text-base font-extrabold">Conversas</h2>
+                    </div>
+                    <div className="mt-3 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto" data-testid="list-chat-selector">
+                      <button
+                        type="button"
+                        onClick={selectParentChat}
+                        data-testid="button-select-chat-parent"
+                        className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-[hsl(var(--muted)/.6)]"
+                      >
+                        <span
+                          className="grid size-12 shrink-0 place-items-center rounded-full text-base font-extrabold text-white shadow-sm"
+                          style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
+                        >
+                          {(parentName ?? relationshipInfo.label).trim().slice(0, 1).toUpperCase()}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{parentName ?? relationshipInfo.label}</span>
+                          <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">{relationshipInfo.label}</span>
+                        </span>
+                        <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
+                      </button>
+                      {contacts.map((contact) => (
+                        <button
+                          key={contact.id}
+                          type="button"
+                          onClick={() => selectContactChat(contact.contactUserId)}
+                          data-testid={`button-select-chat-contact-${contact.id}`}
+                          className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-[hsl(var(--muted)/.6)]"
+                        >
+                          <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[hsl(var(--secondary))] text-base font-extrabold text-white shadow-sm">
+                            {contact.contactName.trim().slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{contact.contactName}</span>
+                            <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">Contato</span>
+                          </span>
+                          <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
+                        </button>
+                      ))}
+                      {groups.map((group) => (
+                        <button
+                          key={group.id}
+                          type="button"
+                          onClick={() => selectGroupChat(group.id)}
+                          data-testid={`button-select-chat-group-${group.id}`}
+                          className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-[hsl(var(--muted)/.6)]"
+                        >
+                          <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[hsl(var(--accent))] text-base font-extrabold text-white shadow-sm">
+                            {group.name.trim().slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{group.name}</span>
+                            <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">Grupo</span>
+                          </span>
+                          <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
+                        </button>
+                      ))}
+                      {/* "Criar grupos" pelo lado da Criança (pedido do Marcelo). */}
+                      <button
+                        type="button"
+                        onClick={openGroupCreator}
+                        data-testid="button-open-group-creator"
+                        className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-[hsl(var(--muted)/.6)]"
+                      >
+                        <span className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]">
+                          <Plus size={18} />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-extrabold text-[hsl(var(--muted-foreground))]">Criar grupo</span>
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex shrink-0 items-center gap-2">
                     <button
-                      key={contact.id}
                       type="button"
-                      onClick={() => selectContactChat(contact.contactUserId)}
-                      data-testid={`button-select-chat-contact-${contact.id}`}
-                      className={`flex shrink-0 flex-col items-center gap-1 ${selectedGroupId === null && selectedContactUserId === contact.contactUserId ? '' : 'opacity-60'}`}
+                      onClick={() => setChatListOpen(true)}
+                      aria-label="Voltar pra lista de conversas"
+                      data-testid="button-back-to-chat-list"
+                      className="grid size-8 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
                     >
-                      <span className="grid size-11 place-items-center rounded-full bg-[hsl(var(--secondary))] text-sm font-extrabold text-white shadow-sm">
-                        {contact.contactName.trim().slice(0, 1).toUpperCase()}
-                      </span>
-                      <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{contact.contactName}</span>
+                      <ArrowLeft size={18} />
                     </button>
-                  ))}
-                  {groups.map((group) => (
+                    <Sparkles size={18} className="shrink-0 text-[hsl(var(--secondary))]" />
+                    <h2 className="font-kid min-w-0 flex-1 truncate text-base font-extrabold">
+                      {selectedGroupId
+                        ? (groups.find((g) => g.id === selectedGroupId)?.name ?? 'Grupo')
+                        : selectedContactUserId
+                          ? (contacts.find((c) => c.contactUserId === selectedContactUserId)?.contactName ?? 'Conversa')
+                          : parentName
+                            ? `${parentName} (${relationshipInfo.label})`
+                            : relationshipInfo.label}
+                    </h2>
                     <button
-                      key={group.id}
                       type="button"
-                      onClick={() => selectGroupChat(group.id)}
-                      data-testid={`button-select-chat-group-${group.id}`}
-                      className={`flex shrink-0 flex-col items-center gap-1 ${selectedGroupId === group.id ? '' : 'opacity-60'}`}
+                      onClick={() => setChatExpanded((current) => !current)}
+                      aria-label={chatExpanded ? 'Reduzir conversa' : 'Expandir conversa pra tela toda'}
+                      title={chatExpanded ? 'Reduzir conversa' : 'Expandir conversa pra tela toda'}
+                      data-testid="button-toggle-chat-fullscreen"
+                      className="grid size-8 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
                     >
-                      <span className="grid size-11 place-items-center rounded-full bg-[hsl(var(--accent))] text-sm font-extrabold text-white shadow-sm">
-                        {group.name.trim().slice(0, 1).toUpperCase()}
-                      </span>
-                      <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{group.name}</span>
+                      {chatExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                     </button>
-                  ))}
-                  {/* "Criar grupos" pelo lado da Criança (pedido do
-                      Marcelo) -- mesma bolinha "+" do WhatsApp, no fim
-                      da fileira. */}
-                  <button
-                    type="button"
-                    onClick={openGroupCreator}
-                    aria-label="Criar grupo"
-                    data-testid="button-open-group-creator"
-                    className="flex shrink-0 flex-col items-center gap-1"
-                  >
-                    <span className="grid size-11 place-items-center rounded-full border-2 border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]">
-                      <Plus size={18} />
-                    </span>
-                    <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">Grupo</span>
-                  </button>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Sparkles size={18} className="shrink-0 text-[hsl(var(--secondary))]" />
-                  <h2 className="font-kid min-w-0 flex-1 truncate text-base font-extrabold">
-                    {selectedGroupId
-                      ? (groups.find((g) => g.id === selectedGroupId)?.name ?? 'Grupo')
-                      : selectedContactUserId
-                        ? (contacts.find((c) => c.contactUserId === selectedContactUserId)?.contactName ?? 'Conversa')
-                        : parentName
-                          ? `${parentName} (${relationshipInfo.label})`
-                          : relationshipInfo.label}
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => setChatExpanded((current) => !current)}
-                    aria-label={chatExpanded ? 'Reduzir conversa' : 'Expandir conversa pra tela toda'}
-                    title={chatExpanded ? 'Reduzir conversa' : 'Expandir conversa pra tela toda'}
-                    data-testid="button-toggle-chat-fullscreen"
-                    className="grid size-8 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
-                  >
-                    {chatExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                  </button>
-                </div>
+                  </div>
+                )}
+                {!chatListOpen && (
                 <p className="mt-1 shrink-0 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
                   {selectedGroupId ? 'Todo mundo do grupo vê essa conversa.' : selectedContactUserId ? 'Essa conversa também é vista pelo responsável.' : 'Só vocês dois veem essa conversa.'}
                 </p>
-                {selectedGroupId ? (
+                )}
+                {!chatListOpen && (selectedGroupId ? (
                   <>
                     <div
                       ref={groupListRef}
@@ -920,6 +956,9 @@ export function PairingJoin() {
                                 style={sticker || !fromMe ? undefined : { background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
                               >
                                 <MessageContent message={message} authHeaders={{ 'X-Child-Token': deviceToken ?? '' }} />
+                                <p className={`mt-1 text-[10px] uppercase tracking-[.08em] ${fromMe && !sticker ? 'text-white/70' : 'text-[hsl(var(--muted-foreground))]'}`}>
+                                  {new Date(message.createdAt).toLocaleString('pt-BR')}
+                                </p>
                               </div>
                             </div>
                           );
@@ -1052,6 +1091,9 @@ export function PairingJoin() {
                               style={sticker || !fromMe ? undefined : { background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
                             >
                               <MessageContent message={message} authHeaders={{ 'X-Child-Token': deviceToken ?? '' }} />
+                              <p className={`mt-1 text-[10px] uppercase tracking-[.08em] ${fromMe && !sticker ? 'text-white/70' : 'text-[hsl(var(--muted-foreground))]'}`}>
+                                {new Date(message.createdAt).toLocaleString('pt-BR')}
+                              </p>
                             </div>
                           );
                         })
@@ -1155,7 +1197,7 @@ export function PairingJoin() {
                       </button>
                     </form>
                   </>
-                )}
+                ))}
               </div>
             )}
 

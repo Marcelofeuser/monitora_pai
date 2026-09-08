@@ -17,7 +17,7 @@ import { AttachmentPicker } from '@/components/attachment-picker';
 import { StickerPicker } from '@/components/sticker-picker';
 import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
-import { LockKeyhole, Plus, Send } from 'lucide-react';
+import { LockKeyhole, Plus, Send, ArrowLeft, ChevronRight } from 'lucide-react';
 
 /**
  * Rota /contact — chat contínuo de um Contato aprovado (mãe, avó, tia)
@@ -82,6 +82,10 @@ export function ContactChat() {
   const parentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
+  // Lista de conversas em coluna (estilo WhatsApp), em vez da fileira
+  // horizontal de bolinhas de antes -- pedido do Marcelo. Começa aberta:
+  // o Contato vê a lista primeiro e toca numa conversa pra abrir.
+  const [chatListOpen, setChatListOpen] = useState(true);
 
   // Chat tem que rolar sozinho pra ultima mensagem, igual WhatsApp -- so
   // auto-rola se ja estava perto do fim (ou acabou de trocar de
@@ -244,6 +248,7 @@ export function ContactChat() {
   function selectChildChat() {
     setSelectedGroupId(null);
     setSelectedParentId(null);
+    setChatListOpen(false);
   }
 
   function selectGroupChat(groupId: string) {
@@ -253,6 +258,7 @@ export function ContactChat() {
     setGroupPendingFile(null);
     setSelectedParentId(null);
     setSelectedGroupId(groupId);
+    setChatListOpen(false);
   }
 
   function selectParentChat(parentId: string) {
@@ -262,6 +268,7 @@ export function ContactChat() {
     setParentPendingFile(null);
     setSelectedGroupId(null);
     setSelectedParentId(parentId);
+    setChatListOpen(false);
   }
 
   async function handleSendGroupMessage(event: FormEvent) {
@@ -427,33 +434,57 @@ export function ContactChat() {
   return (
     <main className="flex min-h-[100dvh] flex-col bg-[hsl(var(--background))]">
       <header className="flex items-center justify-between border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-5 py-4">
-        <div className="min-w-0">
-          <h1 className="truncate text-base font-bold">
-            {selectedGroupId
-              ? (groups.find((g) => g.id === selectedGroupId)?.name ?? 'Grupo')
-              : selectedParentId
-                ? (parents.find((p) => p.parentId === selectedParentId)?.parentName ?? 'Responsável')
-                : (childName ?? 'Conversa')}
-          </h1>
-          <p className="text-xs text-[hsl(var(--muted-foreground))]">
-            {selectedGroupId ? 'Chat de grupo' : selectedParentId ? 'Conversa com o responsável' : contactName ? `Conectado como ${contactName}` : 'Contato aprovado'}
-          </p>
+        <div className="flex min-w-0 items-center gap-3">
+          {!chatListOpen && (groups.length > 0 || parents.length > 0) && (
+            <button
+              type="button"
+              onClick={() => setChatListOpen(true)}
+              aria-label="Voltar pra lista de conversas"
+              data-testid="button-back-to-chat-list"
+              className="grid size-9 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
+            >
+              <ArrowLeft size={18} />
+            </button>
+          )}
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-bold">
+              {chatListOpen && (groups.length > 0 || parents.length > 0)
+                ? 'Conversas'
+                : selectedGroupId
+                  ? (groups.find((g) => g.id === selectedGroupId)?.name ?? 'Grupo')
+                  : selectedParentId
+                    ? (parents.find((p) => p.parentId === selectedParentId)?.parentName ?? 'Responsável')
+                    : (childName ?? 'Conversa')}
+            </h1>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              {chatListOpen && (groups.length > 0 || parents.length > 0)
+                ? (contactName ? `Conectado como ${contactName}` : 'Contato aprovado')
+                : selectedGroupId ? 'Chat de grupo' : selectedParentId ? 'Conversa com o responsável' : contactName ? `Conectado como ${contactName}` : 'Contato aprovado'}
+            </p>
+          </div>
         </div>
         <ThemeSwitcher />
       </header>
 
-      {(groups.length > 0 || parents.length > 0) && (
-        <div className="flex shrink-0 gap-3 overflow-x-auto border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-5 py-3" data-testid="row-contact-chat-bubbles">
+      {chatListOpen && (groups.length > 0 || parents.length > 0) ? (
+        /* Lista de conversas em COLUNA, igual ao WhatsApp -- antes era uma
+           fileira horizontal de bolinhas, trocada por pedido do Marcelo.
+           Toca numa linha pra abrir a conversa cheia. */
+        <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3" data-testid="list-contact-chat-selector">
           <button
             type="button"
             onClick={selectChildChat}
             data-testid="button-select-chat-child"
-            className={`flex shrink-0 flex-col items-center gap-1 ${selectedGroupId === null && selectedParentId === null ? '' : 'opacity-60'}`}
+            className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-[hsl(var(--muted)/.6)]"
           >
-            <span className="grid size-11 place-items-center rounded-full bg-[hsl(var(--primary))] text-sm font-extrabold text-[hsl(var(--primary-foreground))] shadow-sm">
+            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[hsl(var(--primary))] text-base font-extrabold text-[hsl(var(--primary-foreground))] shadow-sm">
               {(childName ?? '?').trim().slice(0, 1).toUpperCase()}
             </span>
-            <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{childName ?? 'Criança'}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{childName ?? 'Criança'}</span>
+              <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">Conversa com a criança</span>
+            </span>
+            <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
           </button>
           {parents.map((parent) => (
             <button
@@ -461,12 +492,16 @@ export function ContactChat() {
               type="button"
               onClick={() => selectParentChat(parent.parentId)}
               data-testid={`button-select-chat-parent-${parent.parentId}`}
-              className={`flex shrink-0 flex-col items-center gap-1 ${selectedParentId === parent.parentId ? '' : 'opacity-60'}`}
+              className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-[hsl(var(--muted)/.6)]"
             >
-              <span className="grid size-11 place-items-center rounded-full bg-[hsl(var(--accent))] text-sm font-extrabold text-[hsl(var(--accent-foreground))] shadow-sm">
+              <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[hsl(var(--accent))] text-base font-extrabold text-[hsl(var(--accent-foreground))] shadow-sm">
                 {parent.parentName.trim().slice(0, 1).toUpperCase()}
               </span>
-              <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{parent.parentName}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{parent.parentName}</span>
+                <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">Responsável</span>
+              </span>
+              <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
             </button>
           ))}
           {groups.map((group) => (
@@ -475,17 +510,21 @@ export function ContactChat() {
               type="button"
               onClick={() => selectGroupChat(group.id)}
               data-testid={`button-select-chat-group-${group.id}`}
-              className={`flex shrink-0 flex-col items-center gap-1 ${selectedGroupId === group.id ? '' : 'opacity-60'}`}
+              className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition-colors hover:bg-[hsl(var(--muted)/.6)]"
             >
-              <span className="grid size-11 place-items-center rounded-full bg-[hsl(var(--secondary))] text-sm font-extrabold text-white shadow-sm">
+              <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[hsl(var(--secondary))] text-base font-extrabold text-white shadow-sm">
                 {group.name.trim().slice(0, 1).toUpperCase()}
               </span>
-              <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{group.name}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{group.name}</span>
+                <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">Grupo</span>
+              </span>
+              <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
             </button>
           ))}
         </div>
-      )}
-
+      ) : (
+      <>
       <div
         ref={listRef}
         onScroll={(event) => {
@@ -842,6 +881,9 @@ export function ContactChat() {
           </>
         )}
       </div>
+      </>
+      )}
+      {!(chatListOpen && (groups.length > 0 || parents.length > 0)) && (
       <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-5 py-3 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
         <LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" />{' '}
         {selectedGroupId
@@ -850,6 +892,7 @@ export function ContactChat() {
             ? 'Esta é uma conversa direta com o responsável -- não aparece pra criança.'
             : <>Esta conversa também fica visível para o responsável de {childName ?? 'a criança'}.</>}
       </div>
+      )}
     </main>
   );
 }
