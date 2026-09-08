@@ -6,8 +6,11 @@ import {
   fetchContactGroups,
   fetchContactGroupMessages,
   sendContactGroupMessage,
+  fetchContactParents,
+  fetchContactParentChat,
+  sendContactParentMessage,
 } from '@/lib/contact-conversations-api';
-import type { PrivateMessage, GroupSummary, GroupMessage } from '@/lib/contact-conversations-api';
+import type { PrivateMessage, GroupSummary, GroupMessage, ContactParent } from '@/lib/contact-conversations-api';
 import { ThemeSwitcher } from '@/lib/theme';
 import { EmojiPicker } from '@/components/emoji-picker';
 import { AttachmentPicker } from '@/components/attachment-picker';
@@ -62,18 +65,33 @@ export function ContactChat() {
   const [groupAttachError, setGroupAttachError] = useState<string | null>(null);
   const [groupComposerToolsOpen, setGroupComposerToolsOpen] = useState(false);
   const groupTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // "Meu Chat" do lado do Contato: falar direto com o(s) responsável(is)
+  // da criança (Item 13 -- pode ter mais de um), cada um com sua própria
+  // conversa. Mesmo padrão de estado dos grupos, só trocando a fonte.
+  const [parents, setParents] = useState<ContactParent[]>([]);
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
+  const [parentChatMessages, setParentChatMessages] = useState<PrivateMessage[]>([]);
+  const [parentChatLoading, setParentChatLoading] = useState(false);
+  const [parentChatError, setParentChatError] = useState<string | null>(null);
+  const [parentDraft, setParentDraft] = useState('');
+  const [parentSending, setParentSending] = useState(false);
+  const [parentPendingFile, setParentPendingFile] = useState<File | null>(null);
+  const [parentAttachError, setParentAttachError] = useState<string | null>(null);
+  const [parentComposerToolsOpen, setParentComposerToolsOpen] = useState(false);
+  const parentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
 
   // Chat tem que rolar sozinho pra ultima mensagem, igual WhatsApp -- so
   // auto-rola se ja estava perto do fim (ou acabou de trocar de
-  // conversa: Crianca <-> um dos grupos), pra nao puxar a tela de quem
-  // rolou pra cima pra ler o historico.
-  useEffect(() => { stickToBottomRef.current = true; }, [selectedGroupId]);
+  // conversa: Crianca <-> um dos grupos <-> um dos responsaveis), pra nao
+  // puxar a tela de quem rolou pra cima pra ler o historico.
+  useEffect(() => { stickToBottomRef.current = true; }, [selectedGroupId, selectedParentId]);
   useEffect(() => {
     const el = listRef.current;
     if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages, groupChatMessages, selectedGroupId]);
+  }, [messages, groupChatMessages, parentChatMessages, selectedGroupId, selectedParentId]);
 
   useEffect(() => {
     try {
@@ -170,8 +188,62 @@ export function ContactChat() {
     };
   }, [deviceToken, selectedGroupId]);
 
+  // Lista de responsáveis com quem dá pra falar (a mãe/pai, e qualquer
+  // outro guardião adicionado -- Item 13) -- mesma cadência de 20s dos
+  // grupos.
+  useEffect(() => {
+    if (!deviceToken) return;
+    let cancelled = false;
+
+    function loadParents() {
+      fetchContactParents(deviceToken!)
+        .then((data) => {
+          if (!cancelled) setParents(data);
+        })
+        .catch(() => undefined);
+    }
+
+    loadParents();
+    const intervalId = window.setInterval(loadParents, 20000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [deviceToken]);
+
+  // Poll de 5s do chat aberto com um responsável.
+  useEffect(() => {
+    if (!deviceToken || !selectedParentId) return;
+    let cancelled = false;
+
+    async function loadParentMessages(showSpinner: boolean) {
+      if (showSpinner) setParentChatLoading(true);
+      try {
+        const data = await fetchContactParentChat(deviceToken!, selectedParentId!);
+        if (!cancelled) {
+          setParentChatMessages(data.messages);
+          setParentChatError(null);
+        }
+      } catch (err) {
+        if (!cancelled && showSpinner) {
+          setParentChatError(err instanceof Error ? err.message : 'Erro ao carregar a conversa.');
+        }
+      } finally {
+        if (!cancelled && showSpinner) setParentChatLoading(false);
+      }
+    }
+
+    loadParentMessages(true);
+    const intervalId = window.setInterval(() => loadParentMessages(false), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [deviceToken, selectedParentId]);
+
   function selectChildChat() {
     setSelectedGroupId(null);
+    setSelectedParentId(null);
   }
 
   function selectGroupChat(groupId: string) {
@@ -179,7 +251,17 @@ export function ContactChat() {
     setGroupChatError(null);
     setGroupDraft('');
     setGroupPendingFile(null);
+    setSelectedParentId(null);
     setSelectedGroupId(groupId);
+  }
+
+  function selectParentChat(parentId: string) {
+    setParentChatMessages([]);
+    setParentChatError(null);
+    setParentDraft('');
+    setParentPendingFile(null);
+    setSelectedGroupId(null);
+    setSelectedParentId(parentId);
   }
 
   async function handleSendGroupMessage(event: FormEvent) {
@@ -228,6 +310,55 @@ export function ContactChat() {
       setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
     } finally {
       setGroupSending(false);
+    }
+  }
+
+  async function handleSendParentMessage(event: FormEvent) {
+    event.preventDefault();
+    const text = parentDraft.trim();
+    if ((!text && !parentPendingFile) || !deviceToken || !selectedParentId || parentSending) return;
+    setParentSending(true);
+    setParentChatError(null);
+    try {
+      const message = parentPendingFile
+        ? await sendContactParentMessage(deviceToken, selectedParentId, { file: parentPendingFile, caption: text || undefined })
+        : await sendContactParentMessage(deviceToken, selectedParentId, { textContent: text });
+      setParentChatMessages((current) => [...current, message]);
+      setParentDraft('');
+      setParentPendingFile(null);
+      if (parentTextareaRef.current) parentTextareaRef.current.style.height = 'auto';
+    } catch (err) {
+      setParentChatError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+    } finally {
+      setParentSending(false);
+    }
+  }
+
+  async function sendParentSticker(emoji: string) {
+    if (!deviceToken || !selectedParentId || parentSending) return;
+    setParentSending(true);
+    setParentChatError(null);
+    try {
+      const message = await sendContactParentMessage(deviceToken, selectedParentId, { stickerEmoji: emoji });
+      setParentChatMessages((current) => [...current, message]);
+    } catch (err) {
+      setParentChatError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
+    } finally {
+      setParentSending(false);
+    }
+  }
+
+  async function sendParentAudio(file: File) {
+    if (!deviceToken || !selectedParentId || parentSending) return;
+    setParentSending(true);
+    setParentChatError(null);
+    try {
+      const message = await sendContactParentMessage(deviceToken, selectedParentId, { file });
+      setParentChatMessages((current) => [...current, message]);
+    } catch (err) {
+      setParentChatError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
+    } finally {
+      setParentSending(false);
     }
   }
 
@@ -298,28 +429,46 @@ export function ContactChat() {
       <header className="flex items-center justify-between border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-5 py-4">
         <div className="min-w-0">
           <h1 className="truncate text-base font-bold">
-            {selectedGroupId ? (groups.find((g) => g.id === selectedGroupId)?.name ?? 'Grupo') : (childName ?? 'Conversa')}
+            {selectedGroupId
+              ? (groups.find((g) => g.id === selectedGroupId)?.name ?? 'Grupo')
+              : selectedParentId
+                ? (parents.find((p) => p.parentId === selectedParentId)?.parentName ?? 'Responsável')
+                : (childName ?? 'Conversa')}
           </h1>
           <p className="text-xs text-[hsl(var(--muted-foreground))]">
-            {selectedGroupId ? 'Chat de grupo' : contactName ? `Conectado como ${contactName}` : 'Contato aprovado'}
+            {selectedGroupId ? 'Chat de grupo' : selectedParentId ? 'Conversa com o responsável' : contactName ? `Conectado como ${contactName}` : 'Contato aprovado'}
           </p>
         </div>
         <ThemeSwitcher />
       </header>
 
-      {groups.length > 0 && (
+      {(groups.length > 0 || parents.length > 0) && (
         <div className="flex shrink-0 gap-3 overflow-x-auto border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-5 py-3" data-testid="row-contact-chat-bubbles">
           <button
             type="button"
             onClick={selectChildChat}
             data-testid="button-select-chat-child"
-            className={`flex shrink-0 flex-col items-center gap-1 ${selectedGroupId === null ? '' : 'opacity-60'}`}
+            className={`flex shrink-0 flex-col items-center gap-1 ${selectedGroupId === null && selectedParentId === null ? '' : 'opacity-60'}`}
           >
             <span className="grid size-11 place-items-center rounded-full bg-[hsl(var(--primary))] text-sm font-extrabold text-[hsl(var(--primary-foreground))] shadow-sm">
               {(childName ?? '?').trim().slice(0, 1).toUpperCase()}
             </span>
             <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{childName ?? 'Criança'}</span>
           </button>
+          {parents.map((parent) => (
+            <button
+              key={parent.parentId}
+              type="button"
+              onClick={() => selectParentChat(parent.parentId)}
+              data-testid={`button-select-chat-parent-${parent.parentId}`}
+              className={`flex shrink-0 flex-col items-center gap-1 ${selectedParentId === parent.parentId ? '' : 'opacity-60'}`}
+            >
+              <span className="grid size-11 place-items-center rounded-full bg-[hsl(var(--accent))] text-sm font-extrabold text-[hsl(var(--accent-foreground))] shadow-sm">
+                {parent.parentName.trim().slice(0, 1).toUpperCase()}
+              </span>
+              <span className="max-w-[56px] truncate text-[10px] font-bold text-[hsl(var(--muted-foreground))]">{parent.parentName}</span>
+            </button>
+          ))}
           {groups.map((group) => (
             <button
               key={group.id}
@@ -370,6 +519,30 @@ export function ContactChat() {
                       {new Date(message.createdAt).toLocaleString('pt-BR')}
                     </p>
                   </div>
+                </div>
+              );
+            })
+          )
+        ) : selectedParentId ? (
+          parentChatLoading && parentChatMessages.length === 0 ? (
+            <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+          ) : parentChatMessages.length === 0 ? (
+            <p className="text-sm text-[hsl(var(--muted-foreground))]">
+              Nenhuma mensagem ainda com {parents.find((p) => p.parentId === selectedParentId)?.parentName ?? 'o responsável'}. Escreva a primeira aqui embaixo.
+            </p>
+          ) : (
+            parentChatMessages.map((message) => {
+              const fromMe = contactUserId !== null && message.senderId === contactUserId;
+              const sticker = isStickerMessage(message);
+              const bubbleClass = sticker
+                ? `${fromMe ? 'self-end' : 'self-start'}`
+                : `rounded-2xl px-4 py-2.5 shadow-sm ${fromMe ? 'self-end bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'self-start bg-[hsl(var(--card))]'}`;
+              return (
+                <div key={message.id} data-testid={`row-parent-message-${message.id}`} className={`max-w-[80%] text-sm leading-6 ${bubbleClass}`}>
+                  <MessageContent message={message} authHeaders={{ 'X-Contact-Token': deviceToken }} />
+                  <p className={`mt-1 text-[10px] uppercase tracking-[.08em] ${fromMe && !sticker ? 'text-[hsl(var(--primary-foreground)/.7)]' : 'text-[hsl(var(--muted-foreground))]'}`}>
+                    {new Date(message.createdAt).toLocaleString('pt-BR')}
+                  </p>
                 </div>
               );
             })
@@ -489,6 +662,95 @@ export function ContactChat() {
               </button>
             </form>
           </>
+        ) : selectedParentId ? (
+          <>
+            {parentChatError && <p className="mb-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{parentChatError}</p>}
+            {parentAttachError && <p className="mb-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{parentAttachError}</p>}
+            {parentPendingFile && (
+              <div className="mb-2 flex items-center gap-2 self-start rounded-xl bg-[hsl(var(--muted)/.6)] px-3 py-2 text-xs font-semibold">
+                {parentPendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {parentPendingFile.name}
+                <button type="button" onClick={() => setParentPendingFile(null)} aria-label="Remover anexo" className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+                  ×
+                </button>
+              </div>
+            )}
+            <form onSubmit={handleSendParentMessage} className="flex items-end gap-2">
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setParentComposerToolsOpen((current) => !current)}
+                  aria-label={parentComposerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                  className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl border transition-transform ${
+                    parentComposerToolsOpen
+                      ? 'rotate-45 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
+                      : 'border-[hsl(var(--input))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                  }`}
+                >
+                  <Plus size={20} />
+                </button>
+                {parentComposerToolsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setParentComposerToolsOpen(false)} />
+                    <div className="absolute bottom-full left-0 z-40 mb-2 flex flex-col gap-1.5 rounded-2xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-1.5 shadow-lg">
+                      <EmojiPicker
+                        onSelect={(emoji) => {
+                          setParentDraft((current) => current + emoji);
+                          setParentComposerToolsOpen(false);
+                        }}
+                      />
+                      <AttachmentPicker
+                        onSelect={(file) => {
+                          setParentAttachError(null);
+                          setParentPendingFile(file);
+                          setParentComposerToolsOpen(false);
+                        }}
+                        onError={setParentAttachError}
+                      />
+                      <StickerPicker
+                        onSelect={(emoji) => {
+                          void sendParentSticker(emoji);
+                          setParentComposerToolsOpen(false);
+                        }}
+                      />
+                      <AudioRecorderButton
+                        onRecorded={(file) => {
+                          void sendParentAudio(file);
+                          setParentComposerToolsOpen(false);
+                        }}
+                        onError={setParentAttachError}
+                        disabled={parentSending}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <textarea
+                ref={parentTextareaRef}
+                value={parentDraft}
+                onChange={(event) => {
+                  setParentDraft(event.target.value);
+                  autoGrowTextarea(event.target);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                placeholder={parentPendingFile ? 'Adicione uma legenda (opcional)…' : `Escreva pro responsável…`}
+                rows={1}
+                className="max-h-32 min-h-[48px] flex-1 resize-none rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--background)/.65)] px-4 py-3 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
+              />
+              <button
+                type="submit"
+                disabled={(!parentDraft.trim() && !parentPendingFile) || parentSending}
+                aria-label="Enviar mensagem"
+                className="grid size-12 shrink-0 place-items-center rounded-xl bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] disabled:opacity-60"
+              >
+                {parentSending ? '…' : <Send size={18} />}
+              </button>
+            </form>
+          </>
         ) : (
           <>
             {error && <p className="mb-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{error}</p>}
@@ -582,7 +844,11 @@ export function ContactChat() {
       </div>
       <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-5 py-3 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
         <LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" />{' '}
-        {selectedGroupId ? 'Esta conversa de grupo também fica visível para o responsável.' : <>Esta conversa também fica visível para o responsável de {childName ?? 'a criança'}.</>}
+        {selectedGroupId
+          ? 'Esta conversa de grupo também fica visível para o responsável.'
+          : selectedParentId
+            ? 'Esta é uma conversa direta com o responsável -- não aparece pra criança.'
+            : <>Esta conversa também fica visível para o responsável de {childName ?? 'a criança'}.</>}
       </div>
     </main>
   );

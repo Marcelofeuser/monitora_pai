@@ -188,6 +188,50 @@ export async function sendChildContactMessage(
   );
 }
 
+// ---------------------------------------------------------------------
+// "Meu Chat" do lado do Contato: falar direto com o(s) Responsável(is) da
+// Criança (pode ter mais de um -- Item 13, múltiplos responsáveis). Mesmo
+// padrão de grupos: uma rota pra listar quem dá pra conversar, uma pra
+// buscar o histórico com um responsável específico, uma pra mandar.
+// ---------------------------------------------------------------------
+
+export type ContactParent = { parentId: string; parentName: string };
+
+export async function fetchContactParents(deviceToken: string): Promise<ContactParent[]> {
+  const res = await fetch(`${API_URL}/api/contact/conversations/with-parent`, {
+    headers: { 'X-Contact-Token': deviceToken },
+  });
+  if (!res.ok) throw new Error(`fetch_contact_parents_failed_${res.status}`);
+  return res.json();
+}
+
+export type ContactParentConversation = {
+  conversation: { id: string; participantAId: string; participantBId: string };
+  messages: PrivateMessage[];
+  parentName: string;
+};
+
+export async function fetchContactParentChat(deviceToken: string, parentId: string): Promise<ContactParentConversation> {
+  const res = await fetch(`${API_URL}/api/contact/conversations/with-parent/${encodeURIComponent(parentId)}`, {
+    headers: { 'X-Contact-Token': deviceToken },
+  });
+  if (!res.ok) throw new Error(`fetch_contact_parent_chat_failed_${res.status}`);
+  return res.json();
+}
+
+export async function sendContactParentMessage(
+  deviceToken: string,
+  parentId: string,
+  input: SendMessageInput,
+): Promise<PrivateMessage> {
+  return sendDeviceMessage(
+    `/api/contact/conversations/with-parent/${encodeURIComponent(parentId)}/messages`,
+    'X-Contact-Token',
+    deviceToken,
+    input,
+  );
+}
+
 // Helper compartilhado: mesma lógica de texto/anexo/figurinha usada em
 // child-conversations-api.ts, só que parametrizada pelo header e pela URL
 // (evita duplicar 3x o mesmo if/else de FormData vs JSON).
