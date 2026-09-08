@@ -862,6 +862,7 @@ export function PairingJoin() {
               <div className="mt-4">
                 <BioEditor
                   photoUrl={childBio.photoUrl}
+                  authHeaders={deviceToken ? { 'X-Child-Token': deviceToken } : {}}
                   avatarLabel={childBio.name}
                   name={childBio.name}
                   phone={childBio.phone}

@@ -14,6 +14,7 @@ import {
   groupsTable,
   messagesTable,
   mirrorLogTable,
+  usersTable,
 } from "@workspace/db";
 import {
   contentTypeForFilename,
@@ -24,6 +25,39 @@ import {
 import { isGuardianOfChild } from "../lib/guardians";
 
 const router: IRouter = Router();
+
+// Compartilhado entre a mídia de mensagem de grupo (abaixo) e a foto de
+// capa do próprio grupo (BIO/grupos, ver comentário mais abaixo) -- mesma
+// regra de "quem pode ver esse grupo" nos dois casos.
+async function isAuthorizedForGroup(
+  group: { id: string; childId: string },
+  ids: { parentUserId: string | null; childId: string | null; contactUserId: string | null },
+): Promise<boolean> {
+  if (ids.parentUserId) {
+    // Item 13 (multiplos Responsaveis): antes so o dono original
+    // (createdByParentId) via midia de grupo -- um guardian adicional
+    // tomava 404 mesmo tendo acesso a criança.
+    return isGuardianOfChild(ids.parentUserId, group.childId);
+  }
+  if (ids.childId) {
+    return group.childId === ids.childId;
+  }
+  if (ids.contactUserId) {
+    const [membership] = await db
+      .select()
+      .from(groupMembersTable)
+      .innerJoin(contactsTable, eq(groupMembersTable.contactId, contactsTable.id))
+      .where(
+        and(
+          eq(groupMembersTable.groupId, group.id),
+          eq(contactsTable.contactUserId, ids.contactUserId),
+        ),
+      )
+      .limit(1);
+    return Boolean(membership);
+  }
+  return false;
+}
 
 // A Criança não tem conta Clerk (ver middlewares/childAuth.ts), então esta
 // rota precisa reconhecer os dois jeitos de autenticar — Responsável via
@@ -128,35 +162,43 @@ router.get("/media/:filename", async (req, res) => {
       .from(groupMessagesTable)
       .where(eq(groupMessagesTable.contentUrl, contentUrl))
       .limit(1);
-    if (!groupMessage) return res.status(404).json({ error: "not_found" });
 
-    const [group] = await db
-      .select()
-      .from(groupsTable)
-      .where(eq(groupsTable.id, groupMessage.groupId))
-      .limit(1);
-    if (!group) return res.status(404).json({ error: "not_found" });
-
-    if (parentUserId) {
-      // Item 13 do pedido (multiplos Responsaveis): antes so o dono
-      // original (createdByParentId) via midia de grupo -- um guardian
-      // adicional tomava 404 mesmo tendo acesso a criança.
-      authorized = await isGuardianOfChild(parentUserId, group.childId);
-    } else if (childId) {
-      authorized = group.childId === childId;
-    } else if (contactUserId) {
-      const [membership] = await db
+    if (groupMessage) {
+      const [group] = await db
         .select()
-        .from(groupMembersTable)
-        .innerJoin(contactsTable, eq(groupMembersTable.contactId, contactsTable.id))
-        .where(
-          and(
-            eq(groupMembersTable.groupId, group.id),
-            eq(contactsTable.contactUserId, contactUserId),
-          ),
-        )
+        .from(groupsTable)
+        .where(eq(groupsTable.id, groupMessage.groupId))
         .limit(1);
-      authorized = Boolean(membership);
+      if (!group) return res.status(404).json({ error: "not_found" });
+      authorized = await isAuthorizedForGroup(group, { parentUserId, childId, contactUserId });
+    } else {
+      // Não é mídia de mensagem (chat ou grupo) -- só pode ser foto de
+      // perfil/BIO (users.photo_url) ou foto de capa de um grupo
+      // (groups.photo_url, ver POST /groups/:id/photo). Nenhuma das duas
+      // vira linha em messages/group_messages, então sem este bloco
+      // qualquer upload de BIO ou de capa de grupo caía sempre no 404
+      // "not_found" ali embaixo -- bug real encontrado em 08/09 (foto da
+      // BIO "não fixava" pra Criança).
+      const [photoOwner] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.photoUrl, contentUrl))
+        .limit(1);
+
+      if (photoOwner) {
+        // BIO: por enquanto só o dono vê a própria foto (nenhuma tela
+        // ainda mostra a BIO de outra pessoa).
+        authorized =
+          photoOwner.id === parentUserId || photoOwner.id === childId || photoOwner.id === contactUserId;
+      } else {
+        const [group] = await db
+          .select()
+          .from(groupsTable)
+          .where(eq(groupsTable.photoUrl, contentUrl))
+          .limit(1);
+        if (!group) return res.status(404).json({ error: "not_found" });
+        authorized = await isAuthorizedForGroup(group, { parentUserId, childId, contactUserId });
+      }
     }
   }
 

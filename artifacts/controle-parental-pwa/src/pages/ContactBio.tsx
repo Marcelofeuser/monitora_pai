@@ -129,6 +129,7 @@ export function ContactBio() {
             <div className="mt-5">
               <BioEditor
                 photoUrl={bio.photoUrl}
+                authHeaders={deviceToken ? { 'X-Contact-Token': deviceToken } : {}}
                 avatarLabel={bio.name}
                 name={bio.name}
                 phone={bio.phone}

@@ -72,6 +72,7 @@ import type { ScreenTimeStatus } from '@/lib/screen-time-api';
 import { fetchMe, updateMyRelationship } from '@/lib/me-api';
 import { fetchParentBio, updateParentBio, uploadParentBioPhoto } from '@/lib/bio-api';
 import type { BioProfile, UpdateBioInput } from '@/lib/bio-api';
+import { resolveMediaUrl } from '@/lib/media';
 import { BioEditor } from '@/components/bio-editor';
 import { fetchGuardians, createGuardianInvite, removeGuardian, acceptGuardianInvite } from '@/lib/guardians-api';
 import type { GuardianInfo } from '@/lib/guardians-api';
@@ -821,12 +822,20 @@ function NavItem({ item, active, onClick, mobile = false }: { item: typeof navIt
 function Avatar({ name, dark = false, shape = 'circle', photoUrl }: { name?: string; dark?: boolean; shape?: 'circle' | 'balloon' | 'star'; photoUrl?: string | null }) {
   const initials = name?.trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase() || '?';
   const tone = dark ? 'bg-[hsl(var(--sidebar-primary)/.22)] text-[hsl(var(--sidebar-primary))]' : 'bg-[hsl(var(--accent))] text-[hsl(var(--foreground))]';
+  // Backend devolve caminho relativo ("/api/media/xxx.jpg") -- precisa do
+  // domínio do api-server na frente, senão o <img> tenta carregar do
+  // domínio do PWA e nunca aparece (ver lib/media.ts). Nota: pra
+  // Criança/Contato isso sozinho ainda não basta (a rota exige
+  // Authorization/X-Child-Token/X-Contact-Token, que um <img> não manda) —
+  // fica documentado como próximo passo, mesmo tratamento que a BIO ganhou
+  // agora via useAuthedMediaUrl (ver bio-editor.tsx).
+  const resolvedPhotoUrl = photoUrl ? resolveMediaUrl(photoUrl) : null;
 
   if (shape === 'balloon') {
     return (
       <span className="relative inline-grid size-10 shrink-0 place-items-center" data-testid="avatar-profile">
-        {photoUrl ? (
-          <img src={photoUrl} alt={name ?? 'Grupo'} className="size-10 -rotate-6 rounded-[50%_50%_50%_4px] object-cover" />
+        {resolvedPhotoUrl ? (
+          <img src={resolvedPhotoUrl} alt={name ?? 'Grupo'} className="size-10 -rotate-6 rounded-[50%_50%_50%_4px] object-cover" />
         ) : (
           <span className={`grid size-10 -rotate-6 place-items-center rounded-[50%_50%_50%_4px] text-xs font-extrabold ${tone}`}>{initials}</span>
         )}
@@ -838,18 +847,18 @@ function Avatar({ name, dark = false, shape = 'circle', photoUrl }: { name?: str
   if (shape === 'star') {
     return (
       <span
-        className={`grid size-10 shrink-0 place-items-center text-xs font-extrabold ${photoUrl ? '' : tone}`}
+        className={`grid size-10 shrink-0 place-items-center text-xs font-extrabold ${resolvedPhotoUrl ? '' : tone}`}
         style={{ clipPath: 'polygon(50% 0%, 63% 35%, 100% 38%, 72% 60%, 82% 96%, 50% 76%, 18% 96%, 28% 60%, 0% 38%, 37% 35%)' }}
         data-testid="avatar-profile"
       >
-        {photoUrl ? <img src={photoUrl} alt={name ?? ''} className="size-10 object-cover" /> : initials}
+        {resolvedPhotoUrl ? <img src={resolvedPhotoUrl} alt={name ?? ''} className="size-10 object-cover" /> : initials}
       </span>
     );
   }
 
   return (
-    <span className={`grid size-10 shrink-0 place-items-center overflow-hidden rounded-full text-xs font-extrabold ${photoUrl ? '' : tone}`} data-testid="avatar-profile">
-      {photoUrl ? <img src={photoUrl} alt={name ?? ''} className="size-10 object-cover" /> : initials}
+    <span className={`grid size-10 shrink-0 place-items-center overflow-hidden rounded-full text-xs font-extrabold ${resolvedPhotoUrl ? '' : tone}`} data-testid="avatar-profile">
+      {resolvedPhotoUrl ? <img src={resolvedPhotoUrl} alt={name ?? ''} className="size-10 object-cover" /> : initials}
     </span>
   );
 }
@@ -3482,12 +3491,18 @@ function ParentBio() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Mesmo padrão de Conversations()/GroupsPage() (mediaAuthHeaders): a foto
+  // da BIO passa pela mesma rota autenticada de mídia do chat, então o
+  // <img> precisa buscar com Authorization -- guardamos o token aqui pra
+  // passar pro BioEditor (ver lib/media.ts).
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const token = await getToken();
+        if (!cancelled) setAuthToken(token);
         const data = await fetchParentBio(token);
         if (!cancelled) setBio(data);
       } catch (err) {
@@ -3540,6 +3555,7 @@ function ParentBio() {
           <>
             <BioEditor
               photoUrl={bio.photoUrl}
+              authHeaders={authToken ? { Authorization: `Bearer ${authToken}` } : {}}
               avatarLabel={bio.name}
               name={bio.name}
               nameEditable={false}

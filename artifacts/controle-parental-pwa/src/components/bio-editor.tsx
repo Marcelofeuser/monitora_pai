@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { Camera } from 'lucide-react';
 import type { SocialLinks, UpdateBioInput } from '@/lib/bio-api';
+import { useAuthedMediaUrl } from '@/lib/media';
 
 /**
  * Formulário de BIO reutilizado nas 3 pontas (pedido do Marcelo, 08/09):
@@ -13,6 +14,7 @@ import type { SocialLinks, UpdateBioInput } from '@/lib/bio-api';
  */
 export function BioEditor({
   photoUrl,
+  authHeaders,
   avatarLabel,
   name,
   nameEditable = true,
@@ -27,6 +29,14 @@ export function BioEditor({
   kid = false,
 }: {
   photoUrl: string | null;
+  // GET /api/media/:filename exige autenticação (a mesma que já protege
+  // foto/vídeo de mensagem) -- um <img src> puro não manda Authorization
+  // nem X-Child-Token/X-Contact-Token, então a foto nunca carregava pra
+  // Criança/Contato (bug real relatado em 08/09, na BIO da Mariana). Por
+  // isso quem chama BioEditor passa os mesmos headers que já usa pra
+  // buscar/salvar a BIO (ver bio-api.ts) -- useAuthedMediaUrl busca o
+  // arquivo com esses headers e transforma num object URL (ver lib/media.ts).
+  authHeaders: HeadersInit;
   avatarLabel: string;
   name: string;
   nameEditable?: boolean;
@@ -46,8 +56,9 @@ export function BioEditor({
   const [draftInstagram, setDraftInstagram] = useState(socialLinks?.instagram ?? '');
   const [draftWhatsapp, setDraftWhatsapp] = useState(socialLinks?.whatsapp ?? '');
   const [draftOther, setDraftOther] = useState(socialLinks?.other ?? '');
+  const { url: resolvedPhotoUrl } = useAuthedMediaUrl(photoUrl, authHeaders);
 
-  function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
+  function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (file) void onUploadPhoto(file);
@@ -77,8 +88,8 @@ export function BioEditor({
     <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4 text-left" data-testid="form-bio-editor">
       <div className="flex items-center gap-4">
         <div className="relative shrink-0">
-          {photoUrl ? (
-            <img src={photoUrl} alt="" className="size-16 rounded-full object-cover shadow-sm" data-testid="img-bio-photo" />
+          {resolvedPhotoUrl ? (
+            <img src={resolvedPhotoUrl} alt="" className="size-16 rounded-full object-cover shadow-sm" data-testid="img-bio-photo" />
           ) : (
             <div
               className="grid size-16 place-items-center rounded-full text-xl font-extrabold text-white shadow-sm"
