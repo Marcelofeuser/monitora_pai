@@ -1,4 +1,5 @@
 import express, { type Express } from "express";
+import * as Sentry from "@sentry/node";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
@@ -49,6 +50,12 @@ app.use(
 );
 
 app.use("/api", router);
+
+// Sentry.setupExpressErrorHandler é um no-op se SENTRY_DSN não estiver
+// configurada (ver instrument.ts) -- seguro chamar sempre. Tem que vir
+// DEPOIS das rotas e ANTES do handler de erro customizado abaixo, senão
+// o Sentry nunca vê o erro (o handler abaixo não faz next(err)).
+Sentry.setupExpressErrorHandler(app);
 
 // Handler de erro global: sem isso, um erro não tratado numa rota async
 // (ex: uma query do Drizzle que falha) só aparecia nos logs como um

@@ -1,3 +1,5 @@
+// Precisa ser o primeiro import -- ver comentário em instrument.ts.
+import "./instrument";
 import app from "./app";
 import { logger } from "./lib/logger";
 
