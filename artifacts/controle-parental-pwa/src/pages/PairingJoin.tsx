@@ -24,7 +24,10 @@ import { fetchChildScreenTimeStatus, sendScreenTimeHeartbeat } from '@/lib/scree
 import type { ChildLockStatus } from '@/lib/screen-time-api';
 import { enablePushNotifications, disablePushNotifications, isPushSupported } from '@/lib/push';
 import { getRelationshipInfo } from '@/lib/relationship';
-import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin, Plus, Maximize2, Minimize2, X, ArrowLeft, ChevronRight } from 'lucide-react';
+import { fetchChildBio, updateChildBio, uploadChildBioPhoto } from '@/lib/bio-api';
+import type { BioProfile, UpdateBioInput } from '@/lib/bio-api';
+import { BioEditor } from '@/components/bio-editor';
+import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin, Plus, Maximize2, Minimize2, X, ArrowLeft, ChevronRight, UserCircle2, MessageCircle } from 'lucide-react';
 
 /**
  * Rota /join?token=... — é para onde o link do QR code aponta.
@@ -63,6 +66,16 @@ export function PairingJoin() {
   const [childName, setChildName] = useState<string | null>(null);
   const [childId, setChildId] = useState<string | null>(null);
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
+  // Pedido do Marcelo (08/09): a primeira página da Criança é a BIO dela
+  // (foto, nome, telefone/e-mail/redes sociais opcionais), com um botão
+  // "Chat" no meio/base da tela pra entrar na conversa -- não mais a
+  // conversa direto. 'bio' é sempre o estado inicial depois de parear;
+  // reabrir o app cai na BIO de novo (não fica "lembrado" no chat).
+  const [childView, setChildView] = useState<'bio' | 'chat'>('bio');
+  const [childBio, setChildBio] = useState<BioProfile | null>(null);
+  const [bioSaving, setBioSaving] = useState(false);
+  const [bioUploadingPhoto, setBioUploadingPhoto] = useState(false);
+  const [bioError, setBioError] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<'idle' | 'active' | 'error'>('idle');
   const [locationError, setLocationError] = useState<string | null>(null);
   const [lastSharedAt, setLastSharedAt] = useState<Date | null>(null);
@@ -229,6 +242,58 @@ export function PairingJoin() {
       window.clearInterval(intervalId);
     };
   }, [status, deviceToken, selectedContactUserId]);
+
+  // BIO da Criança (pedido do Marcelo, 08/09) -- carrega assim que o
+  // pareamento (ou a credencial salva) confirma, pra já ter os dados
+  // prontos quando a tela cai na visão 'bio' (ver render abaixo).
+  useEffect(() => {
+    if (status !== 'success' || !deviceToken) return;
+    let cancelled = false;
+    fetchChildBio(deviceToken)
+      .then((data) => {
+        if (!cancelled) setChildBio(data);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [status, deviceToken]);
+
+  async function handleSaveChildBio(input: UpdateBioInput) {
+    if (!deviceToken) return;
+    setBioSaving(true);
+    setBioError(null);
+    try {
+      const updated = await updateChildBio(input, deviceToken);
+      setChildBio(updated);
+      if (updated.name) {
+        setChildName(updated.name);
+        try {
+          localStorage.setItem(CHILD_NAME_KEY, updated.name);
+        } catch {
+          // ignora
+        }
+      }
+    } catch (err) {
+      setBioError(err instanceof Error ? err.message : 'Erro ao salvar.');
+    } finally {
+      setBioSaving(false);
+    }
+  }
+
+  async function handleUploadChildBioPhoto(file: File) {
+    if (!deviceToken) return;
+    setBioUploadingPhoto(true);
+    setBioError(null);
+    try {
+      const { photoUrl } = await uploadChildBioPhoto(file, deviceToken);
+      setChildBio((current) => (current ? { ...current, photoUrl } : current));
+    } catch (err) {
+      setBioError(err instanceof Error ? err.message : 'Erro ao enviar foto.');
+    } finally {
+      setBioUploadingPhoto(false);
+    }
+  }
 
   // Lista de Contatos aprovados que já aceitaram o convite por link/QR
   // (pedido do Marcelo: bolinhas de conversa, igual ao WhatsApp) --
@@ -712,6 +777,19 @@ export function PairingJoin() {
               <span className="text-[11px] font-extrabold text-[hsl(var(--muted-foreground))]">local e privado</span>
             </div>
             <div className="flex items-center gap-2">
+              {/* Alterna entre a BIO e o chat (pedido do Marcelo, 08/09) --
+                  sempre visível, nas duas visões, pra Criança nunca ficar
+                  "presa" numa das duas. */}
+              <button
+                type="button"
+                onClick={() => setChildView((current) => (current === 'bio' ? 'chat' : 'bio'))}
+                aria-label={childView === 'bio' ? 'Ir para o chat' : 'Ver minha BIO'}
+                title={childView === 'bio' ? 'Ir para o chat' : 'Ver minha BIO'}
+                data-testid="button-toggle-child-view"
+                className="grid size-10 place-items-center rounded-full bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm transition-transform hover:scale-105 active:scale-95"
+              >
+                {childView === 'bio' ? <MessageCircle size={17} /> : <UserCircle2 size={17} />}
+              </button>
               {isPushSupported() && (
                 <button
                   type="button"
@@ -764,7 +842,54 @@ export function PairingJoin() {
           </div>
         )}
 
-        {status === 'success' && (
+        {/* Pedido do Marcelo (08/09): primeira página da Criança é a BIO
+            dela -- foto, nome, telefone/e-mail/redes sociais opcionais --
+            com um botão "Chat" no meio/base pra entrar na conversa. O
+            botão de alternar no topo (ver acima, button-toggle-child-view)
+            deixa ela voltar pra cá depois, a qualquer momento. */}
+        {status === 'success' && childView === 'bio' && (
+          <div
+            className="mt-2 flex w-full flex-1 animate-pop-in flex-col rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 text-left shadow-card"
+            data-testid="panel-child-bio"
+          >
+            <h1 className="font-kid text-lg font-extrabold text-[hsl(var(--foreground))]">
+              Oi{childName ? `, ${childName}` : ''}! <span aria-hidden="true">👋</span>
+            </h1>
+            <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+              Essa página é sua! Coloque uma foto e, se quiser, mais informações. Tudo é opcional.
+            </p>
+            {childBio ? (
+              <div className="mt-4">
+                <BioEditor
+                  photoUrl={childBio.photoUrl}
+                  avatarLabel={childBio.name}
+                  name={childBio.name}
+                  phone={childBio.phone}
+                  email={childBio.email}
+                  socialLinks={childBio.socialLinks}
+                  onUploadPhoto={handleUploadChildBioPhoto}
+                  onSave={handleSaveChildBio}
+                  uploadingPhoto={bioUploadingPhoto}
+                  saving={bioSaving}
+                  error={bioError}
+                  kid
+                />
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">Carregando…</p>
+            )}
+            <button
+              type="button"
+              onClick={() => setChildView('chat')}
+              data-testid="button-open-chat-from-bio"
+              className="font-kid mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-[hsl(var(--primary))] text-base font-extrabold text-[hsl(var(--primary-foreground))] shadow-lg transition-transform hover:scale-[1.02] active:scale-95"
+            >
+              <MessageCircle size={20} /> Chat
+            </button>
+          </div>
+        )}
+
+        {status === 'success' && childView === 'chat' && (
           <>
             <div className="mt-1 flex w-full shrink-0 items-center gap-3 text-left">
               <div

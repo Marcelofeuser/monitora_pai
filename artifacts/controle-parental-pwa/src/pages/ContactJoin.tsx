@@ -67,7 +67,10 @@ export function ContactJoin() {
       } catch {
         // localStorage pode falhar (modo privado, etc.) — não bloqueia o fluxo.
       }
-      setLocation('/contact');
+      // Pedido do Marcelo (08/09): logo depois de confirmar o convite, já
+      // mostrar a BIO (foto, telefone, redes sociais) antes de ir pro chat
+      // -- ver pages/ContactBio.tsx.
+      setLocation('/contact/bio?first=1');
     } catch (err) {
       setStatus('error');
       setErrorMessage(err instanceof Error ? err.message : 'Erro ao confirmar convite.');

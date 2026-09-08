@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, pgEnum, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -46,6 +46,19 @@ export const usersTable = pgTable("users", {
   // Só usado quando role = 'parent'. Ver comentário em parentRelationshipEnum.
   relationship: parentRelationshipEnum("relationship"),
   onboardingCompleted: text("onboarding_completed").default("false"),
+  // BIO (pedido do Marcelo, 08/09): foto de perfil + redes sociais,
+  // preenchíveis pelo próprio dono da conta -- Responsável (welcome
+  // screen), Criança (primeira página do app dela) e Contato (logo depois
+  // de confirmar o convite). Mesmo padrão de upload de `groups.photoUrl`
+  // (ver routes/me.ts). socialLinks é livre de propósito (chaves conhecidas
+  // pelo frontend, mas nenhuma delas obrigatória) -- é só informação
+  // opcional, não afeta nenhuma regra de negócio.
+  photoUrl: text("photo_url"),
+  socialLinks: jsonb("social_links").$type<{
+    instagram?: string;
+    whatsapp?: string;
+    other?: string;
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

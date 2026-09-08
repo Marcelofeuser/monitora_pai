@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Link } from 'wouter';
 import {
   fetchContactConversation,
   sendContactMessage,
@@ -17,7 +18,7 @@ import { AttachmentPicker } from '@/components/attachment-picker';
 import { StickerPicker } from '@/components/sticker-picker';
 import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
-import { LockKeyhole, Plus, Send, ArrowLeft, ChevronRight } from 'lucide-react';
+import { LockKeyhole, Plus, Send, ArrowLeft, ChevronRight, UserCircle2 } from 'lucide-react';
 
 /**
  * Rota /contact — chat contínuo de um Contato aprovado (mãe, avó, tia)
@@ -463,7 +464,22 @@ export function ContactChat() {
             </p>
           </div>
         </div>
-        <ThemeSwitcher />
+        <div className="flex items-center gap-2">
+          {/* "Meu perfil" (pedido do Marcelo, 08/09): foto, telefone,
+              e-mail e redes sociais do Contato -- mesma BIO mostrada logo
+              depois de confirmar o convite em ContactJoin.tsx, reaberta
+              aqui pra editar depois. */}
+          <Link
+            href="/contact/bio"
+            aria-label="Meu perfil"
+            title="Meu perfil"
+            data-testid="link-contact-profile"
+            className="grid size-9 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
+          >
+            <UserCircle2 size={20} />
+          </Link>
+          <ThemeSwitcher />
+        </div>
       </header>
 
       {chatListOpen && (groups.length > 0 || parents.length > 0) ? (

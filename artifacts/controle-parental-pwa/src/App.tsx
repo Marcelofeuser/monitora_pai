@@ -48,6 +48,7 @@ import { PairingGenerate } from '@/pages/PairingGenerate';
 import { PairingJoin } from '@/pages/PairingJoin';
 import { ContactJoin } from '@/pages/ContactJoin';
 import { ContactChat } from '@/pages/ContactChat';
+import { ContactBio } from '@/pages/ContactBio';
 import { GuardianJoin } from '@/pages/GuardianJoin';
 import QRCode from 'qrcode';
 import { ThemeProvider, ThemeSwitcher } from '@/lib/theme';
@@ -69,6 +70,9 @@ import type { ChildLocation } from '@/lib/location-api';
 import { fetchScreenTime, setDailyLimit, setChildLock } from '@/lib/screen-time-api';
 import type { ScreenTimeStatus } from '@/lib/screen-time-api';
 import { fetchMe, updateMyRelationship } from '@/lib/me-api';
+import { fetchParentBio, updateParentBio, uploadParentBioPhoto } from '@/lib/bio-api';
+import type { BioProfile, UpdateBioInput } from '@/lib/bio-api';
+import { BioEditor } from '@/components/bio-editor';
 import { fetchGuardians, createGuardianInvite, removeGuardian, acceptGuardianInvite } from '@/lib/guardians-api';
 import type { GuardianInfo } from '@/lib/guardians-api';
 import { RELATIONSHIP_OPTIONS } from '@/lib/relationship';
@@ -659,13 +663,13 @@ function AppShell({ children }: { children: ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[252px] flex-col bg-[hsl(var(--sidebar))] px-5 py-7 text-[hsl(var(--sidebar-foreground))] lg:flex">
         <BrandMark compact />
         <div className="mt-7 rounded-2xl border border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-accent)/.55)] p-4">
-          <div className="flex items-center gap-3">
+          <Link href="/perfil" className="flex items-center gap-3" data-testid="link-sidebar-bio">
             <Avatar name={profile?.displayName} dark />
             <div className="min-w-0">
               <p className="truncate text-sm font-bold">{profile?.displayName || t.shell.yourProfile}</p>
               <p className="truncate text-xs text-[hsl(var(--sidebar-foreground)/.6)]">{profile?.familyName || t.shell.setupIncomplete}</p>
             </div>
-          </div>
+          </Link>
           {!profile && <Link href="/" className="mt-3 flex items-center justify-between text-xs font-bold text-[hsl(var(--sidebar-primary))]" data-testid="link-complete-setup">{t.shell.completeSetup} <ArrowRight size={13} /></Link>}
         </div>
         <nav className="mt-9 flex-1 space-y-1" aria-label={t.shell.mainNav}>
@@ -922,7 +926,21 @@ function Dashboard() {
   const profile = readProfile();
   return (
     <>
-      <PageIntro eyebrow={t.dashboard.eyebrow} title={profile ? t.dashboard.greeting.replace('{name}', profile.displayName) : t.dashboard.title} description={profile ? t.dashboard.description : t.dashboard.noProfileDescription} />
+      <div className="flex items-start justify-between gap-4">
+        <PageIntro eyebrow={t.dashboard.eyebrow} title={profile ? t.dashboard.greeting.replace('{name}', profile.displayName) : t.dashboard.title} description={profile ? t.dashboard.description : t.dashboard.noProfileDescription} />
+        {/* Pedido do Marcelo (08/09): a BIO (foto, telefone, redes sociais)
+            do Responsável fica acessível direto na tela de boas-vindas. */}
+        <Link
+          href="/perfil"
+          data-testid="link-dashboard-bio"
+          aria-label="Sua BIO"
+          title="Sua BIO"
+          className="mt-1 flex shrink-0 items-center gap-2 rounded-full border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] px-3 py-2 text-xs font-extrabold shadow-card transition-colors hover:border-[hsl(var(--primary))]"
+        >
+          <Avatar name={profile?.displayName} />
+          <span className="hidden sm:inline">Sua BIO</span>
+        </Link>
+      </div>
       <SetupNotice />
       <div aria-hidden="true" data-tour="dashboard" className="h-28" />
       <div className="fixed inset-x-0 bottom-6 z-20 flex justify-center gap-3 px-4 lg:pl-[252px]">
@@ -3450,6 +3468,101 @@ function SettingsPage() {
   );
 }
 
+// Pedido do Marcelo (08/09): BIO do Responsável (foto, telefone, e-mail,
+// redes sociais), acessível pela tela de boas-vindas (ver Dashboard()) e
+// também pela lista de navegação. "name" fica de fora do formulário --
+// é sincronizado com o Clerk a cada leitura (ver lib/parentUser.ts no
+// backend), então editar aqui seria sobrescrito na próxima vez que a
+// página carregasse. Quem quiser trocar o nome, troca na conta.
+function ParentBio() {
+  const { getToken } = useAuth();
+  const [bio, setBio] = useState<BioProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const data = await fetchParentBio(token);
+        if (!cancelled) setBio(data);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Erro ao carregar seu perfil.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+
+  async function handleSave(input: UpdateBioInput) {
+    setSaving(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const updated = await updateParentBio(input, token);
+      setBio((current) => (current ? { ...current, ...updated } : current));
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2200);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao salvar.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handlePhoto(file: File) {
+    setUploadingPhoto(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      const { photoUrl } = await uploadParentBioPhoto(file, token);
+      setBio((current) => (current ? { ...current, photoUrl } : current));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao enviar foto.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  return (
+    <>
+      <PageIntro eyebrow="sua bio" title="Sua BIO" description="Sua foto e informações de contato — opcional, só se você quiser deixar preenchido." />
+      <div className="max-w-lg rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
+        {loading && <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando…</p>}
+        {!loading && bio && (
+          <>
+            <BioEditor
+              photoUrl={bio.photoUrl}
+              avatarLabel={bio.name}
+              name={bio.name}
+              nameEditable={false}
+              phone={bio.phone}
+              email={bio.email}
+              socialLinks={bio.socialLinks}
+              onUploadPhoto={handlePhoto}
+              onSave={handleSave}
+              uploadingPhoto={uploadingPhoto}
+              saving={saving}
+              error={error}
+            />
+            <p className="mt-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+              Seu nome ({bio.name}) vem da sua conta — pra trocar, é direto lá, não aqui.
+            </p>
+            {saved && <span className="mt-2 block text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-bio-saved">Salvo.</span>}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
 const clerkAppearance = {
   theme: shadcn,
   cssLayerName: 'clerk',
@@ -3523,7 +3636,7 @@ function SignUpPage() {
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/invites" component={InvitesRoute} /><Route path="/groups/new" component={CreateGroupRoute} /><Route path="/meu-chat" component={MyChatRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route path="/join-contact" component={ContactJoin} /><Route path="/aceitar-responsavel" component={GuardianJoin} /><Route path="/contact" component={ContactChat} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/invites" component={InvitesRoute} /><Route path="/groups/new" component={CreateGroupRoute} /><Route path="/meu-chat" component={MyChatRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route path="/join-contact" component={ContactJoin} /><Route path="/aceitar-responsavel" component={GuardianJoin} /><Route path="/contact" component={ContactChat} /><Route path="/contact/bio" component={ContactBio} /><Route path="/perfil" component={ParentBioRoute} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 // /join não exige o Responsável logado — é a rota que o QR code abre no
 // aparelho da Criança, que ainda não tem conta. /pair é o gerador do QR,
@@ -3561,6 +3674,7 @@ function MyChatRoute() { return <RequireSignedIn><AppShell><MyChat /></AppShell>
 function LocationRoute() { return <RequireSignedIn><AppShell><LocationPage /></AppShell></RequireSignedIn>; }
 function ScreenTimeRoute() { return <RequireSignedIn><AppShell><ScreenTimePage /></AppShell></RequireSignedIn>; }
 function SettingsRoute() { return <RequireSignedIn><AppShell><SettingsPage /></AppShell></RequireSignedIn>; }
+function ParentBioRoute() { return <RequireSignedIn><AppShell><ParentBio /></AppShell></RequireSignedIn>; }
 
 function NotFound() {
   const { t } = useLanguage();
