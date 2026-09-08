@@ -82,6 +82,50 @@ export async function fetchParentContactConversation(
 }
 
 
+// "Meu Chat" (pedido do Marcelo, 07/09): diferente do espelho acima
+// (fetchParentContactConversation, só-leitura), aqui o Responsável é
+// participante de verdade -- conversa direta com o Contato aprovado,
+// mesma lista de Convites da Criança (decisão dele: não é lista separada).
+export type MyContactChat = {
+  conversation: { id: string; participantAId: string; participantBId: string };
+  messages: PrivateMessage[];
+  contactName: string;
+};
+
+export async function fetchMyContactChat(
+  contactUserId: string,
+  authToken: string | null,
+): Promise<MyContactChat> {
+  const res = await fetch(
+    `${API_URL}/api/conversations/contact/${encodeURIComponent(contactUserId)}`,
+    { headers: authHeaders(authToken) },
+  );
+  if (!res.ok) throw new Error(`fetch_my_contact_chat_failed_${res.status}`);
+  return res.json();
+}
+
+// V1: só texto -- o backend já aceita foto/vídeo/figurinha (mesmo
+// extractMessageInput do canal privado), só o frontend ainda não manda.
+export async function sendMyContactMessage(
+  contactUserId: string,
+  input: { textContent: string },
+  authToken: string | null,
+): Promise<PrivateMessage> {
+  const res = await fetch(
+    `${API_URL}/api/conversations/contact/${encodeURIComponent(contactUserId)}/messages`,
+    {
+      method: 'POST',
+      headers: authHeaders(authToken),
+      body: JSON.stringify({ textContent: input.textContent }),
+    },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `send_my_contact_message_failed_${res.status}`);
+  }
+  return res.json();
+}
+
 export type PrivateMessage = {
   id: string;
   conversationId: string;

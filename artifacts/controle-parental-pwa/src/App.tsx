@@ -59,7 +59,7 @@ import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
 import { fetchGroups, createGroup, uploadGroupPhoto, deleteGroup, addGroupMember, removeGroupMember, fetchGroupMessages, sendGroupMessage } from '@/lib/groups-api';
 import type { Group, GroupMessage } from '@/lib/groups-api';
-import { fetchChildren, fetchApprovedContacts, fetchParentContactConversation, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact, updateContact, blockContact } from '@/lib/conversations-api';
+import { fetchChildren, fetchApprovedContacts, fetchParentContactConversation, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact, updateContact, blockContact, fetchMyContactChat, sendMyContactMessage } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, PrivateMessage } from '@/lib/conversations-api';
 import { useLongPress } from '@/hooks/use-long-press';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -2508,24 +2508,247 @@ function CreateGroupWizard() {
 }
 
 // Pedido do Marcelo: chat próprio do Responsável, pra conversar com quem
-// ele quiser (mesmo modelo do chat da Criança). Backend de mensagem
-// direta Responsável<->Convite ainda não existe (hoje o que existe é só o
-// espelho, somente-leitura, da conversa da criança) -- fica como próximo
-// passo dedicado. Por enquanto a tela já existe e explica isso, em vez de
-// fingir uma função que não funciona de verdade.
+// ele quiser da família (07/09: decidiu que usa a mesma lista de Convites
+// da Criança, não uma lista separada). Diferente do Espelho
+// (/parent/contacts/:id/messages, só-leitura -- ver aba "Espelho" em
+// Conversations()), aqui o Responsável é participante de verdade: canal
+// próprio no backend (getOrCreateParentContactConversation em
+// routes/conversations.ts), ninguém mais vê essas mensagens. V1: só texto
+// -- sem foto/vídeo/figurinha/áudio ainda (o backend já aceita, é só o
+// composer daqui que ainda não manda -- mesmo padrão incremental que o
+// canal privado teve no começo).
 function MyChat() {
+  const { getToken } = useAuth();
+  const [children, setChildren] = useState<ChildUser[] | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [contacts, setContacts] = useState<ApprovedContact[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [openContact, setOpenContact] = useState<{ contactUserId: string; contactName: string } | null>(null);
+  const [messages, setMessages] = useState<PrivateMessage[]>([]);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [threadError, setThreadError] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const kids = await fetchChildren(token);
+        if (cancelled) return;
+        setChildren(kids);
+        setSelectedChildId((current) => current ?? kids[0]?.id ?? null);
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getToken]);
+
+  useEffect(() => {
+    if (!selectedChildId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const data = await fetchApprovedContacts(selectedChildId!, token);
+        if (!cancelled) setContacts(data);
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar contatos.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedChildId, getToken]);
+
+  // Reabrir uma conversa sempre começa colada no fim, igual WhatsApp
+  // (mesmo padrão do canal privado/grupo/espelho em Conversations()).
+  useEffect(() => { stickToBottomRef.current = true; }, [openContact]);
+  useEffect(() => {
+    const el = listRef.current;
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  useEffect(() => {
+    if (!openContact) return;
+    let cancelled = false;
+    async function load(showSpinner: boolean) {
+      if (showSpinner) setThreadLoading(true);
+      try {
+        const token = await getToken();
+        if (!cancelled) setAuthToken(token);
+        const data = await fetchMyContactChat(openContact!.contactUserId, token);
+        if (!cancelled) {
+          setMessages(data.messages);
+          setThreadError(null);
+        }
+      } catch (err) {
+        if (!cancelled && showSpinner) setThreadError(err instanceof Error ? err.message : 'Erro ao carregar a conversa.');
+      } finally {
+        if (!cancelled && showSpinner) setThreadLoading(false);
+      }
+    }
+    load(true);
+    const intervalId = window.setInterval(() => load(false), 5000);
+    return () => { cancelled = true; window.clearInterval(intervalId); };
+  }, [openContact, getToken]);
+
+  function openChat(contact: ApprovedContact) {
+    if (!contact.contactUserId) return;
+    setMessages([]);
+    setThreadError(null);
+    setDraft('');
+    setOpenContact({ contactUserId: contact.contactUserId, contactName: contact.contactName });
+  }
+
+  function closeChat() {
+    setOpenContact(null);
+  }
+
+  async function sendMessage(event: FormEvent) {
+    event.preventDefault();
+    const text = draft.trim();
+    if (!text || !openContact || sending) return;
+    setSending(true);
+    setThreadError(null);
+    try {
+      const token = await getToken();
+      setAuthToken(token);
+      const message = await sendMyContactMessage(openContact.contactUserId, { textContent: text }, token);
+      setMessages((current) => [...current, message]);
+      setDraft('');
+    } catch (err) {
+      setThreadError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const hasChild = (children?.length ?? 0) > 0;
+  // Só quem já aceitou o convite (virou usuário de verdade) dá pra
+  // conversar de fato -- mesmo filtro do lado da Criança (ChildContact).
+  const chatable = contacts.filter((contact) => contact.contactUserId);
+  const mediaAuthHeaders: HeadersInit = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+
   return (
     <>
       <PageIntro eyebrow="seu chat" title="Chat" description="Seu próprio espaço para conversar com quem você quiser da família — separado do espelho da criança." />
-      <EmptyState
-        icon={MessageCircle}
-        eyebrow="em construção"
-        title="Ainda vem por aqui"
-        text="O chat próprio do Responsável está em construção — vai funcionar igual ao chat da criança, com os mesmos Convites da família. Por enquanto, use o Espelho para acompanhar as conversas dela."
-        actionLabel="Ver Convites"
-        onAction={() => { window.location.href = '/conversations'; }}
-        testId="button-my-chat-empty-action"
-      />
+      {children && children.length > 1 && (
+        <div className="mb-6 flex flex-wrap items-center gap-1 rounded-2xl bg-[hsl(var(--muted)/.65)] p-1 sm:w-fit" data-testid="selector-my-chat-child">
+          {children.map((child) => (
+            <button
+              key={child.id}
+              type="button"
+              onClick={() => setSelectedChildId(child.id)}
+              data-testid={`button-select-my-chat-child-${child.id}`}
+              className={`min-h-10 rounded-xl px-4 text-xs font-extrabold transition-colors ${selectedChildId === child.id ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]'}`}
+            >
+              {child.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {loadError ? (
+        <p className="rounded-2xl bg-[hsl(var(--destructive)/.08)] p-5 text-sm text-[hsl(var(--destructive))]" data-testid="status-my-chat-error">{loadError}</p>
+      ) : !hasChild ? (
+        <EmptyState icon={MessageCircle} eyebrow="sem crianças" title="Nada por aqui ainda" text="Vincule uma criança primeiro em 'Vincular criança'." actionLabel="Vincular criança" onAction={() => { window.location.href = '/pair'; }} testId="button-my-chat-empty-nochild" />
+      ) : chatable.length === 0 ? (
+        <EmptyState
+          icon={MessageCircle}
+          eyebrow="sem convites ainda"
+          title="Ninguém por aqui"
+          text="Convide alguém da família em Convites e, assim que a pessoa aceitar, ela aparece aqui pra você conversar direto."
+          actionLabel="Ver Convites"
+          onAction={() => { window.location.href = '/conversations'; }}
+          testId="button-my-chat-empty-action"
+        />
+      ) : (
+        <div className="flex flex-col gap-2">
+          {chatable.map((contact) => (
+            <button
+              key={contact.id}
+              type="button"
+              onClick={() => openChat(contact)}
+              className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] px-4 py-3.5 text-left shadow-card transition-colors hover:border-[hsl(var(--primary))]"
+              data-testid={`button-my-chat-open-${contact.id}`}
+            >
+              <Avatar name={contact.contactName} shape={contact.isFavorite ? 'star' : 'circle'} />
+              <span className="font-bold">{contact.contactName}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {openContact && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[hsl(var(--background))]" data-testid="overlay-my-chat">
+          <header className="flex items-center justify-between border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-5 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar name={openContact.contactName} />
+              <div className="min-w-0">
+                <h1 className="truncate text-base font-bold">{openContact.contactName}</h1>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">Meu Chat</p>
+              </div>
+            </div>
+            <button type="button" onClick={closeChat} aria-label="Fechar conversa" data-testid="button-close-my-chat" className="grid size-10 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+              <X size={20} />
+            </button>
+          </header>
+
+          <div
+            ref={listRef}
+            onScroll={(event) => {
+              const el = event.currentTarget;
+              stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+            }}
+            className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+            data-testid="list-my-chat-messages"
+          >
+            {threadLoading && messages.length === 0 ? (
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+            ) : messages.length === 0 ? (
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda — mande a primeira.</p>
+            ) : (
+              messages.map((message) => {
+                // openContact! aqui: dentro desta closure (arrow do .map)
+                // o guard "openContact &&" do JSX não estreita de volta pra
+                // não-nulo -- mesmo padrão documentado em CreateGroupWizard
+                // / ContactChat.tsx / Conversations().
+                const fromMe = message.senderId !== openContact!.contactUserId;
+                const sticker = isStickerMessage(message);
+                const bubbleClass = sticker
+                  ? `${fromMe ? 'self-end' : 'self-start'}`
+                  : `rounded-2xl px-4 py-2.5 shadow-sm ${fromMe ? 'self-end bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'self-start bg-[hsl(var(--card))]'}`;
+                return (
+                  <div key={message.id} data-testid={`row-my-chat-message-${message.id}`} className={`flex max-w-[80%] flex-col ${fromMe ? 'self-end items-end' : 'self-start items-start'}`}>
+                    <div className={`text-sm leading-6 ${bubbleClass}`}>
+                      <MessageContent message={message} authHeaders={mediaAuthHeaders} />
+                      <p className={`mt-1 text-[10px] font-mono-app uppercase tracking-[.08em] ${fromMe && !sticker ? 'text-[hsl(var(--primary-foreground)/.7)]' : 'text-[hsl(var(--muted-foreground))]'}`}>
+                        {new Date(message.createdAt).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          {threadError && <p className="shrink-0 px-4 pb-2 text-sm font-semibold text-[hsl(var(--destructive))]">{threadError}</p>}
+          <form onSubmit={sendMessage} className="flex items-center gap-2 border-t border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="Escreva uma mensagem…"
+              className="h-11 flex-1 rounded-full border border-[hsl(var(--border))] bg-transparent px-4 text-sm outline-none focus:border-[hsl(var(--primary))]"
+              data-testid="input-my-chat-message"
+            />
+            <button type="submit" disabled={!draft.trim() || sending} data-testid="button-my-chat-send" className="grid size-11 shrink-0 place-items-center rounded-full bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] disabled:opacity-60">
+              <Send size={18} />
+            </button>
+          </form>
+        </div>
+      )}
     </>
   );
 }

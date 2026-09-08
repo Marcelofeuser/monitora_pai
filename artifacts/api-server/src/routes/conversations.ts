@@ -9,7 +9,7 @@ import { kindForMime, maxBytesForMime, saveMedia } from "../lib/mediaStorage";
 import { isAllowedSticker } from "../lib/stickers";
 import { notifyChildOfActivity, notifyParentOfActivity } from "../lib/notify";
 import { mirrorAndNotify } from "../lib/mirror";
-import { isGuardianOfChild } from "../lib/guardians";
+import { isGuardianOfChild, getGuardiansOfChild } from "../lib/guardians";
 
 const router: IRouter = Router();
 
@@ -440,6 +440,202 @@ router.post(
       .returning();
 
     await mirrorAndNotify({ conversation, messageId: message.id, senderId: contactUserId, childId: contactRow.childId });
+
+    return res.status(201).json(message);
+  },
+);
+
+// Canal direto Responsável <-> Contato aprovado ("Meu Chat" -- pedido do
+// Marcelo, 07/09: diferente do espelho read-only de
+// /parent/contacts/:id/messages acima, aqui o Responsável é participante
+// de verdade e manda mensagem direto pro Contato, mesma lista de Convites
+// da Criança (decisão dele: não é uma lista separada). isParentChildPrivate
+// fica false (mesma regra "não é conversa Responsável<->Criança"), mas não
+// é espelhada -- o Responsável já é o participante direto, não tem pra
+// quem espelhar. Item 13 (múltiplos Responsáveis): um canal por par
+// Responsável/Contato, cada guardian tem o seu -- mesmo padrão do canal
+// privado com a Criança (getOrCreatePrivateConversation acima).
+async function getOrCreateParentContactConversation(parentId: string, contactUserId: string) {
+  const [existing] = await db
+    .select()
+    .from(conversationsTable)
+    .where(
+      and(
+        eq(conversationsTable.isParentChildPrivate, false),
+        or(
+          and(eq(conversationsTable.participantAId, parentId), eq(conversationsTable.participantBId, contactUserId)),
+          and(eq(conversationsTable.participantAId, contactUserId), eq(conversationsTable.participantBId, parentId)),
+        ),
+      ),
+    )
+    .limit(1);
+
+  if (existing) return existing;
+
+  const [created] = await db
+    .insert(conversationsTable)
+    .values({ participantAId: parentId, participantBId: contactUserId, isParentChildPrivate: false })
+    .returning();
+  return created;
+}
+
+/**
+ * GET /api/conversations/contact/:contactUserId
+ * Responsável: "Meu Chat" com um Contato aprovado -- conversa de verdade
+ * (não o espelho), + histórico.
+ */
+router.get("/conversations/contact/:contactUserId", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+  const contactUserId = req.params.contactUserId;
+
+  const [contactRow] = await db
+    .select()
+    .from(contactsTable)
+    .where(and(eq(contactsTable.contactUserId, contactUserId), eq(contactsTable.status, "approved")))
+    .limit(1);
+  if (!contactRow) return res.status(404).json({ error: "not_found" });
+
+  if (!(await isGuardianOfChild(auth.userId, contactRow.childId))) {
+    return res.status(403).json({ error: "not_the_parent_of_this_child" });
+  }
+
+  const conversation = await getOrCreateParentContactConversation(auth.userId, contactUserId);
+  const messages = await listMessages(conversation.id);
+  return res.json({ conversation, messages, contactName: contactRow.contactName });
+});
+
+/**
+ * POST /api/conversations/contact/:contactUserId/messages
+ * Responsável manda mensagem direto pro Contato (Meu Chat). V1: reaproveita
+ * extractMessageInput por completo, então já aceita foto/vídeo/figurinha
+ * junto com texto, igual ao canal privado -- só o frontend (MyChat em
+ * App.tsx) que por enquanto só manda texto.
+ */
+router.post(
+  "/conversations/contact/:contactUserId/messages",
+  uploadSingleMediaFile,
+  async (req, res) => {
+    const auth = getAuth(req);
+    if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+    const contactUserId = req.params.contactUserId;
+
+    const [contactRow] = await db
+      .select()
+      .from(contactsTable)
+      .where(and(eq(contactsTable.contactUserId, contactUserId), eq(contactsTable.status, "approved")))
+      .limit(1);
+    if (!contactRow) return res.status(404).json({ error: "not_found" });
+
+    if (!(await isGuardianOfChild(auth.userId, contactRow.childId))) {
+      return res.status(403).json({ error: "not_the_parent_of_this_child" });
+    }
+
+    const input = await extractMessageInput(req, res);
+    if (!input) return;
+
+    const conversation = await getOrCreateParentContactConversation(auth.userId, contactUserId);
+    const [message] = await db
+      .insert(messagesTable)
+      .values({
+        conversationId: conversation.id,
+        senderId: auth.userId,
+        type: input.type,
+        textContent: input.textContent,
+        contentUrl: input.contentUrl,
+      })
+      .returning();
+
+    return res.status(201).json(message);
+  },
+);
+
+/**
+ * GET /api/contact/conversations/with-parent
+ * Contato (token): lista dos Responsáveis dessa Criança com quem pode
+ * conversar direto -- pode ser mais de um (item 13). Lado do Contato do
+ * "Meu Chat". Ainda sem tela própria no frontend do Contato (fica como
+ * próximo passo -- só o lado do Responsável foi ligado nesta rodada).
+ */
+router.get(
+  "/contact/conversations/with-parent",
+  requireContactAuth,
+  async (req: ContactAuthedRequest, res) => {
+    const contactUserId = req.contactUserId;
+    if (!contactUserId) return res.status(401).json({ error: "not_authenticated" });
+
+    const [contactRow] = await db.select().from(contactsTable).where(eq(contactsTable.contactUserId, contactUserId)).limit(1);
+    if (!contactRow) return res.status(404).json({ error: "contact_not_found" });
+
+    const guardians = await getGuardiansOfChild(contactRow.childId);
+    return res.json(guardians.map((g) => ({ parentId: g.id, parentName: g.name })));
+  },
+);
+
+/**
+ * GET /api/contact/conversations/with-parent/:parentId
+ * Contato: conversa com um Responsável específico + histórico.
+ */
+router.get(
+  "/contact/conversations/with-parent/:parentId",
+  requireContactAuth,
+  async (req: ContactAuthedRequest, res) => {
+    const contactUserId = req.contactUserId;
+    if (!contactUserId) return res.status(401).json({ error: "not_authenticated" });
+    const parentId = req.params.parentId;
+
+    const [contactRow] = await db.select().from(contactsTable).where(eq(contactsTable.contactUserId, contactUserId)).limit(1);
+    if (!contactRow) return res.status(404).json({ error: "contact_not_found" });
+
+    if (!(await isGuardianOfChild(parentId, contactRow.childId))) {
+      return res.status(403).json({ error: "not_a_guardian_of_this_child" });
+    }
+
+    const [parent] = await db.select().from(usersTable).where(eq(usersTable.id, parentId)).limit(1);
+
+    const conversation = await getOrCreateParentContactConversation(parentId, contactUserId);
+    const messages = await listMessages(conversation.id);
+    return res.json({ conversation, messages, parentName: parent?.name ?? "Responsável" });
+  },
+);
+
+/**
+ * POST /api/contact/conversations/with-parent/:parentId/messages
+ * Contato manda mensagem direto pro Responsável -- notifica por push
+ * (mesma infra do canal privado Criança<->Responsável, reaproveitada).
+ */
+router.post(
+  "/contact/conversations/with-parent/:parentId/messages",
+  requireContactAuth,
+  uploadSingleMediaFile,
+  async (req: ContactAuthedRequest, res) => {
+    const contactUserId = req.contactUserId;
+    if (!contactUserId) return res.status(401).json({ error: "not_authenticated" });
+    const parentId = req.params.parentId;
+
+    const [contactRow] = await db.select().from(contactsTable).where(eq(contactsTable.contactUserId, contactUserId)).limit(1);
+    if (!contactRow) return res.status(404).json({ error: "contact_not_found" });
+
+    if (!(await isGuardianOfChild(parentId, contactRow.childId))) {
+      return res.status(403).json({ error: "not_a_guardian_of_this_child" });
+    }
+
+    const input = await extractMessageInput(req, res);
+    if (!input) return;
+
+    const conversation = await getOrCreateParentContactConversation(parentId, contactUserId);
+    const [message] = await db
+      .insert(messagesTable)
+      .values({
+        conversationId: conversation.id,
+        senderId: contactUserId,
+        type: input.type,
+        textContent: input.textContent,
+        contentUrl: input.contentUrl,
+      })
+      .returning();
+
+    await notifyParentOfActivity({ conversation, senderId: contactUserId, parentUserId: parentId });
 
     return res.status(201).json(message);
   },
