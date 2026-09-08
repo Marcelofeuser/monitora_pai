@@ -515,7 +515,15 @@ router.get("/conversations/contact/:contactUserId", async (req, res) => {
 router.post(
   "/conversations/contact/:contactUserId/messages",
   uploadSingleMediaFile,
-  async (req, res) => {
+  // req tipado explicitamente (Request<Record<string, string>>, mesmo
+  // padrão de ContactAuthedRequest em middlewares/contactAuth.ts): sem
+  // isso, o TS não consegue inferir req.params.contactUserId como string
+  // -- com 2 handlers em sequência (uploadSingleMediaFile + esta função) e
+  // req implícito, ele cai num tipo genérico onde params vira
+  // "string | string[]" (suporte do Express 5/path-to-regexp v8 a
+  // wildcards tipo "/*splat"), e o Drizzle recusa comparar uma coluna TEXT
+  // com isso. Erro pego no typecheck do Marcelo (07/09), corrigido aqui.
+  async (req: Request<Record<string, string>>, res: Response) => {
     const auth = getAuth(req);
     if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
     const contactUserId = req.params.contactUserId;
