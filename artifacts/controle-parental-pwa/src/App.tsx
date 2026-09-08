@@ -60,7 +60,7 @@ import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
 import { fetchGroups, createGroup, uploadGroupPhoto, deleteGroup, addGroupMember, removeGroupMember, fetchGroupMessages, sendGroupMessage } from '@/lib/groups-api';
 import type { Group, GroupMessage } from '@/lib/groups-api';
-import { fetchChildren, fetchApprovedContacts, fetchBlockedContacts, fetchParentContactConversation, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact, updateContact, blockContact, fetchMyContactChat, sendMyContactMessage } from '@/lib/conversations-api';
+import { fetchChildren, fetchApprovedContacts, fetchBlockedContacts, fetchDeniedContacts, fetchDeletedContactsCount, fetchParentContactConversation, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact, updateContact, blockContact, fetchMyContactChat, sendMyContactMessage } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, PrivateMessage } from '@/lib/conversations-api';
 import { useLongPress } from '@/hooks/use-long-press';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -1882,14 +1882,14 @@ function StatTile({ label, value, tone }: { label: string; value: number; tone: 
 // Convites (pedido do Marcelo, 08/09): página própria, alcançável pelo
 // hambúrguer -- antes era só uma aba dentro do Espelho, junto de Grupos e
 // do canal privado, "abria um monte de assuntos". Ganhou também um
-// resumo com números (aceito / pendente / bloqueado) e a seção de
-// convidar outro Responsável, que morava em Configurações.
+// resumo com números (aceito / pendente / recusado / bloqueado / excluído)
+// e a seção de convidar outro Responsável, que morava em Configurações.
 //
-// "Recusado" e "excluído" não têm um número aqui: o backend não guarda
-// histórico desses dois hoje (recusar não existe mais como fluxo -- todo
-// contato já nasce aprovado -- e excluir apaga a linha de vez, sem
-// registro). Dá pra adicionar um registro auditável depois se o Marcelo
-// quiser esse histórico.
+// "Recusado" reaproveita status="denied" (existia no enum sem uso -- ver
+// botão "Recusar convite" em ContactJoin.tsx). "Excluído" vem de um log
+// separado (contactDeletionEventsTable) porque excluir é hard delete de
+// verdade -- a linha em `contacts` some, então não dá pra contar olhando
+// o estado atual da tabela (ver schema/contactStats.ts).
 // Opções de "função" do Contato no formulário de Convites (item 7 do
 // pedido: "amigo, primo, tio avó, etc"). "responsavel" é tratado à parte
 // no formulário -- não vira um Contato normal, gera um convite de
@@ -1913,6 +1913,8 @@ function Invites() {
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [approvedContacts, setApprovedContacts] = useState<ApprovedContact[]>([]);
   const [blockedCount, setBlockedCount] = useState(0);
+  const [deniedCount, setDeniedCount] = useState(0);
+  const [deletedCount, setDeletedCount] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [newContactName, setNewContactName] = useState('');
@@ -1963,13 +1965,17 @@ function Invites() {
     (async () => {
       try {
         const token = await getToken();
-        const [contacts, blocked] = await Promise.all([
+        const [contacts, blocked, denied, deletedTotal] = await Promise.all([
           fetchApprovedContacts(selectedChildId!, token),
           fetchBlockedContacts(selectedChildId!, token),
+          fetchDeniedContacts(selectedChildId!, token),
+          fetchDeletedContactsCount(selectedChildId!, token),
         ]);
         if (!cancelled) {
           setApprovedContacts(contacts);
           setBlockedCount(blocked.length);
+          setDeniedCount(denied.length);
+          setDeletedCount(deletedTotal);
         }
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar convites.');
@@ -2050,6 +2056,7 @@ function Invites() {
       const token = await getToken();
       await deleteContact(contact.id, token);
       setApprovedContacts((current) => current.filter((item) => item.id !== contact.id));
+      setDeletedCount((current) => current + 1);
     } catch (err) {
       setDeleteContactError(err instanceof Error ? err.message : 'Erro ao excluir contato.');
     } finally {
@@ -2166,6 +2173,10 @@ function Invites() {
   const hasChild = (children?.length ?? 0) > 0;
   const acceptedCount = approvedContacts.filter((contact) => contact.contactUserId).length;
   const pendingCount = approvedContacts.length - acceptedCount;
+  // "Convites" (total): todos os convites já enviados pra essa Criança,
+  // em qualquer estado -- ativos (aceito+pendente) + recusado + bloqueado
+  // + excluído. Item 2 do pedido original.
+  const totalInvitesCount = approvedContacts.length + deniedCount + blockedCount + deletedCount;
 
   return (
     <>
@@ -2180,11 +2191,13 @@ function Invites() {
         </div>
       )}
       {hasChild && (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="row-invite-stats">
-          <StatTile label="Convites" value={approvedContacts.length} tone="muted" />
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" data-testid="row-invite-stats">
+          <StatTile label="Convites" value={totalInvitesCount} tone="muted" />
           <StatTile label="Aceitos" value={acceptedCount} tone="teal" />
           <StatTile label="Pendentes" value={pendingCount} tone="gold" />
+          <StatTile label="Recusados" value={deniedCount} tone="destructive" />
           <StatTile label="Bloqueados" value={blockedCount} tone="destructive" />
+          <StatTile label="Excluídos" value={deletedCount} tone="destructive" />
         </div>
       )}
       {loadError ? (

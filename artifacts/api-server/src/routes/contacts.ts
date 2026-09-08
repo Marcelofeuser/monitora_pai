@@ -13,6 +13,7 @@ import {
   pairingTokensTable,
   contactInviteTokensTable,
   contactDeviceTokensTable,
+  contactDeletionEventsTable,
 } from "@workspace/db";
 import { z } from "zod/v4";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
@@ -248,6 +249,13 @@ router.patch("/contacts/:id", async (req, res) => {
  * Marcelo: opção de excluir qualquer contato, não só negar/revogar acesso.
  * Se o contato estiver em algum grupo, sai de lá junto — group_members
  * referencia contacts com ON DELETE CASCADE (ver schema/groups.ts).
+ *
+ * Antes de apagar, registra um evento anônimo em contact_deletion_events
+ * (só childId + hora, nenhum dado do Contato) -- é o que alimenta o card
+ * "Excluídos" nas estatísticas de Convites, já que depois deste delete não
+ * sobra mais nenhuma linha pra contar (ver comentário em
+ * schema/contactStats.ts). Na mesma transação pra nunca contar uma
+ * exclusão que não aconteceu de verdade (ou vice-versa).
  */
 router.delete("/contacts/:id", async (req, res) => {
   const auth = getAuth(req);
@@ -264,9 +272,37 @@ router.delete("/contacts/:id", async (req, res) => {
   const isParent = await assertIsParentOfChild(auth.userId, contact.childId);
   if (!isParent) return res.status(403).json({ error: "not_the_parent_of_this_child" });
 
-  await db.delete(contactsTable).where(eq(contactsTable.id, contact.id));
+  await db.transaction(async (tx) => {
+    await tx.insert(contactDeletionEventsTable).values({ childId: contact.childId });
+    await tx.delete(contactsTable).where(eq(contactsTable.id, contact.id));
+  });
 
   return res.json({ ok: true });
+});
+
+/**
+ * GET /api/contacts/deleted-count?childId=...
+ * Quantos contatos já foram excluídos de verdade dessa Criança -- card
+ * "Excluídos" nas estatísticas de Convites. Não dá pra tirar isso de
+ * `contacts` (a linha some no delete), por isso o contador separado (ver
+ * contactDeletionEventsTable acima).
+ */
+router.get("/contacts/deleted-count", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const childId = String(req.query.childId ?? "");
+  if (!childId) return res.status(400).json({ error: "missing_child_id" });
+
+  const isParent = await assertIsParentOfChild(auth.userId, childId);
+  if (!isParent) return res.status(403).json({ error: "not_the_parent_of_this_child" });
+
+  const events = await db
+    .select()
+    .from(contactDeletionEventsTable)
+    .where(eq(contactDeletionEventsTable.childId, childId));
+
+  return res.json({ count: events.length });
 });
 
 /**
@@ -505,6 +541,44 @@ router.post("/contacts/invite/:token/confirm", async (req, res) => {
     childId: invite.childId,
     childName: child?.name ?? null,
   });
+});
+
+/**
+ * POST /api/contacts/invite/:token/decline
+ * Público -- mesma situação do /confirm: quem recusa ainda não tem conta.
+ * Pedido do Marcelo (item 2, card "Recusado" nas estatísticas de
+ * Convites): reaproveita o status "denied", que já existia no enum mas
+ * nunca tinha um caminho de código que o usasse (o fluxo de aprovação
+ * antigo foi removido -- ver comentário em POST /api/contacts). O contato
+ * some das listas de Convites/Chat/Grupos (que só mostram status=approved),
+ * igual "bloqueado", mas com o rótulo certo pra quem recusou o convite em
+ * vez de ter sido bloqueado depois de já aceito.
+ */
+router.post("/contacts/invite/:token/decline", async (req, res) => {
+  const [invite] = await db
+    .select()
+    .from(contactInviteTokensTable)
+    .where(
+      and(
+        eq(contactInviteTokensTable.token, req.params.token),
+        isNull(contactInviteTokensTable.usedAt),
+        gt(contactInviteTokensTable.expiresAt, new Date()),
+      ),
+    )
+    .limit(1);
+  if (!invite) return res.status(400).json({ error: "invalid_or_expired_token" });
+
+  await db
+    .update(contactsTable)
+    .set({ status: "denied", decidedAt: new Date() })
+    .where(eq(contactsTable.id, invite.contactId));
+
+  await db
+    .update(contactInviteTokensTable)
+    .set({ usedAt: new Date() })
+    .where(eq(contactInviteTokensTable.id, invite.id));
+
+  return res.json({ ok: true });
 });
 
 export default router;

@@ -78,6 +78,38 @@ export async function fetchBlockedContacts(
   return res.json();
 }
 
+// "Recusados" nas estatísticas de Convites: reaproveita status="denied" --
+// existia no enum sem nenhum caminho de código que o usasse até o botão
+// "Recusar convite" em ContactJoin.tsx (ver POST /api/contacts/invite/:token/decline).
+export async function fetchDeniedContacts(
+  childId: string,
+  authToken: string | null,
+): Promise<ApprovedContact[]> {
+  const res = await fetch(
+    `${API_URL}/api/contacts?childId=${encodeURIComponent(childId)}&status=denied`,
+    { headers: authHeaders(authToken) },
+  );
+  if (!res.ok) throw new Error(`fetch_denied_contacts_failed_${res.status}`);
+  return res.json();
+}
+
+// "Excluídos" nas estatísticas de Convites: exclusão é hard delete de
+// verdade (LGPD), a linha some de `contacts` -- por isso o contador vem de
+// um log separado (ver contactDeletionEventsTable/schema/contactStats.ts),
+// não de uma contagem com filtro de status como as outras.
+export async function fetchDeletedContactsCount(
+  childId: string,
+  authToken: string | null,
+): Promise<number> {
+  const res = await fetch(
+    `${API_URL}/api/contacts/deleted-count?childId=${encodeURIComponent(childId)}`,
+    { headers: authHeaders(authToken) },
+  );
+  if (!res.ok) throw new Error(`fetch_deleted_contacts_count_failed_${res.status}`);
+  const body = await res.json();
+  return body.count as number;
+}
+
 // Pedido do Marcelo: "o chat e um espelho do chat da crianca" -- toda
 // pessoa aprovada aparece pro Responsavel como uma conversa de verdade
 // (bolinha + historico), nao mais uma lista solta de mensagens sem dono

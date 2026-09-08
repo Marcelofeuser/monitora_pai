@@ -9,3 +9,4 @@ export * from "./screenTime";
 export * from "./groups";
 export * from "./contactAuth";
 export * from "./guardians";
+export * from "./contactStats";

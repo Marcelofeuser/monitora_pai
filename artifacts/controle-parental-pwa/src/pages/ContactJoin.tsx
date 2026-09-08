@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useLocation } from 'wouter';
-import { getContactInviteInfo, confirmContactInvite } from '@/lib/contact-invite-api';
+import { getContactInviteInfo, confirmContactInvite, declineContactInvite } from '@/lib/contact-invite-api';
 import { ThemeSwitcher } from '@/lib/theme';
 import { ShieldCheck } from 'lucide-react';
 
@@ -24,7 +24,7 @@ const CONTACT_CHILD_NAME_KEY = 'amparo-contact-child-name';
 
 export function ContactJoin() {
   const [, setLocation] = useLocation();
-  const [status, setStatus] = useState<'loading' | 'ready' | 'confirming' | 'error' | 'no_token'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'confirming' | 'declining' | 'declined' | 'error' | 'no_token'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [childName, setChildName] = useState('');
   const [contactName, setContactName] = useState('');
@@ -74,6 +74,19 @@ export function ContactJoin() {
     }
   }
 
+  async function handleDecline() {
+    if (!token) return;
+    setStatus('declining');
+    setErrorMessage(null);
+    try {
+      await declineContactInvite(token);
+      setStatus('declined');
+    } catch (err) {
+      setStatus('error');
+      setErrorMessage(err instanceof Error ? err.message : 'Erro ao recusar convite.');
+    }
+  }
+
   const minutesLeft = expiresAt
     ? Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 60000))
     : null;
@@ -107,7 +120,16 @@ export function ContactJoin() {
           </div>
         )}
 
-        {(status === 'ready' || status === 'confirming') && (
+        {status === 'declined' && (
+          <div className="text-center" data-testid="status-contact-invite-declined">
+            <h1 className="text-xl font-bold">Convite recusado</h1>
+            <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
+              Tudo certo, você não vai ganhar acesso a essa conversa. Nada mais a fazer por aqui.
+            </p>
+          </div>
+        )}
+
+        {(status === 'ready' || status === 'confirming' || status === 'declining') && (
           <>
             <div className="flex items-center gap-2 text-[hsl(var(--primary))]">
               <ShieldCheck size={20} />
@@ -135,11 +157,20 @@ export function ContactJoin() {
               </label>
               <button
                 type="submit"
-                disabled={status === 'confirming' || !contactName.trim()}
+                disabled={status === 'confirming' || status === 'declining' || !contactName.trim()}
                 data-testid="button-confirm-contact-invite"
                 className="rounded-md bg-[hsl(var(--primary))] px-4 py-2 font-semibold text-[hsl(var(--primary-foreground))] disabled:opacity-60"
               >
                 {status === 'confirming' ? 'Confirmando…' : 'Confirmar e começar a conversar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { void handleDecline(); }}
+                disabled={status === 'confirming' || status === 'declining'}
+                data-testid="button-decline-contact-invite"
+                className="text-sm font-medium text-[hsl(var(--muted-foreground))] underline disabled:opacity-60"
+              >
+                {status === 'declining' ? 'Recusando…' : 'Não quero conversar por aqui'}
               </button>
             </form>
           </>

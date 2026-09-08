@@ -47,3 +47,18 @@ export async function confirmContactInvite(
   }
   return res.json();
 }
+
+// "Recusar convite" em ContactJoin.tsx -- pedido do Marcelo (item 2, card
+// "Recusado" nas estatísticas de Convites). Marca o contato como
+// status="denied" do lado do Responsável; não cria conta nenhuma pra quem
+// recusou.
+export async function declineContactInvite(token: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/contacts/invite/${encodeURIComponent(token)}/decline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `decline_contact_invite_failed_${res.status}`);
+  }
+}
