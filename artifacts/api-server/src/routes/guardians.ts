@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import { randomBytes } from "node:crypto";
 import { eq, and, isNull, gt } from "drizzle-orm";
 import { db, usersTable, guardianInviteTokensTable, childGuardiansTable } from "@workspace/db";
+import { z } from "zod/v4";
 import { ensureParentUser } from "../lib/parentUser";
 import { ensureGuardian, getGuardianChildIds, getGuardiansOfChild } from "../lib/guardians";
 
@@ -86,6 +87,15 @@ router.get("/guardians/invite/:token", async (req, res) => {
   return res.json({ invitedByName: inviter?.name ?? null, expiresAt: invite.expiresAt });
 });
 
+const acceptGuardianInviteSchema = z.object({
+  // LGPD/ECA Digital: consentimento explícito de quem está aceitando virar
+  // Responsável adicional pro tratamento de dados de TODAS as crianças que
+  // vai passar a enxergar -- mesmo z.literal(true) usado em
+  // createPairingSchema (routes/pairing.ts). Sem isso não dá pra provar que
+  // o consentimento foi de fato coletado nesse ponto de entrada também.
+  consent: z.literal(true),
+});
+
 /**
  * POST /api/guardians/invite/:token/accept
  * Autenticado (Clerk) -- quem aceita ja logou ou criou conta propria antes
@@ -97,6 +107,11 @@ router.get("/guardians/invite/:token", async (req, res) => {
 router.post("/guardians/invite/:token/accept", async (req, res) => {
   const auth = getAuth(req);
   if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+
+  const parsed = acceptGuardianInviteSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+  }
 
   const [invite] = await db
     .select()
@@ -118,8 +133,12 @@ router.post("/guardians/invite/:token/accept", async (req, res) => {
   const newParent = await ensureParentUser(auth.userId);
 
   const childIds = await getGuardianChildIds(invite.invitedByParentId);
+  // z.literal(true) já garantiu que só chega aqui se o consentimento foi
+  // marcado -- carimba o timestamp de verdade pra cada criança que este
+  // Responsável está ganhando acesso agora (mesmo padrão do POST /pairing).
+  const consentAcceptedAt = new Date();
   for (const childId of childIds) {
-    await ensureGuardian(childId, newParent.id, "guardian");
+    await ensureGuardian(childId, newParent.id, "guardian", consentAcceptedAt);
   }
 
   await db

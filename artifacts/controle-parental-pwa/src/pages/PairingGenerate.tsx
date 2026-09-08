@@ -29,6 +29,10 @@ export function PairingGenerate() {
 
   const [childName, setChildName] = useState('');
   const [childAge, setChildAge] = useState('');
+  // LGPD/ECA Digital: consentimento explícito do Responsável pro tratamento
+  // de dados da Criança -- exigido pelo backend (createPairingSchema em
+  // routes/pairing.ts recusa a requisição sem `consent: true`).
+  const [consentChecked, setConsentChecked] = useState(false);
 
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
@@ -112,14 +116,14 @@ export function PairingGenerate() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!childName.trim()) return;
+    if (!childName.trim() || !consentChecked) return;
 
     setStatus('loading');
     setErrorMessage(null);
     try {
       const authToken = await getToken();
       const result = await createPairing(
-        { childName: childName.trim(), childAge: childAge.trim() || undefined },
+        { childName: childName.trim(), childAge: childAge.trim() || undefined, consent: true },
         authToken,
       );
       await buildQr(childName.trim(), result);
@@ -137,6 +141,7 @@ export function PairingGenerate() {
     setPairedChildLabel('');
     setChildName('');
     setChildAge('');
+    setConsentChecked(false);
   }
 
   const minutesLeft = expiresAt
@@ -234,9 +239,22 @@ export function PairingGenerate() {
                   placeholder="Ex: 10"
                 />
               </label>
+              <label className="flex items-start gap-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={consentChecked}
+                  onChange={(e) => setConsentChecked(e.target.checked)}
+                  data-testid="checkbox-pairing-consent"
+                  required
+                />
+                Confirmo que sou responsável legal por {childName.trim() || 'esta criança'} e concordo com o
+                tratamento dos dados dela pelo Ampara Kids para as finalidades de monitoramento e proteção
+                descritas na Política de Privacidade.
+              </label>
               <button
                 type="submit"
-                disabled={status === 'loading'}
+                disabled={status === 'loading' || !consentChecked}
                 className="rounded-md bg-[hsl(var(--primary))] px-4 py-2 font-semibold text-[hsl(var(--primary-foreground))] disabled:opacity-60"
               >
                 {status === 'loading' ? 'Gerando…' : 'Gerar QR code'}

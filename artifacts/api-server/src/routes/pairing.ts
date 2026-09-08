@@ -20,6 +20,12 @@ function generateToken(): string {
 const createPairingSchema = z.object({
   childName: z.string().min(1).max(120),
   childAge: z.string().max(10).optional(),
+  // LGPD/ECA Digital: consentimento explícito do Responsável pro
+  // tratamento de dados da Criança -- z.literal(true) recusa a requisição
+  // se o campo vier ausente/false (checkbox não marcado no frontend, ver
+  // PairingGenerate.tsx). Sem isso não dá pra provar que o consentimento
+  // foi de fato coletado, só que o formulário foi preenchido.
+  consent: z.literal(true),
 });
 
 /**
@@ -55,6 +61,9 @@ router.post("/pairing", async (req, res) => {
       parentId,
       childName: parsed.data.childName,
       childAge: parsed.data.childAge,
+      // z.literal(true) já garantiu que só chega aqui se o consentimento
+      // foi marcado -- carimba o timestamp de verdade, não só um "true".
+      consentAcceptedAt: new Date(),
       expiresAt,
     })
     .returning();
@@ -192,8 +201,11 @@ router.post("/pairing/confirm", async (req, res) => {
   // Item 13 do pedido (multiplos Responsaveis): garante que quem gerou o
   // QR fica registrado como 'owner' em child_guardians desde o primeiro
   // pareamento -- sem isso, so o fallback preguicoso de isGuardianOfChild
-  // cobriria essa crianca.
-  await ensureGuardian(childUser.id, pairing.parentId, "owner");
+  // cobriria essa crianca. Propaga o consentimento coletado em
+  // POST /api/pairing (pairing.consentAcceptedAt) -- em reconexão a linha
+  // já existe e onConflictDoNothing não sobrescreve, então isso não apaga
+  // um consentimento anterior nem tenta recriar um novo.
+  await ensureGuardian(childUser.id, pairing.parentId, "owner", pairing.consentAcceptedAt ?? undefined);
 
   // A Criança não tem conta Clerk — este é o único momento em que ela
   // recebe uma credencial. O aparelho dela guarda o token bruto (nunca

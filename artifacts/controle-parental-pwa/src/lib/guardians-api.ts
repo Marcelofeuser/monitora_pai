@@ -54,7 +54,10 @@ export async function getGuardianInviteInfo(token: string): Promise<GuardianInvi
 export type AcceptGuardianInviteResult = { ok: true; childrenCount: number };
 
 // Autenticada -- so chamar depois que quem aceita ja tem sessao Clerk
-// ativa (ver GuardianJoin.tsx).
+// ativa (ver GuardianJoin.tsx). consent: LGPD/ECA Digital -- confirmação
+// explícita de quem está aceitando virar Responsável adicional (checkbox
+// obrigatório em GuardianJoin.tsx); o backend recusa se vier diferente de
+// `true` (ver acceptGuardianInviteSchema em routes/guardians.ts).
 export async function acceptGuardianInvite(
   token: string,
   authToken: string | null,
@@ -62,6 +65,7 @@ export async function acceptGuardianInvite(
   const res = await fetch(`${API_URL}/api/guardians/invite/${encodeURIComponent(token)}/accept`, {
     method: 'POST',
     headers: authHeaders(authToken),
+    body: JSON.stringify({ consent: true }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

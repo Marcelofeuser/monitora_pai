@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useAuth } from '@clerk/react';
 import { getGuardianInviteInfo, acceptGuardianInvite } from '@/lib/guardians-api';
@@ -29,6 +29,12 @@ export function GuardianJoin() {
   const [childrenCount, setChildrenCount] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  // LGPD/ECA Digital: consentimento explícito de quem está aceitando virar
+  // Responsável adicional -- precisa ser marcado ANTES de aceitar (já
+  // logado) ou de sair pra /sign-in|/sign-up (senão o aceite automático no
+  // retorno, em App.tsx, aconteceria sem nenhum clique explícito de
+  // consentimento).
+  const [consentChecked, setConsentChecked] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -49,41 +55,45 @@ export function GuardianJoin() {
       });
   }, []);
 
-  // Assim que sabemos se a pessoa já está logada (Clerk carregado) e temos
-  // o convite válido, ou aceita na hora (já logada) ou guarda o token pra
-  // o AppShell confirmar depois do login/cadastro.
-  useEffect(() => {
-    if (status !== 'ready' || !isLoaded || !token) return;
-    if (!isSignedIn) {
-      try {
-        localStorage.setItem(PENDING_GUARDIAN_INVITE_KEY, token);
-      } catch {
-        // localStorage pode falhar (modo privado etc.) — segue sem salvar;
-        // a pessoa pode voltar a abrir o mesmo link depois de logar.
-      }
+  // Aceite (quando já logado) — só dispara com o clique explícito em
+  // "Aceitar convite", nunca sozinho: LGPD/ECA Digital exige consentimento
+  // explícito, então o checkbox precisa estar marcado antes de chamar isso.
+  async function handleAccept() {
+    if (!token || !consentChecked || status === 'accepting') return;
+    setStatus('accepting');
+    setErrorMessage(null);
+    try {
+      const authToken = await getToken();
+      const result = await acceptGuardianInvite(token, authToken);
+      setChildrenCount(result.childrenCount);
+      setStatus('done');
+    } catch (err) {
+      setStatus('error');
+      setErrorMessage(err instanceof Error ? err.message : 'Erro ao confirmar convite.');
+    }
+  }
+
+  // Quem ainda não tem sessão precisa entrar/criar conta antes de aceitar.
+  // Só guarda o token pendente (pro App.tsx confirmar automaticamente no
+  // retorno) se o consentimento já foi marcado aqui — assim aquele aceite
+  // automático nunca acontece sem um clique explícito de consentimento
+  // por parte de quem está aceitando.
+  function handleContinueToAuth(event: MouseEvent) {
+    if (!token || !consentChecked) {
+      // Sem o checkbox marcado, não deixa nem sair pra /sign-in|/sign-up --
+      // senão o aceite automático no retorno (App.tsx) rolaria sem nenhum
+      // clique explícito de consentimento.
+      event.preventDefault();
       return;
     }
-    setStatus('accepting');
-    (async () => {
-      try {
-        const authToken = await getToken();
-        // token! -- o guard "if (... || !token) return" acima não estreita
-        // o tipo dentro desta função assíncrona aninhada (mesmo padrão já
-        // visto em ContactChat.tsx/App.tsx).
-        const result = await acceptGuardianInvite(token!, authToken);
-        try {
-          localStorage.removeItem(PENDING_GUARDIAN_INVITE_KEY);
-        } catch {
-          // ignora
-        }
-        setChildrenCount(result.childrenCount);
-        setStatus('done');
-      } catch (err) {
-        setStatus('error');
-        setErrorMessage(err instanceof Error ? err.message : 'Erro ao confirmar convite.');
-      }
-    })();
-  }, [status, isLoaded, isSignedIn, token, getToken]);
+    try {
+      localStorage.setItem(PENDING_GUARDIAN_INVITE_KEY, token);
+    } catch {
+      // localStorage pode falhar (modo privado etc.) — segue sem salvar;
+      // a pessoa precisa reabrir o mesmo link e marcar o consentimento de
+      // novo depois de logar.
+    }
+  }
 
   return (
     <main className="grid min-h-[100dvh] place-items-center bg-[hsl(var(--background))] px-4 py-8">
@@ -127,9 +137,38 @@ export function GuardianJoin() {
               Ao aceitar, você passa a ver e acompanhar as mesmas crianças deste espaço da família — conversas,
               localização, contatos e tempo de uso.
             </p>
+
+            {status === 'ready' && (
+              <label className="mt-4 flex items-start gap-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={consentChecked}
+                  onChange={(e) => setConsentChecked(e.target.checked)}
+                  data-testid="checkbox-guardian-consent"
+                />
+                Confirmo que sou responsável legal e concordo com o tratamento dos dados das crianças deste
+                espaço pelo Ampara Kids, para as finalidades de monitoramento e proteção descritas na Política
+                de Privacidade.
+              </label>
+            )}
+
             {status === 'accepting' && (
               <p className="mt-4 text-sm font-semibold text-[hsl(var(--primary))]">Confirmando convite…</p>
             )}
+
+            {status === 'ready' && isLoaded && isSignedIn && (
+              <button
+                type="button"
+                onClick={() => { void handleAccept(); }}
+                disabled={!consentChecked}
+                data-testid="button-guardian-invite-accept"
+                className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[hsl(var(--primary))] px-4 font-semibold text-[hsl(var(--primary-foreground))] disabled:opacity-60"
+              >
+                Aceitar convite
+              </button>
+            )}
+
             {status === 'ready' && !isSignedIn && isLoaded && (
               <div className="mt-5 flex flex-col gap-3">
                 <p className="text-xs text-[hsl(var(--muted-foreground))]">
@@ -137,15 +176,17 @@ export function GuardianJoin() {
                 </p>
                 <Link
                   href="/sign-in"
+                  onClick={handleContinueToAuth}
                   data-testid="link-guardian-invite-sign-in"
-                  className="inline-flex min-h-11 items-center justify-center rounded-md bg-[hsl(var(--primary))] px-4 font-semibold text-[hsl(var(--primary-foreground))]"
+                  className={`inline-flex min-h-11 items-center justify-center rounded-md bg-[hsl(var(--primary))] px-4 font-semibold text-[hsl(var(--primary-foreground))] ${consentChecked ? '' : 'pointer-events-none opacity-60'}`}
                 >
                   Entrar
                 </Link>
                 <Link
                   href="/sign-up"
+                  onClick={handleContinueToAuth}
                   data-testid="link-guardian-invite-sign-up"
-                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-[hsl(var(--border))] px-4 font-semibold"
+                  className={`inline-flex min-h-11 items-center justify-center rounded-md border border-[hsl(var(--border))] px-4 font-semibold ${consentChecked ? '' : 'pointer-events-none opacity-60'}`}
                 >
                   Criar conta
                 </Link>

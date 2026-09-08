@@ -7,6 +7,9 @@ import {
   contactsTable,
   usersTable,
   conversationsTable,
+  messagesTable,
+  groupsTable,
+  groupMessagesTable,
   pairingTokensTable,
   contactInviteTokensTable,
   contactDeviceTokensTable,
@@ -14,6 +17,16 @@ import {
 import { z } from "zod/v4";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
 import { isGuardianOfChild, getGuardianChildIds } from "../lib/guardians";
+import { deleteMediaFile } from "../lib/mediaStorage";
+
+// LGPD (exclusão real de dados): content_url/photo_url guardam
+// "/api/media/<filename>" (mídia de verdade, ver lib/mediaStorage.ts) ou
+// "emoji:<emoji>" (figurinha, não é arquivo nenhum) ou null (mensagem de
+// texto). Só o primeiro caso corresponde a um arquivo físico no volume.
+function mediaFilenameFromUrl(url: string | null): string | null {
+  if (!url || !url.startsWith("/api/media/")) return null;
+  return url.slice("/api/media/".length);
+}
 
 const router: IRouter = Router();
 
@@ -271,6 +284,16 @@ router.delete("/contacts/:id", async (req, res) => {
  *   - pairing_tokens.resulting_child_user_id — não é uma referência viva,
  *     é só o registro histórico de qual criança nasceu daquele QR; em vez
  *     de apagar o token, só desvinculamos (seta null).
+ *
+ * LGPD (exclusão real de dados): apagar as LINHAS do banco não é exclusão
+ * de verdade se as fotos/vídeos/áudios da Criança continuarem no volume —
+ * por isso, ANTES de começar a transação, coletamos os nomes de todo
+ * arquivo de mídia que só existe por causa desta Criança (mensagens das
+ * conversas dela + mensagens e foto dos grupos que ela é dona), e só depois
+ * que a transação (que apaga as linhas) confirma com sucesso é que
+ * apagamos os arquivos do disco de verdade. Nessa ordem porque: se
+ * coletássemos depois da transação, as linhas já teriam sumido (cascade) e
+ * não daria mais pra saber quais arquivos eram dela.
  */
 router.delete("/children/:id", async (req, res) => {
   const auth = getAuth(req);
@@ -279,6 +302,31 @@ router.delete("/children/:id", async (req, res) => {
   const childId = req.params.id;
   const isParent = await assertIsParentOfChild(auth.userId, childId);
   if (!isParent) return res.status(403).json({ error: "not_the_parent_of_this_child" });
+
+  const [directMessages, ownGroups] = await Promise.all([
+    db
+      .select({ contentUrl: messagesTable.contentUrl })
+      .from(messagesTable)
+      .innerJoin(conversationsTable, eq(messagesTable.conversationId, conversationsTable.id))
+      .where(or(eq(conversationsTable.participantAId, childId), eq(conversationsTable.participantBId, childId))),
+    db.select({ id: groupsTable.id, photoUrl: groupsTable.photoUrl }).from(groupsTable).where(eq(groupsTable.childId, childId)),
+  ]);
+
+  const ownGroupIds = ownGroups.map((g) => g.id);
+  const groupMessages = ownGroupIds.length
+    ? await db
+        .select({ contentUrl: groupMessagesTable.contentUrl })
+        .from(groupMessagesTable)
+        .where(inArray(groupMessagesTable.groupId, ownGroupIds))
+    : [];
+
+  const mediaFilenames = [
+    ...directMessages.map((m) => m.contentUrl),
+    ...groupMessages.map((m) => m.contentUrl),
+    ...ownGroups.map((g) => g.photoUrl),
+  ]
+    .map(mediaFilenameFromUrl)
+    .filter((f): f is string => f !== null);
 
   await db.transaction(async (tx) => {
     await tx
@@ -292,6 +340,13 @@ router.delete("/children/:id", async (req, res) => {
 
     await tx.delete(usersTable).where(eq(usersTable.id, childId));
   });
+
+  // Só depois que a transação confirmou é que mexemos no disco -- se a
+  // transação falhar e der rollback, as linhas continuam existindo e não
+  // faria sentido já ter apagado os arquivos. Falha em apagar um arquivo
+  // individual não derruba a resposta (ver deleteMediaFile) nem impede a
+  // exclusão dos demais.
+  await Promise.all(mediaFilenames.map((filename) => deleteMediaFile(filename)));
 
   return res.json({ ok: true });
 });

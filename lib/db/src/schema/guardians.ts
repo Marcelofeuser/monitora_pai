@@ -25,6 +25,14 @@ export const childGuardiansTable = pgTable(
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
     role: guardianRoleEnum("role").notNull().default("guardian"),
+    // LGPD/ECA Digital: registro auditável de quando ESTE Responsável deu
+    // consentimento explícito pro tratamento de dados desta Criança
+    // (checkbox obrigatório em routes/pairing.ts na criação, e em
+    // routes/guardians.ts no aceite de convite de 2º/3º Responsável).
+    // Nulo pra linhas criadas antes desta coluna existir (fallback de
+    // isGuardianOfChild, reconexões) -- não retroagimos consentimento que
+    // nunca foi de fato coletado.
+    consentAcceptedAt: timestamp("consent_accepted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [unique("child_guardians_child_parent_unique").on(table.childId, table.parentId)],

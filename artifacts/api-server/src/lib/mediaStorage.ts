@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
 
 // Todo o disco de mídia (fotos e vídeos enviados no chat) vive num volume
@@ -97,6 +97,24 @@ export async function mediaFileExists(filename: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+// LGPD (exclusão real de dados): apaga o arquivo físico do volume quando a
+// mensagem/criança correspondente é excluída de verdade -- sem isso, o
+// hard-delete de contacts.ts (DELETE /children/:id) removia as linhas do
+// banco mas deixava as fotos/vídeos/áudios órfãos no disco pra sempre.
+// Silenciosamente ignora "arquivo não existe" (ENOENT) -- pode acontecer se
+// o arquivo já tiver sido removido antes, ou nunca ter sido escrito com
+// sucesso; qualquer outro erro é logado mas não interrompe a exclusão em
+// lote (uma mídia problemática não pode travar a exclusão de todo o resto).
+export async function deleteMediaFile(filename: string): Promise<void> {
+  try {
+    await unlink(mediaFilePath(filename));
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT") return;
+    console.error(`[mediaStorage] falha ao apagar mídia ${filename}:`, err);
   }
 }
 

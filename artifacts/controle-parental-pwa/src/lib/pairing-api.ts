@@ -23,7 +23,11 @@ export type CreatePairingResponse = {
 };
 
 export async function createPairing(
-  input: { childName: string; childAge?: string },
+  // consent: LGPD/ECA Digital -- confirmação explícita do Responsável de que
+  // concorda com o tratamento de dados da Criança (checkbox obrigatório em
+  // PairingGenerate.tsx). O backend recusa a requisição se vier diferente
+  // de `true` (ver createPairingSchema em routes/pairing.ts).
+  input: { childName: string; childAge?: string; consent: true },
   authToken: string | null,
 ): Promise<CreatePairingResponse> {
   const res = await fetch(`${API_URL}/api/pairing`, {

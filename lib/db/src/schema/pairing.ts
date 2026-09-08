@@ -16,6 +16,13 @@ export const pairingTokensTable = pgTable("pairing_tokens", {
     .references(() => usersTable.id, { onDelete: "cascade" }),
   childName: text("child_name").notNull(),
   childAge: text("child_age"),
+  // LGPD/ECA Digital: timestamp de quando o Responsável marcou o checkbox
+  // de consentimento pro tratamento de dados da Criança, no momento em que
+  // gerou este QR (POST /api/pairing). Propagado pra
+  // child_guardians.consentAcceptedAt quando o vínculo é confirmado (ver
+  // routes/pairing.ts POST /pairing/confirm). Nulo só deveria acontecer em
+  // dado antigo, de antes desta coluna existir.
+  consentAcceptedAt: timestamp("consent_accepted_at"),
   expiresAt: timestamp("expires_at").notNull(),
   usedAt: timestamp("used_at"),
   // Preenchido depois que a Criança escaneia e confirma o vínculo.

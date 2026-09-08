@@ -20,10 +20,18 @@ export async function ensureGuardian(
   childId: string,
   parentId: string,
   role: "owner" | "guardian" = "owner",
+  // LGPD/ECA Digital: quando o Responsável de fato consentiu (checkbox no
+  // momento da criação do pareamento ou do aceite do convite -- ver
+  // routes/pairing.ts e routes/guardians.ts). onConflictDoNothing significa
+  // que isso só é gravado na PRIMEIRA vez que esta linha é criada — nunca
+  // sobrescreve um consentimento já registrado, e fica ausente (null) nos
+  // caminhos de fallback (reconexão, isGuardianOfChild) onde não há
+  // consentimento novo sendo dado agora.
+  consentAcceptedAt?: Date,
 ): Promise<void> {
   await db
     .insert(childGuardiansTable)
-    .values({ childId, parentId, role })
+    .values({ childId, parentId, role, consentAcceptedAt })
     .onConflictDoNothing({ target: [childGuardiansTable.childId, childGuardiansTable.parentId] });
 }
 
