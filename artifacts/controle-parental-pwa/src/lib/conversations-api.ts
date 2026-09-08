@@ -57,6 +57,23 @@ export async function fetchApprovedContacts(
   return res.json();
 }
 
+// Pedido do Marcelo (08/09): estatísticas na página de Convites (aceito /
+// pendente / bloqueado). "Bloquear" reaproveita status="revoked" (ver
+// comentário em routes/contacts.ts) -- por isso o contador de bloqueados
+// busca esse status à parte, já que fetchApprovedContacts só traz
+// status=approved.
+export async function fetchBlockedContacts(
+  childId: string,
+  authToken: string | null,
+): Promise<ApprovedContact[]> {
+  const res = await fetch(
+    `${API_URL}/api/contacts?childId=${encodeURIComponent(childId)}&status=revoked`,
+    { headers: authHeaders(authToken) },
+  );
+  if (!res.ok) throw new Error(`fetch_blocked_contacts_failed_${res.status}`);
+  return res.json();
+}
+
 // Pedido do Marcelo: "o chat e um espelho do chat da crianca" -- toda
 // pessoa aprovada aparece pro Responsavel como uma conversa de verdade
 // (bolinha + historico), nao mais uma lista solta de mensagens sem dono

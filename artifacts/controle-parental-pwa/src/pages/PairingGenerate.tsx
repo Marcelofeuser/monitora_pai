@@ -41,6 +41,10 @@ export function PairingGenerate() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
   const [deletingChildId, setDeletingChildId] = useState<string | null>(null);
+  // Pedido do Marcelo (08/09): o link vinha só como texto solto, tinha que
+  // selecionar na mão (arrastar) pra copiar -- igual no convite de contato
+  // e no de Responsável, agora tem um botão "Copiar link" de verdade.
+  const [linkCopied, setLinkCopied] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -142,6 +146,19 @@ export function PairingGenerate() {
     setChildName('');
     setChildAge('');
     setConsentChecked(false);
+    setLinkCopied(false);
+  }
+
+  async function copyJoinLink() {
+    if (!joinUrl) return;
+    try {
+      await navigator.clipboard.writeText(joinUrl);
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 2200);
+    } catch {
+      // Clipboard pode falhar (sem permissão, contexto não seguro) -- o
+      // link continua visível pra copiar manualmente.
+    }
   }
 
   const minutesLeft = expiresAt
@@ -283,9 +300,23 @@ export function PairingGenerate() {
             )}
           </p>
           {joinUrl && (
-            <p className="break-all text-center text-xs text-[hsl(var(--muted-foreground))]">
-              Ou envie este link diretamente: {joinUrl}
-            </p>
+            <div className="flex w-full flex-col gap-2">
+              <input
+                readOnly
+                value={joinUrl}
+                data-testid="input-pairing-join-url"
+                onFocus={(event) => event.currentTarget.select()}
+                className="w-full truncate rounded-md border border-[hsl(var(--border))] bg-transparent px-3 py-2 text-center text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => { void copyJoinLink(); }}
+                data-testid="button-copy-pairing-join-url"
+                className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[hsl(var(--primary))] px-4 text-sm font-semibold text-[hsl(var(--primary-foreground))]"
+              >
+                {linkCopied ? 'Copiado!' : 'Copiar link'}
+              </button>
+            </div>
           )}
           <button type="button" onClick={resetToStart} className="text-sm font-medium underline">
             Voltar
