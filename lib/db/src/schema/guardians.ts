@@ -1,7 +1,7 @@
 import { pgTable, text, timestamp, uuid, pgEnum, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { usersTable } from "./users";
+import { usersTable, parentRelationshipEnum } from "./users";
 
 // Item 13 do pedido: mais de um Responsável pode enxergar a mesma Criança
 // (ex: Marcelo + Veronica). Antes só existia usersTable.parentId (1 dono
@@ -53,6 +53,14 @@ export const guardianInviteTokensTable = pgTable("guardian_invite_tokens", {
   expiresAt: timestamp("expires_at").notNull(),
   usedAt: timestamp("used_at"),
   resultingParentId: text("resulting_parent_id").references(() => usersTable.id),
+  // O que a pessoa convidada vai ser da(s) Criança(s) (pai, mãe, avó, etc —
+  // pedido do Marcelo, item 7: escolhida no momento do convite, na mesma
+  // tela de Convites). Reaproveita parentRelationshipEnum -- mesmo campo
+  // que usersTable.relationship (ver comentário lá). Nula quando quem
+  // convidou não escolheu (ex: convites antigos, de antes desta coluna) --
+  // nesse caso o convidado escolhe depois em Configurações, como já
+  // funcionava.
+  intendedRelation: parentRelationshipEnum("intended_relation"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

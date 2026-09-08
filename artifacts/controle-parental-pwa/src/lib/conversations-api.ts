@@ -43,6 +43,10 @@ export type ApprovedContact = {
   contactUserId: string | null;
   // Long-press > favoritar (pedido do Marcelo) -- avatar vira estrela.
   isFavorite: boolean;
+  // "Função" escolhida ao adicionar (amigo, primo, tio, avó etc — item 7
+  // do pedido). Texto livre já formatado pro rótulo (ver CONTACT_RELATION_OPTIONS
+  // em App.tsx). Null pra contatos criados antes desta coluna existir.
+  relation: string | null;
 };
 
 export async function fetchApprovedContacts(
@@ -228,11 +232,12 @@ export async function addApprovedContact(
   childId: string,
   contactName: string,
   authToken: string | null,
+  relation?: string,
 ): Promise<ApprovedContact> {
   const res = await fetch(`${API_URL}/api/contacts`, {
     method: 'POST',
     headers: authHeaders(authToken),
-    body: JSON.stringify({ childId, contactName }),
+    body: JSON.stringify({ childId, contactName, relation }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

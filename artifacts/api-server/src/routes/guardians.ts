@@ -2,7 +2,13 @@ import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { randomBytes } from "node:crypto";
 import { eq, and, isNull, gt } from "drizzle-orm";
-import { db, usersTable, guardianInviteTokensTable, childGuardiansTable } from "@workspace/db";
+import {
+  db,
+  usersTable,
+  guardianInviteTokensTable,
+  childGuardiansTable,
+  parentRelationshipEnum,
+} from "@workspace/db";
 import { z } from "zod/v4";
 import { ensureParentUser } from "../lib/parentUser";
 import { ensureGuardian, getGuardianChildIds, getGuardiansOfChild } from "../lib/guardians";
@@ -34,6 +40,14 @@ router.get("/guardians", async (req, res) => {
   return res.json([...byId.values()]);
 });
 
+const createGuardianInviteSchema = z.object({
+  // O que a pessoa convidada vai ser da criança (pai, mãe, avó etc — item 7
+  // do pedido: escolhido na hora do convite, junto com Convites). Opcional
+  // -- se não vier, o convidado escolhe depois em Configurações, como já
+  // funcionava antes desta coluna existir.
+  intendedRelation: z.enum(parentRelationshipEnum.enumValues).optional(),
+});
+
 /**
  * POST /api/guardians/invite
  * Gera link/QR pra um novo Responsavel entrar no mesmo espaco -- pedido do
@@ -47,6 +61,11 @@ router.post("/guardians/invite", async (req, res) => {
   const auth = getAuth(req);
   if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
 
+  const parsed = createGuardianInviteSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+  }
+
   await ensureParentUser(auth.userId);
 
   const token = generateInviteToken();
@@ -54,7 +73,12 @@ router.post("/guardians/invite", async (req, res) => {
 
   const [invite] = await db
     .insert(guardianInviteTokensTable)
-    .values({ token, invitedByParentId: auth.userId, expiresAt })
+    .values({
+      token,
+      invitedByParentId: auth.userId,
+      expiresAt,
+      intendedRelation: parsed.data.intendedRelation,
+    })
     .returning();
 
   return res.status(201).json({
@@ -139,6 +163,19 @@ router.post("/guardians/invite/:token/accept", async (req, res) => {
   const consentAcceptedAt = new Date();
   for (const childId of childIds) {
     await ensureGuardian(childId, newParent.id, "guardian", consentAcceptedAt);
+  }
+
+  // Se quem convidou já escolheu "o que esse Responsável é da criança" na
+  // hora do convite (item 7 do pedido), aplica direto -- o convidado não
+  // precisa escolher de novo em Configurações (mesma coluna/rota que
+  // updateMyRelationship em routes/me.ts). Convites antigos (sem
+  // intendedRelation) não mexem no relationship, que fica null até a
+  // pessoa escolher manualmente, como já era.
+  if (invite.intendedRelation) {
+    await db
+      .update(usersTable)
+      .set({ relationship: invite.intendedRelation })
+      .where(eq(usersTable.id, newParent.id));
   }
 
   await db

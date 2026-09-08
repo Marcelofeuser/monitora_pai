@@ -96,6 +96,10 @@ const requestContactSchema = z.object({
   childId: z.string().uuid(),
   contactName: z.string().min(1).max(120),
   contactPhone: z.string().max(30).optional(),
+  // "Função" escolhida no formulário de Convites (amigo, primo, tio, avó
+  // etc — item 7 do pedido). Texto livre, já formatado pro frontend exibir
+  // (ver relation em schema/contacts.ts).
+  relation: z.string().max(60).optional(),
 });
 
 /**
@@ -129,6 +133,7 @@ router.post("/contacts", async (req, res) => {
       childId: parsed.data.childId,
       contactName: parsed.data.contactName,
       contactPhone: parsed.data.contactPhone,
+      relation: parsed.data.relation,
       status: "approved",
     })
     .returning();

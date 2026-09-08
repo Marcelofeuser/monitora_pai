@@ -1890,6 +1890,22 @@ function StatTile({ label, value, tone }: { label: string; value: number; tone: 
 // contato já nasce aprovado -- e excluir apaga a linha de vez, sem
 // registro). Dá pra adicionar um registro auditável depois se o Marcelo
 // quiser esse histórico.
+// Opções de "função" do Contato no formulário de Convites (item 7 do
+// pedido: "amigo, primo, tio avó, etc"). "responsavel" é tratado à parte
+// no formulário -- não vira um Contato normal, gera um convite de
+// Responsável (ver handleAddOrInvite abaixo, e RELATIONSHIP_OPTIONS em
+// lib/relationship.ts pra sub-escolha "o que esse responsável é da
+// criança").
+const CONTACT_ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'amigo', label: 'Amigo(a)' },
+  { value: 'primo', label: 'Primo(a)' },
+  { value: 'tio', label: 'Tio(a)' },
+  { value: 'avo', label: 'Avô/Avó' },
+  { value: 'padrinho', label: 'Padrinho/Madrinha' },
+  { value: 'professor', label: 'Professor(a)' },
+  { value: 'outro', label: 'Outro' },
+];
+
 function Invites() {
   const { t } = useLanguage();
   const { getToken } = useAuth();
@@ -1900,8 +1916,17 @@ function Invites() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [newContactName, setNewContactName] = useState('');
+  // "Função" do convite (item 7 do pedido) -- valores de CONTACT_ROLE_OPTIONS
+  // ou 'responsavel' (que muda o formulário pra gerar convite de Responsável
+  // em vez de adicionar Contato, ver isGuardianRole abaixo).
+  const [newContactRole, setNewContactRole] = useState<string>(CONTACT_ROLE_OPTIONS[0].value);
+  const [newGuardianRelation, setNewGuardianRelation] = useState<ParentRelationship>('pai');
   const [addingContact, setAddingContact] = useState(false);
   const [addContactError, setAddContactError] = useState<string | null>(null);
+  const [guardianInviteResult, setGuardianInviteResult] = useState<{ joinUrl: string; expiresAt: string } | null>(null);
+  const [guardianInviteBusy, setGuardianInviteBusy] = useState(false);
+  const [guardianInviteError, setGuardianInviteError] = useState<string | null>(null);
+  const [guardianInviteCopied, setGuardianInviteCopied] = useState(false);
   const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
   const [deleteContactError, setDeleteContactError] = useState<string | null>(null);
   const [invitingContactId, setInvitingContactId] = useState<string | null>(null);
@@ -1953,21 +1978,66 @@ function Invites() {
     return () => { cancelled = true; };
   }, [selectedChildId, getToken]);
 
+  const isGuardianRole = newContactRole === 'responsavel';
+
   async function addContact(event: FormEvent) {
     event.preventDefault();
+    if (isGuardianRole) {
+      void handleInviteGuardian();
+      return;
+    }
     const name = newContactName.trim();
     if (!name || !selectedChildId || addingContact) return;
     setAddingContact(true);
     setAddContactError(null);
     try {
       const token = await getToken();
-      const contact = await addApprovedContact(selectedChildId, name, token);
+      const roleLabel = CONTACT_ROLE_OPTIONS.find((option) => option.value === newContactRole)?.label;
+      const contact = await addApprovedContact(selectedChildId, name, token, roleLabel);
       setApprovedContacts((current) => [...current, contact]);
       setNewContactName('');
     } catch (err) {
       setAddContactError(err instanceof Error ? err.message : 'Erro ao adicionar contato.');
     } finally {
       setAddingContact(false);
+    }
+  }
+
+  // "Responsável" escolhida na função (item 7 do pedido) -- não é um
+  // Contato normal, gera um convite de Responsável já com a relação com a
+  // criança escolhida (pai, mãe, avó etc), reaproveitando
+  // POST /api/guardians/invite (ver lib/guardians-api.ts).
+  async function handleInviteGuardian() {
+    if (guardianInviteBusy) return;
+    setGuardianInviteBusy(true);
+    setGuardianInviteError(null);
+    try {
+      const token = await getToken();
+      const invite = await createGuardianInvite(token, newGuardianRelation);
+      setGuardianInviteResult({ joinUrl: invite.joinUrl, expiresAt: invite.expiresAt });
+      setGuardianInviteCopied(false);
+    } catch (err) {
+      setGuardianInviteError(err instanceof Error ? err.message : 'Erro ao gerar o convite de Responsável.');
+    } finally {
+      setGuardianInviteBusy(false);
+    }
+  }
+
+  function closeGuardianInviteModal() {
+    setGuardianInviteResult(null);
+    setGuardianInviteCopied(false);
+    setGuardianInviteError(null);
+  }
+
+  async function copyGuardianInviteLink() {
+    if (!guardianInviteResult) return;
+    try {
+      await navigator.clipboard.writeText(guardianInviteResult.joinUrl);
+      setGuardianInviteCopied(true);
+      setTimeout(() => setGuardianInviteCopied(false), 2000);
+    } catch {
+      // clipboard pode falhar (permissão, contexto não seguro etc.) -- o
+      // link continua selecionável/copiável manualmente no texto.
     }
   }
 
@@ -2124,24 +2194,57 @@ function Invites() {
       ) : (
         <section className="overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] shadow-card">
           <div className="p-6 sm:p-8">
-            <form onSubmit={addContact} className="flex items-center gap-2" data-testid="form-add-contact">
-              <input
-                value={newContactName}
-                onChange={(event) => setNewContactName(event.target.value)}
-                placeholder="Nome do contato (ex: Vovó Ana)"
-                data-testid="input-new-contact-name"
-                className="h-11 flex-1 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
-              />
-              <button
-                type="submit"
-                disabled={!newContactName.trim() || addingContact}
-                data-testid="button-add-contact"
-                className="h-11 whitespace-nowrap rounded-md bg-[hsl(var(--primary))] px-4 text-sm font-medium text-[hsl(var(--primary-foreground))] disabled:opacity-60"
-              >
-                {addingContact ? "…" : "Adicionar"}
-              </button>
+            <form onSubmit={addContact} className="flex flex-col gap-2" data-testid="form-add-contact">
+              <div className="flex flex-wrap items-center gap-2">
+                {!isGuardianRole && (
+                  <input
+                    value={newContactName}
+                    onChange={(event) => setNewContactName(event.target.value)}
+                    placeholder="Nome do contato (ex: Vovó Ana)"
+                    data-testid="input-new-contact-name"
+                    className="h-11 min-w-[160px] flex-1 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
+                  />
+                )}
+                <select
+                  value={newContactRole}
+                  onChange={(event) => setNewContactRole(event.target.value)}
+                  data-testid="select-new-contact-role"
+                  className="h-11 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
+                >
+                  {CONTACT_ROLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                  <option value="responsavel">Responsável</option>
+                </select>
+                {isGuardianRole && (
+                  <select
+                    value={newGuardianRelation}
+                    onChange={(event) => setNewGuardianRelation(event.target.value as ParentRelationship)}
+                    data-testid="select-new-guardian-relation"
+                    className="h-11 min-w-[160px] flex-1 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
+                  >
+                    {RELATIONSHIP_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label} da criança</option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  type="submit"
+                  disabled={isGuardianRole ? guardianInviteBusy : (!newContactName.trim() || addingContact)}
+                  data-testid="button-add-contact"
+                  className="h-11 whitespace-nowrap rounded-md bg-[hsl(var(--primary))] px-4 text-sm font-medium text-[hsl(var(--primary-foreground))] disabled:opacity-60"
+                >
+                  {isGuardianRole ? (guardianInviteBusy ? "Gerando…" : "Gerar convite") : (addingContact ? "…" : "Adicionar")}
+                </button>
+              </div>
+              {isGuardianRole && (
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                  Gera um link de convite para outro adulto Responsável acompanhar o mesmo espaço — a pessoa completa o próprio cadastro ao abrir o link, sem precisar de nome aqui.
+                </p>
+              )}
             </form>
             {addContactError && <p className="mt-2 text-sm text-red-600" data-testid="status-add-contact-error">{addContactError}</p>}
+            {guardianInviteError && <p className="mt-2 text-sm text-red-600" data-testid="status-guardian-invite-error">{guardianInviteError}</p>}
             {deleteContactError && <p className="mt-2 text-sm text-red-600" data-testid="status-delete-contact-error">{deleteContactError}</p>}
             {approvedContacts.length === 0 ? (
               <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">Nenhum convite feito ainda.</p>
@@ -2149,7 +2252,14 @@ function Invites() {
               <ul className="mt-4 flex flex-col gap-2">
                 {approvedContacts.map((contact) => (
                   <li key={contact.id} className="flex items-center justify-between gap-3 rounded-xl bg-[hsl(var(--muted)/.5)] px-4 py-3 text-sm font-bold" data-testid={`row-approved-contact-${contact.id}`}>
-                    <span className="min-w-0 flex-1 truncate">{contact.contactName}</span>
+                    <span className="flex min-w-0 flex-1 items-center gap-2 truncate">
+                      <span className="truncate">{contact.contactName}</span>
+                      {contact.relation && (
+                        <span className="shrink-0 rounded-full bg-[hsl(var(--muted))] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]" data-testid={`badge-contact-relation-${contact.id}`}>
+                          {contact.relation}
+                        </span>
+                      )}
+                    </span>
                     <div className="flex shrink-0 items-center gap-3">
                       {contact.contactUserId ? (
                         <span className="text-xs font-semibold text-green-600">Conectado</span>
@@ -2241,6 +2351,42 @@ function Invites() {
               </div>
             )}
             <button type="button" onClick={closeInviteModal} className="text-sm font-medium underline" data-testid="button-close-invite-modal">
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {guardianInviteResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[hsl(var(--foreground)/.35)] p-4" onClick={closeGuardianInviteModal}>
+          <div
+            className="flex w-full max-w-sm flex-col items-center gap-4 rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 text-center shadow-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="text-lg font-extrabold">Convite de Responsável</h2>
+            <p className="text-sm text-[hsl(var(--muted-foreground))]">
+              Envie este link para a pessoa — ao entrar ou criar conta, ela já ganha acesso ao mesmo espaço. Válido por 7 dias.
+            </p>
+            <div className="flex w-full flex-col gap-2">
+              <div className="flex w-full items-center gap-2">
+                <input
+                  readOnly
+                  value={guardianInviteResult.joinUrl}
+                  data-testid="input-copy-guardian-invite-link"
+                  onFocus={(event) => event.currentTarget.select()}
+                  className="min-w-0 flex-1 truncate rounded-md border border-[hsl(var(--border))] bg-transparent px-3 py-2 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => { void copyGuardianInviteLink(); }}
+                  data-testid="button-copy-guardian-invite-link-action"
+                  className="shrink-0 rounded-md bg-[hsl(var(--primary))] px-3 py-2 text-xs font-bold text-[hsl(var(--primary-foreground))]"
+                >
+                  {guardianInviteCopied ? 'Copiado!' : 'Copiar link'}
+                </button>
+              </div>
+            </div>
+            <button type="button" onClick={closeGuardianInviteModal} className="text-sm font-medium underline" data-testid="button-close-guardian-invite-modal">
               Fechar
             </button>
           </div>
@@ -3044,13 +3190,14 @@ function ScreenTimePage() {
 // tem acesso -- mesmo espirito da secao de convite de Contato (ver
 // Conversations()), so que aqui o convidado vira um Responsavel de
 // verdade (conta Clerk propria), nao um Contato.
+// Convite de novo Responsável passou a ser gerado direto no formulário
+// unificado de Convites (item 7 do pedido: "escolher a função ... e
+// responsável" num só lugar) -- ver handleAddOrInvite em Invites(). Esta
+// seção agora só lista quem já tem acesso ao espaço e permite remover.
 function GuardiansSection() {
   const { getToken, userId } = useAuth();
   const [guardians, setGuardians] = useState<GuardianInfo[] | null>(null);
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   async function loadGuardians() {
     try {
@@ -3066,33 +3213,6 @@ function GuardiansSection() {
     void loadGuardians();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function handleInvite() {
-    setBusy(true);
-    setError(null);
-    try {
-      const token = await getToken();
-      const invite = await createGuardianInvite(token);
-      setInviteUrl(invite.joinUrl);
-      setCopied(false);
-    } catch {
-      setError('Não foi possível gerar o convite agora. Tente de novo.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleCopy() {
-    if (!inviteUrl) return;
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2200);
-    } catch {
-      // Clipboard pode falhar (sem permissão, contexto não seguro) — o
-      // link continua visível pra copiar manualmente.
-    }
-  }
 
   async function handleRemove(parentId: string) {
     if (!window.confirm('Remover o acesso deste Responsável ao espaço da família?')) return;
@@ -3112,8 +3232,8 @@ function GuardiansSection() {
         <div className="flex-1">
           <h2 className="text-lg font-extrabold">Responsáveis</h2>
           <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
-            Convide outro adulto responsável (o outro pai/mãe, avó, etc.) para acompanhar o mesmo espaço — as mesmas
-            crianças, conversas, localização e tempo de uso.
+            Quem já tem acesso ao mesmo espaço — as mesmas crianças, conversas, localização e tempo de uso. Para
+            convidar outro adulto responsável, escolha "Responsável" na função ao convidar, logo acima.
           </p>
 
           {guardians && guardians.length > 0 && (
@@ -3150,39 +3270,8 @@ function GuardiansSection() {
 
           {error && <p className="mt-3 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{error}</p>}
 
-          {inviteUrl ? (
-            <div className="mt-4 flex flex-col gap-2">
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                Envie este link pra pessoa — ao entrar ou criar conta, ela já ganha acesso ao espaço:
-              </p>
-              <div className="flex items-center gap-2">
-                <input
-                  readOnly
-                  value={inviteUrl}
-                  data-testid="input-guardian-invite-url"
-                  className="min-w-0 flex-1 truncate rounded-md border border-[hsl(var(--border))] bg-transparent px-3 py-2 text-xs"
-                  onFocus={(e) => e.currentTarget.select()}
-                />
-                <button
-                  type="button"
-                  onClick={() => { void handleCopy(); }}
-                  data-testid="button-copy-guardian-invite"
-                  className="shrink-0 rounded-md bg-[hsl(var(--primary))] px-3 py-2 text-xs font-bold text-[hsl(var(--primary-foreground))]"
-                >
-                  {copied ? 'Copiado!' : 'Copiar'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => { void handleInvite(); }}
-              data-testid="button-invite-guardian"
-              className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-4 text-xs font-bold text-[hsl(var(--primary-foreground))] disabled:opacity-60"
-            >
-              {busy ? 'Gerando link…' : 'Convidar novo Responsável'} <UserPlus size={14} />
-            </button>
+          {guardians && guardians.length <= 1 && (
+            <p className="mt-4 text-xs text-[hsl(var(--muted-foreground))]">Nenhum outro Responsável ainda.</p>
           )}
         </div>
       </div>

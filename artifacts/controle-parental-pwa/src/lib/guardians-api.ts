@@ -22,10 +22,18 @@ export async function fetchGuardians(authToken: string | null): Promise<Guardian
 
 export type GuardianInviteResult = { token: string; joinUrl: string; expiresAt: string };
 
-export async function createGuardianInvite(authToken: string | null): Promise<GuardianInviteResult> {
+// intendedRelation: o que a pessoa convidada vai ser da criança (pai, mãe,
+// avó etc — item 7 do pedido, escolhido junto com Convites). Opcional --
+// se não vier, o convidado escolhe depois em Configurações, como já
+// funcionava.
+export async function createGuardianInvite(
+  authToken: string | null,
+  intendedRelation?: string,
+): Promise<GuardianInviteResult> {
   const res = await fetch(`${API_URL}/api/guardians/invite`, {
     method: 'POST',
     headers: authHeaders(authToken),
+    body: JSON.stringify(intendedRelation ? { intendedRelation } : {}),
   });
   if (!res.ok) throw new Error(`create_guardian_invite_failed_${res.status}`);
   return res.json();

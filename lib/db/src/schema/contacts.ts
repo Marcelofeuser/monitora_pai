@@ -34,6 +34,13 @@ export const contactsTable = pgTable("contacts", {
   // "Bloquear" não ganhou coluna nova -- reaproveita status="revoked", que
   // já existia (ver PATCH /contacts/:id/decision).
   isFavorite: boolean("is_favorite").notNull().default(false),
+  // "Função" escolhida pelo Responsável na hora de adicionar o contato
+  // (amigo, primo, tio, avó, etc — pedido do Marcelo, item 7). Texto livre
+  // (rótulo em português já pronto pra exibir, ex: "Amigo(a)") em vez de
+  // enum -- é só uma etiqueta informativa, diferente de
+  // parentRelationshipEnum (que é sobre o Responsável, não o Contato).
+  // Nula pra contatos criados antes desta coluna existir.
+  relation: text("relation"),
 });
 
 export const insertContactSchema = createInsertSchema(contactsTable).omit({
