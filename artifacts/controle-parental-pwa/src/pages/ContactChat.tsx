@@ -18,7 +18,9 @@ import { AttachmentPicker } from '@/components/attachment-picker';
 import { StickerPicker } from '@/components/sticker-picker';
 import { AudioRecorderButton } from '@/components/audio-recorder-button';
 import { MessageContent, isStickerMessage } from '@/components/message-content';
-import { LockKeyhole, Plus, Send, ArrowLeft, ChevronRight, UserCircle2 } from 'lucide-react';
+import { LockKeyhole, Phone, Plus, Send, ArrowLeft, ChevronRight, UserCircle2 } from 'lucide-react';
+import { useCall } from '@/hooks/use-call';
+import { CallOverlays } from '@/components/call/CallOverlays';
 
 /**
  * Rota /contact — chat contínuo de um Contato aprovado (mãe, avó, tia)
@@ -40,9 +42,14 @@ function autoGrowTextarea(el: HTMLTextAreaElement) {
 
 export function ContactChat() {
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
+  // Chamada de voz/vídeo (pedido do Marcelo, 09/09) -- identidade só
+  // fica pronta depois que o token vem do localStorage (ver useEffect logo
+  // abaixo), por isso o hook recebe null até lá e o useCall interno espera.
+  const call = useCall(deviceToken ? { kind: 'contact', token: deviceToken } : null);
   const [contactUserId, setContactUserId] = useState<string | null>(null);
   const [contactName, setContactName] = useState<string | null>(null);
   const [childName, setChildName] = useState<string | null>(null);
+  const [childId, setChildId] = useState<string | null>(null);
 
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -120,6 +127,10 @@ export function ContactChat() {
         if (!cancelled) {
           setMessages(data.messages);
           if (data.childName) setChildName(data.childName);
+          const otherParticipant = data.conversation.participantAId === contactUserId
+            ? data.conversation.participantBId
+            : data.conversation.participantAId;
+          setChildId(otherParticipant);
           setError(null);
         }
       } catch (err) {
@@ -432,8 +443,20 @@ export function ContactChat() {
     );
   }
 
+  // Alvo da chamada (se houver) pra tela atual -- null na lista de
+  // conversas e no chat de grupo (chamada é sempre 1:1, não em grupo).
+  const inChatList = chatListOpen && (groups.length > 0 || parents.length > 0);
+  const callTarget = inChatList || selectedGroupId
+    ? null
+    : selectedParentId
+      ? { id: selectedParentId, name: parents.find((p) => p.parentId === selectedParentId)?.parentName ?? 'Responsável' }
+      : childId
+        ? { id: childId, name: childName ?? 'Criança' }
+        : null;
+
   return (
     <main className="flex min-h-[100dvh] flex-col bg-[hsl(var(--background))]">
+      <CallOverlays call={call} peerName={callTarget?.name} />
       <header className="flex items-center justify-between border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
           {!chatListOpen && (groups.length > 0 || parents.length > 0) && (
@@ -465,6 +488,17 @@ export function ContactChat() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {callTarget && (
+            <button
+              type="button"
+              onClick={() => call.startCall(callTarget.id, callTarget.name)}
+              aria-label={`Ligar para ${callTarget.name}`}
+              data-testid="button-start-call"
+              className="grid size-9 shrink-0 place-items-center rounded-full text-[hsl(var(--primary))] hover:bg-[hsl(var(--accent))]"
+            >
+              <Phone size={18} />
+            </button>
+          )}
           {/* "Meu perfil" (pedido do Marcelo, 08/09): foto, telefone,
               e-mail e redes sociais do Contato -- mesma BIO mostrada logo
               depois de confirmar o convite em ContactJoin.tsx, reaberta

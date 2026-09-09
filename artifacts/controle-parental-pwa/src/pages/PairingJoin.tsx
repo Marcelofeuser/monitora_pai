@@ -27,7 +27,9 @@ import { getRelationshipInfo } from '@/lib/relationship';
 import { fetchChildBio, updateChildBio, uploadChildBioPhoto } from '@/lib/bio-api';
 import type { BioProfile, UpdateBioInput } from '@/lib/bio-api';
 import { BioEditor } from '@/components/bio-editor';
-import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin, Plus, Maximize2, Minimize2, X, ArrowLeft, ChevronRight, UserCircle2, MessageCircle } from 'lucide-react';
+import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin, Phone, Plus, Maximize2, Minimize2, X, ArrowLeft, ChevronRight, UserCircle2, MessageCircle } from 'lucide-react';
+import { useCall } from '@/hooks/use-call';
+import { CallOverlays } from '@/components/call/CallOverlays';
 
 /**
  * Rota /join?token=... — é para onde o link do QR code aponta.
@@ -113,6 +115,11 @@ export function PairingJoin() {
   const [childGroupError, setChildGroupError] = useState<string | null>(null);
   const [screenLock, setScreenLock] = useState<ChildLockStatus | null>(null);
   const [parentName, setParentName] = useState<string | null>(null);
+  const [parentId, setParentId] = useState<string | null>(null);
+  // Chamada de voz/vídeo (pedido do Marcelo, 09/09) -- mesmo hook das
+  // outras duas telas (App.tsx/ContactChat.tsx), aqui autenticado por
+  // token de dispositivo da Criança.
+  const call = useCall(deviceToken ? { kind: 'child', token: deviceToken } : null);
   const [parentRelationship, setParentRelationship] = useState<string | null>(null);
   const [notifications, setNotifications] = useState(false);
   const [notificationsBusy, setNotificationsBusy] = useState(false);
@@ -220,6 +227,10 @@ export function PairingJoin() {
             setPrivateMessages(data.messages);
             setParentName(data.parentName);
             setParentRelationship(data.parentRelationship);
+            const otherParticipant = data.conversation.participantAId === childId
+              ? data.conversation.participantBId
+              : data.conversation.participantAId;
+            setParentId(otherParticipant);
             setPrivateError(null);
           }
         }
@@ -759,8 +770,20 @@ export function PairingJoin() {
   // como fallback até ele escolher. Ver lib/relationship.ts.
   const relationshipInfo = getRelationshipInfo(parentRelationship);
 
+  // Alvo da chamada (se houver) -- null no chat de grupo (chamada é
+  // sempre 1:1). Mesmo critério das outras duas telas (App.tsx/
+  // ContactChat.tsx).
+  const callTarget = selectedGroupId
+    ? null
+    : selectedContactUserId
+      ? { id: selectedContactUserId, name: contacts.find((c) => c.contactUserId === selectedContactUserId)?.contactName ?? 'Contato' }
+      : parentId
+        ? { id: parentId, name: parentName ?? relationshipInfo.label }
+        : null;
+
   return (
     <div className="child-portal">
+      <CallOverlays call={call} peerName={callTarget?.name} />
       {/* Bolhas decorativas — bem borradas e nos cantos, de propósito: na
           primeira versão elas ficavam quase sólidas atrás do texto (que
           não tinha fundo próprio) e "engoliam" a leitura. Agora são só um
@@ -1034,6 +1057,17 @@ export function PairingJoin() {
                             ? `${parentName} (${relationshipInfo.label})`
                             : relationshipInfo.label}
                     </h2>
+                    {callTarget && (
+                      <button
+                        type="button"
+                        onClick={() => call.startCall(callTarget.id, callTarget.name)}
+                        aria-label={`Ligar para ${callTarget.name}`}
+                        data-testid="button-start-call"
+                        className="grid size-8 shrink-0 place-items-center rounded-full text-[hsl(var(--primary))] hover:bg-[hsl(var(--accent))]"
+                      >
+                        <Phone size={16} />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setChatExpanded((current) => !current)}

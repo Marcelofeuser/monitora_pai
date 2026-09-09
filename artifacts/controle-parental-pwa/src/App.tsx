@@ -23,6 +23,7 @@ import {
   MoreVertical,
   Navigation,
   Pencil,
+  Phone,
   Plus,
   QrCode,
   RefreshCw,
@@ -43,6 +44,8 @@ import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
 import '@clerk/themes/shadcn.css';
 import { Link, Route, Switch, useLocation } from 'wouter';
+import { useCall } from '@/hooks/use-call';
+import { CallOverlays } from '@/components/call/CallOverlays';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { PairingGenerate } from '@/pages/PairingGenerate';
 import { PairingJoin } from '@/pages/PairingJoin';
@@ -2535,6 +2538,11 @@ function MyChat() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
+  // Chamada de voz/vídeo (pedido do Marcelo, 09/09) -- um hook só,
+  // compartilhado pelas duas conversas (Criança e Contato) que passam por
+  // esta tela, já que openThread.id é sempre um usersTable.id (ver
+  // comentário em schema/users.ts) nos dois casos.
+  const call = useCall({ kind: 'parent', getToken });
   // Foto/figurinha/áudio -- só usados na conversa com a Criança (ver
   // comentário acima).
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -2717,6 +2725,7 @@ function MyChat() {
 
   return (
     <>
+      <CallOverlays call={call} peerName={openThread?.name} />
       <PageIntro eyebrow="seu chat" title="Chat" description="Seu próprio espaço para conversar com quem você quiser da família — a criança, sempre no topo, e quem mais aceitar o convite." />
       {children && children.length > 1 && (
         <div className="mb-6 flex flex-wrap items-center gap-1 rounded-2xl bg-[hsl(var(--muted)/.65)] p-1 sm:w-fit" data-testid="selector-my-chat-child">
@@ -2798,9 +2807,20 @@ function MyChat() {
                 <p className="text-xs text-[hsl(var(--muted-foreground))]">{openThread.kind === 'child' ? 'Criança' : 'Meu Chat'}</p>
               </div>
             </div>
-            <button type="button" onClick={closeChat} aria-label="Fechar conversa" data-testid="button-close-my-chat" className="grid size-10 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
-              <X size={20} />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => call.startCall(openThread.id, openThread.name)}
+                aria-label={`Ligar para ${openThread.name}`}
+                data-testid="button-start-call"
+                className="grid size-10 place-items-center rounded-full text-[hsl(var(--primary))] hover:bg-[hsl(var(--accent))]"
+              >
+                <Phone size={20} />
+              </button>
+              <button type="button" onClick={closeChat} aria-label="Fechar conversa" data-testid="button-close-my-chat" className="grid size-10 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+                <X size={20} />
+              </button>
+            </div>
           </header>
 
           <div
