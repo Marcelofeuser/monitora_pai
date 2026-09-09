@@ -172,11 +172,31 @@ export function useCall(identity: CallIdentity | null): UseCallResult {
     if (!identity) return;
     let cancelled = false;
 
+    // Chave estável de identidade (não o token) -- decide se o singleton em
+    // connectSignaling reaproveita o socket existente ou troca.
+    const socketKey = identity.kind === "parent" ? "parent" : `${identity.kind}:${identity.token}`;
+
+    // Reinvocado a cada tentativa de conexão do socket (a inicial e as
+    // automáticas de reconnection: true) -- não só uma vez aqui no mount.
+    // Sem isso, o token Clerk do Responsável (expira em ~60s) ficaria
+    // congelado no valor capturado agora: uma reconexão automática depois
+    // de queda de rede tentaria de novo com o MESMO token vencido, falharia
+    // pra sempre (not_authenticated), e o Responsável pararia de conseguir
+    // receber chamada silenciosamente até recarregar a página. Também
+    // mantém currentAuthRef atualizado (usado pro header da rota de
+    // credenciais TURN em startCall/acceptCall).
+    const resolveSignalingAuth = async () => {
+      const auth = await resolveAuth(identity);
+      if (!auth) return null;
+      currentAuthRef.current = auth;
+      return auth.signaling;
+    };
+
     (async () => {
       const auth = await resolveAuth(identity);
       if (cancelled || !auth) return;
       currentAuthRef.current = auth;
-      const socket = connectSignaling(auth.signaling);
+      const socket = connectSignaling(socketKey, resolveSignalingAuth);
       socketRef.current = socket;
 
       socket.on("call:incoming", ({ callId, callerId, callerName }: IncomingCall) => {

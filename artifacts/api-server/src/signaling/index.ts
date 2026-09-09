@@ -34,6 +34,40 @@ type HandshakeAuth = {
   contactToken?: string;
 };
 
+// socket.on(event, handler) do Node EventEmitter NÃO tem o mesmo tratamento
+// de promise que uma rota Express 5 tem (lá, retornar uma Promise rejeitada
+// de um handler async vira next(err) automaticamente -- é por isso que o
+// resto do repo não precisa de wrapper nas rotas HTTP). Aqui é EventEmitter
+// puro: um handler async que rejeita vira um unhandledRejection de verdade,
+// que em runtime derruba o processo inteiro (Node 15+) -- ou seja, um
+// hiccup passageiro do Postgres durante UMA chamada tiraria o chat inteiro
+// do ar pra todo mundo. `safe` fecha esse buraco pros listeners de evento;
+// `safeTimeout` fecha o mesmo buraco pros callbacks de setTimeout usados
+// abaixo (call:invite e disconnect), que rodam soltos, sem nenhum handler
+// "pai" esperando por eles.
+function safe<Args extends unknown[]>(
+  event: string,
+  handler: (...args: Args) => Promise<void> | void,
+): (...args: Args) => Promise<void> {
+  return async (...args: Args) => {
+    try {
+      await handler(...args);
+    } catch (err) {
+      logger.error({ err, event }, "signaling_handler_error");
+      const maybeAck = args[args.length - 1];
+      if (typeof maybeAck === "function") {
+        (maybeAck as (res: unknown) => void)({ error: "internal_error" });
+      }
+    }
+  };
+}
+
+function safeTimeout(event: string, fn: () => Promise<void>): () => void {
+  return () => {
+    fn().catch((err) => logger.error({ err, event }, "signaling_timeout_error"));
+  };
+}
+
 // Resolve a identidade do handshake do socket pelos mesmos três mecanismos
 // já usados nas rotas HTTP (getAuth/requireChildAuth/requireContactAuth) --
 // só que fora do pipeline do Express, porque o WebSocket nativo do
@@ -69,25 +103,35 @@ async function resolveIdentity(auth: HandshakeAuth): Promise<Identity | null> {
   }
 
   if (auth.childToken) {
-    const tokenHash = createHash("sha256").update(auth.childToken).digest("hex");
-    const [row] = await db
-      .select()
-      .from(childDeviceTokensTable)
-      .where(eq(childDeviceTokensTable.tokenHash, tokenHash))
-      .limit(1);
-    if (row) return { userId: row.childId, role: "child" };
-    return null;
+    try {
+      const tokenHash = createHash("sha256").update(auth.childToken).digest("hex");
+      const [row] = await db
+        .select()
+        .from(childDeviceTokensTable)
+        .where(eq(childDeviceTokensTable.tokenHash, tokenHash))
+        .limit(1);
+      if (row) return { userId: row.childId, role: "child" };
+      return null;
+    } catch (err) {
+      logger.warn({ err }, "signaling_child_token_lookup_failed");
+      return null;
+    }
   }
 
   if (auth.contactToken) {
-    const tokenHash = createHash("sha256").update(auth.contactToken).digest("hex");
-    const [row] = await db
-      .select()
-      .from(contactDeviceTokensTable)
-      .where(eq(contactDeviceTokensTable.tokenHash, tokenHash))
-      .limit(1);
-    if (row?.contactUserId) return { userId: row.contactUserId, role: "contact" };
-    return null;
+    try {
+      const tokenHash = createHash("sha256").update(auth.contactToken).digest("hex");
+      const [row] = await db
+        .select()
+        .from(contactDeviceTokensTable)
+        .where(eq(contactDeviceTokensTable.tokenHash, tokenHash))
+        .limit(1);
+      if (row?.contactUserId) return { userId: row.contactUserId, role: "contact" };
+      return null;
+    } catch (err) {
+      logger.warn({ err }, "signaling_contact_token_lookup_failed");
+      return null;
+    }
   }
 
   return null;
@@ -129,109 +173,134 @@ export function attachSignaling(httpServer: HttpServer): SocketIOServer {
     const userId: string = socket.data.userId;
     socket.join(userRoom(userId));
 
-    socket.on("call:invite", async ({ calleeId }: { calleeId?: string }, ack?: (res: unknown) => void) => {
-      const reply = ack ?? (() => {});
-      if (!calleeId || typeof calleeId !== "string") return reply({ error: "invalid_callee" });
+    socket.on(
+      "call:invite",
+      safe("call:invite", async ({ calleeId }: { calleeId?: string }, ack?: (res: unknown) => void) => {
+        const reply = ack ?? (() => {});
+        if (!calleeId || typeof calleeId !== "string") return reply({ error: "invalid_callee" });
 
-      const auth = await authorizeCall(userId, calleeId);
-      if (!auth.ok) return reply({ error: auth.reason });
+        const auth = await authorizeCall(userId, calleeId);
+        if (!auth.ok) return reply({ error: auth.reason });
 
-      // Ocupado: já existe uma chamada ringing/active envolvendo o callee
-      // (ou o caller). Resolve glare deterministicamente -- quem chegou
-      // primeiro no in-memory state ganha, o segundo toma "busy" na hora
-      // em vez de tocar duas vezes ou entrar em corrida no cliente.
-      const busyWith = await startCall(userId, calleeId);
-      if (busyWith === "busy") return reply({ error: "busy" });
-      const call = busyWith as ActiveCall;
+        // Ocupado: já existe uma chamada ringing/active envolvendo o callee
+        // (ou o caller). Resolve glare deterministicamente -- quem chegou
+        // primeiro no in-memory state ganha, o segundo toma "busy" na hora
+        // em vez de tocar duas vezes ou entrar em corrida no cliente.
+        const busyWith = await startCall(userId, calleeId);
+        if (busyWith === "busy") return reply({ error: "busy" });
+        const call = busyWith as ActiveCall;
 
-      const names = await namesById([userId]);
-      const callerName = names.get(userId) ?? "Alguém";
+        const names = await namesById([userId]);
+        const callerName = names.get(userId) ?? "Alguém";
 
-      io.to(userRoom(calleeId)).emit("call:incoming", {
-        callId: call.id,
-        callerId: userId,
-        callerName,
-      });
-
-      if (!isOnline(io, calleeId)) {
-        // Callee sem socket conectado agora -- dispara push em paralelo,
-        // mas mantém o mesmo timer de toque (o push pode fazer o app abrir
-        // e conectar a tempo de atender).
-        sendIncomingCallPush(calleeId, callerName).catch((err) => {
-          logger.error({ err, calleeId }, "incoming_call_push_failed");
+        io.to(userRoom(calleeId)).emit("call:incoming", {
+          callId: call.id,
+          callerId: userId,
+          callerName,
         });
-      }
 
-      call.timeout = setTimeout(async () => {
-        const ended = await finishCall(call.id, "missed");
-        if (!ended) return;
-        io.to(userRoom(userId)).emit("call:missed", { callId: call.id });
-        io.to(userRoom(calleeId)).emit("call:missed", { callId: call.id });
-      }, RING_TIMEOUT_MS);
+        if (!isOnline(io, calleeId)) {
+          // Callee sem socket conectado agora -- dispara push em paralelo,
+          // mas mantém o mesmo timer de toque (o push pode fazer o app abrir
+          // e conectar a tempo de atender).
+          sendIncomingCallPush(calleeId, callerName).catch((err) => {
+            logger.error({ err, calleeId }, "incoming_call_push_failed");
+          });
+        }
 
-      reply({ callId: call.id });
-    });
+        call.timeout = setTimeout(
+          safeTimeout("call:invite:ring_timeout", async () => {
+            const ended = await finishCall(call.id, "missed");
+            if (!ended) return;
+            io.to(userRoom(userId)).emit("call:missed", { callId: call.id });
+            io.to(userRoom(calleeId)).emit("call:missed", { callId: call.id });
+          }),
+          RING_TIMEOUT_MS,
+        );
 
-    socket.on("call:accept", async ({ callId }: { callId?: string }) => {
-      if (!callId) return;
-      const call = await markAnswered(callId, userId);
-      if (!call) return;
-      io.to(userRoom(call.callerId)).emit("call:accepted", { callId });
-    });
+        reply({ callId: call.id });
+      }),
+    );
 
-    socket.on("call:decline", async ({ callId }: { callId?: string }) => {
-      if (!callId) return;
-      const call = await finishCall(callId, "declined");
-      if (!call) return;
-      io.to(userRoom(call.callerId)).emit("call:declined", { callId });
-    });
+    socket.on(
+      "call:accept",
+      safe("call:accept", async ({ callId }: { callId?: string }) => {
+        if (!callId) return;
+        const call = await markAnswered(callId, userId);
+        if (!call) return;
+        io.to(userRoom(call.callerId)).emit("call:accepted", { callId });
+      }),
+    );
 
-    socket.on("call:cancel", async ({ callId }: { callId?: string }) => {
-      if (!callId) return;
-      const call = await finishCall(callId, "canceled");
-      if (!call) return;
-      io.to(userRoom(call.calleeId)).emit("call:canceled", { callId });
-    });
+    socket.on(
+      "call:decline",
+      safe("call:decline", async ({ callId }: { callId?: string }) => {
+        if (!callId) return;
+        const call = await finishCall(callId, "declined");
+        if (!call) return;
+        io.to(userRoom(call.callerId)).emit("call:declined", { callId });
+      }),
+    );
 
-    socket.on("call:hangup", async ({ callId, reason }: { callId?: string; reason?: string }) => {
-      if (!callId) return;
-      const endReason = reason === "failed" ? "failed" : "hangup";
-      const call = await finishCall(callId, endReason);
-      if (!call) return;
-      const otherId = call.callerId === userId ? call.calleeId : call.callerId;
-      io.to(userRoom(otherId)).emit("call:ended", { callId, reason: endReason });
-    });
+    socket.on(
+      "call:cancel",
+      safe("call:cancel", async ({ callId }: { callId?: string }) => {
+        if (!callId) return;
+        const call = await finishCall(callId, "canceled");
+        if (!call) return;
+        io.to(userRoom(call.calleeId)).emit("call:canceled", { callId });
+      }),
+    );
+
+    socket.on(
+      "call:hangup",
+      safe("call:hangup", async ({ callId, reason }: { callId?: string; reason?: string }) => {
+        if (!callId) return;
+        const endReason = reason === "failed" ? "failed" : "hangup";
+        const call = await finishCall(callId, endReason);
+        if (!call) return;
+        const otherId = call.callerId === userId ? call.calleeId : call.callerId;
+        io.to(userRoom(otherId)).emit("call:ended", { callId, reason: endReason });
+      }),
+    );
 
     // Relay puro de sinalização WebRTC -- o servidor nunca inspeciona SDP/
     // ICE, só repassa pro outro participante do callId (mesmo modelo de
     // confiança de routes/media.ts: só garante que os dois são realmente
     // os participantes daquela chamada).
-    const relay = (event: string) => async (payload: { callId?: string; [k: string]: unknown }) => {
-      const call = payload?.callId ? callRegistry.getById(payload.callId) : null;
-      if (!call) return;
-      if (call.callerId !== userId && call.calleeId !== userId) return;
-      const otherId = call.callerId === userId ? call.calleeId : call.callerId;
-      io.to(userRoom(otherId)).emit(event, payload);
-    };
+    const relay = (event: string) =>
+      safe(event, async (payload: { callId?: string; [k: string]: unknown }) => {
+        const call = payload?.callId ? callRegistry.getById(payload.callId) : null;
+        if (!call) return;
+        if (call.callerId !== userId && call.calleeId !== userId) return;
+        const otherId = call.callerId === userId ? call.calleeId : call.callerId;
+        io.to(userRoom(otherId)).emit(event, payload);
+      });
     socket.on("webrtc:offer", relay("webrtc:offer"));
     socket.on("webrtc:answer", relay("webrtc:answer"));
     socket.on("webrtc:ice-candidate", relay("webrtc:ice-candidate"));
 
-    socket.on("disconnect", async () => {
-      // Se esse era o único socket desse usuário (não tem mais nenhum na
-      // sala pessoal) e ele tinha uma chamada ATIVA, espera um respiro
-      // (troca rápida de app/aba não deveria matar a chamada na hora) antes
-      // de encerrar como "failed".
-      setTimeout(async () => {
-        if (isOnline(io, userId)) return; // reconectou a tempo
-        const call = callRegistry.getActiveFor(userId);
-        if (!call) return;
-        const ended = await finishCall(call.id, "failed");
-        if (!ended) return;
-        const otherId = call.callerId === userId ? call.calleeId : call.callerId;
-        io.to(userRoom(otherId)).emit("call:ended", { callId: call.id, reason: "failed" });
-      }, DISCONNECT_GRACE_MS);
-    });
+    socket.on(
+      "disconnect",
+      safe("disconnect", async () => {
+        // Se esse era o único socket desse usuário (não tem mais nenhum na
+        // sala pessoal) e ele tinha uma chamada ATIVA, espera um respiro
+        // (troca rápida de app/aba não deveria matar a chamada na hora) antes
+        // de encerrar como "failed".
+        setTimeout(
+          safeTimeout("disconnect:grace", async () => {
+            if (isOnline(io, userId)) return; // reconectou a tempo
+            const call = callRegistry.getActiveFor(userId);
+            if (!call) return;
+            const ended = await finishCall(call.id, "failed");
+            if (!ended) return;
+            const otherId = call.callerId === userId ? call.calleeId : call.callerId;
+            io.to(userRoom(otherId)).emit("call:ended", { callId: call.id, reason: "failed" });
+          }),
+          DISCONNECT_GRACE_MS,
+        );
+      }),
+    );
   });
 
   return io;
