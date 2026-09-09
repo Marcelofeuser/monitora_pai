@@ -883,19 +883,51 @@ function ContactRow({ contact, onOpen, onLongPress }: { contact: ApprovedContact
   );
 }
 
-function GroupRow({ group, onOpen, onLongPress }: { group: Group; onOpen: () => void; onLongPress: () => void }) {
+// onAddClick (pedido do Marcelo, 09/09): "adicionar pessoas" já existia,
+// mas só pelo segure-2s no balão -- ele não achou (gesto pouco descobrível).
+// Agora tem também um botão "+" visível do lado do nome do grupo, que já
+// abre a mesma folha de baixo direto na lista de "adicionar" (sem precisar
+// segurar nem clicar em "Adicionar pessoas" antes). stopPropagation pra não
+// disparar o onClick da linha inteira (que abriria o chat do grupo).
+function GroupRow({
+  group,
+  onOpen,
+  onLongPress,
+  onAddClick,
+}: {
+  group: Group;
+  onOpen: () => void;
+  onLongPress: () => void;
+  onAddClick?: () => void;
+}) {
   const longPress = useLongPress(onLongPress);
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      data-testid={`button-open-group-chat-${group.id}`}
-      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[hsl(var(--muted)/.5)]"
-      {...longPress}
-    >
-      <Avatar name={group.name} shape="balloon" photoUrl={group.photoUrl} />
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{group.name}</span>
-    </button>
+    <div className="flex w-full items-center gap-1">
+      <button
+        type="button"
+        onClick={onOpen}
+        data-testid={`button-open-group-chat-${group.id}`}
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[hsl(var(--muted)/.5)]"
+        {...longPress}
+      >
+        <Avatar name={group.name} shape="balloon" photoUrl={group.photoUrl} />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{group.name}</span>
+      </button>
+      {onAddClick && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onAddClick();
+          }}
+          aria-label={`Adicionar pessoas ao grupo ${group.name}`}
+          data-testid={`button-add-to-group-${group.id}`}
+          className="grid size-8 shrink-0 place-items-center rounded-full border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] transition-colors hover:border-[hsl(var(--primary))] hover:text-[hsl(var(--primary))]"
+        >
+          <Plus size={16} />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -1594,7 +1626,13 @@ function GroupsPage() {
           {groups.length > 0 && (
             <div className="mb-5 flex flex-col gap-1" data-testid="row-group-bubbles">
               {groups.map((group) => (
-                <GroupRow key={group.id} group={group} onOpen={() => openGroupChat(group.id)} onLongPress={() => { setGroupSheetError(null); setGroupSheetAddOpen(false); setGroupSheetTarget(group); }} />
+                <GroupRow
+                  key={group.id}
+                  group={group}
+                  onOpen={() => openGroupChat(group.id)}
+                  onLongPress={() => { setGroupSheetError(null); setGroupSheetAddOpen(false); setGroupSheetTarget(group); }}
+                  onAddClick={() => { setGroupSheetError(null); setGroupSheetTarget(group); setGroupSheetAddOpen(true); }}
+                />
               ))}
             </div>
           )}
