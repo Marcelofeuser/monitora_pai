@@ -1,0 +1,238 @@
+import { Server as SocketIOServer, type Socket } from "socket.io";
+import type { Server as HttpServer } from "node:http";
+import { createHash } from "node:crypto";
+import { verifyToken } from "@clerk/express";
+import { and, eq, inArray } from "drizzle-orm";
+import { childDeviceTokensTable, contactDeviceTokensTable, db, usersTable } from "@workspace/db";
+import { authorizeCall } from "../lib/calls";
+import { logger } from "../lib/logger";
+import {
+  callRegistry,
+  finishCall,
+  markAnswered,
+  startCall,
+  type ActiveCall,
+} from "./callState";
+import { sendIncomingCallPush } from "./push";
+
+// LIMITE CONHECIDO: usa o adapter em memória padrão do Socket.IO -- funciona
+// hoje porque o api-server roda em 1 réplica só (confirmado no Railway,
+// 09/09/2026). Se um dia subir pra 2+ réplicas, presence/signaling QUEBRA
+// silenciosamente (uma chamada pode "tocar" numa réplica em que o outro
+// lado não está conectado). Precisaria de @socket.io/redis-adapter + um
+// serviço Redis no Railway antes de escalar horizontalmente -- não
+// construído agora, só documentado aqui pra não ser esquecido.
+
+const RING_TIMEOUT_MS = 40_000;
+const DISCONNECT_GRACE_MS = 15_000;
+
+type Identity = { userId: string; role: "parent" | "child" | "contact" };
+
+type HandshakeAuth = {
+  clerkToken?: string;
+  childToken?: string;
+  contactToken?: string;
+};
+
+// Resolve a identidade do handshake do socket pelos mesmos três mecanismos
+// já usados nas rotas HTTP (getAuth/requireChildAuth/requireContactAuth) --
+// só que fora do pipeline do Express, porque o WebSocket nativo do
+// navegador não manda headers customizados. O Socket.IO resolve isso: o
+// cliente manda o token certo dentro de `auth` no handshake (ver
+// lib/socket.ts na PWA).
+async function resolveIdentity(auth: HandshakeAuth): Promise<Identity | null> {
+  if (auth.clerkToken) {
+    // verifyToken NÃO lança em token inválido/expirado -- devolve
+    // { errors: [...] } (ver JwtReturnType em @clerk/backend). Achado
+    // revisando o código depois de escrever a versão com try/catch "solto"
+    // -- sem checar `.data`, isso deixaria TODO handshake de Responsável
+    // falhando silenciosamente (nunca autenticava, nunca dava erro claro).
+    try {
+      const result = await verifyToken(auth.clerkToken, {
+        secretKey: process.env.CLERK_SECRET_KEY,
+      });
+      // Cast pontual: duas versões de @clerk/shared coexistem no repo (uma
+      // puxada por @workspace/api-server, outra transitiva de
+      // @clerk/backend), o que faz o tipo JwtPayload resolver como `{}`
+      // aqui por divergência de declaração entre as duas -- não é algo pra
+      // "consertar" trocando dependência compartilhada só por causa desta
+      // rota nova. Em runtime o claim `sub` sempre vem no payload de um JWT
+      // do Clerk (é o próprio exemplo da doc do verifyToken).
+      const sub = (result.data as { sub?: string } | undefined)?.sub;
+      if (sub) return { userId: sub, role: "parent" };
+      logger.warn({ errors: result.errors }, "signaling_clerk_token_invalid");
+      return null;
+    } catch (err) {
+      logger.warn({ err }, "signaling_clerk_token_verify_threw");
+      return null;
+    }
+  }
+
+  if (auth.childToken) {
+    const tokenHash = createHash("sha256").update(auth.childToken).digest("hex");
+    const [row] = await db
+      .select()
+      .from(childDeviceTokensTable)
+      .where(eq(childDeviceTokensTable.tokenHash, tokenHash))
+      .limit(1);
+    if (row) return { userId: row.childId, role: "child" };
+    return null;
+  }
+
+  if (auth.contactToken) {
+    const tokenHash = createHash("sha256").update(auth.contactToken).digest("hex");
+    const [row] = await db
+      .select()
+      .from(contactDeviceTokensTable)
+      .where(eq(contactDeviceTokensTable.tokenHash, tokenHash))
+      .limit(1);
+    if (row?.contactUserId) return { userId: row.contactUserId, role: "contact" };
+    return null;
+  }
+
+  return null;
+}
+
+function userRoom(userId: string): string {
+  return `user:${userId}`;
+}
+
+// Um usuário pode ter mais de um socket (várias abas) -- ver `has_online`
+// abaixo. isOnline usa isso pra decidir entre "toca e espera" vs. "toca e
+// já dispara push em paralelo" (callee offline).
+function isOnline(io: SocketIOServer, userId: string): boolean {
+  const room = io.sockets.adapter.rooms.get(userRoom(userId));
+  return Boolean(room && room.size > 0);
+}
+
+async function namesById(ids: string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable).where(inArray(usersTable.id, ids));
+  return new Map(rows.map((r) => [r.id, r.name]));
+}
+
+export function attachSignaling(httpServer: HttpServer): SocketIOServer {
+  const io = new SocketIOServer(httpServer, {
+    path: "/socket.io",
+    cors: { origin: true, credentials: true },
+  });
+
+  io.use(async (socket, next) => {
+    const identity = await resolveIdentity((socket.handshake.auth ?? {}) as HandshakeAuth);
+    if (!identity) return next(new Error("not_authenticated"));
+    socket.data.userId = identity.userId;
+    socket.data.role = identity.role;
+    next();
+  });
+
+  io.on("connection", (socket: Socket) => {
+    const userId: string = socket.data.userId;
+    socket.join(userRoom(userId));
+
+    socket.on("call:invite", async ({ calleeId }: { calleeId?: string }, ack?: (res: unknown) => void) => {
+      const reply = ack ?? (() => {});
+      if (!calleeId || typeof calleeId !== "string") return reply({ error: "invalid_callee" });
+
+      const auth = await authorizeCall(userId, calleeId);
+      if (!auth.ok) return reply({ error: auth.reason });
+
+      // Ocupado: já existe uma chamada ringing/active envolvendo o callee
+      // (ou o caller). Resolve glare deterministicamente -- quem chegou
+      // primeiro no in-memory state ganha, o segundo toma "busy" na hora
+      // em vez de tocar duas vezes ou entrar em corrida no cliente.
+      const busyWith = await startCall(userId, calleeId);
+      if (busyWith === "busy") return reply({ error: "busy" });
+      const call = busyWith as ActiveCall;
+
+      const names = await namesById([userId]);
+      const callerName = names.get(userId) ?? "Alguém";
+
+      io.to(userRoom(calleeId)).emit("call:incoming", {
+        callId: call.id,
+        callerId: userId,
+        callerName,
+      });
+
+      if (!isOnline(io, calleeId)) {
+        // Callee sem socket conectado agora -- dispara push em paralelo,
+        // mas mantém o mesmo timer de toque (o push pode fazer o app abrir
+        // e conectar a tempo de atender).
+        sendIncomingCallPush(calleeId, callerName).catch((err) => {
+          logger.error({ err, calleeId }, "incoming_call_push_failed");
+        });
+      }
+
+      call.timeout = setTimeout(async () => {
+        const ended = await finishCall(call.id, "missed");
+        if (!ended) return;
+        io.to(userRoom(userId)).emit("call:missed", { callId: call.id });
+        io.to(userRoom(calleeId)).emit("call:missed", { callId: call.id });
+      }, RING_TIMEOUT_MS);
+
+      reply({ callId: call.id });
+    });
+
+    socket.on("call:accept", async ({ callId }: { callId?: string }) => {
+      if (!callId) return;
+      const call = await markAnswered(callId, userId);
+      if (!call) return;
+      io.to(userRoom(call.callerId)).emit("call:accepted", { callId });
+    });
+
+    socket.on("call:decline", async ({ callId }: { callId?: string }) => {
+      if (!callId) return;
+      const call = await finishCall(callId, "declined");
+      if (!call) return;
+      io.to(userRoom(call.callerId)).emit("call:declined", { callId });
+    });
+
+    socket.on("call:cancel", async ({ callId }: { callId?: string }) => {
+      if (!callId) return;
+      const call = await finishCall(callId, "canceled");
+      if (!call) return;
+      io.to(userRoom(call.calleeId)).emit("call:canceled", { callId });
+    });
+
+    socket.on("call:hangup", async ({ callId, reason }: { callId?: string; reason?: string }) => {
+      if (!callId) return;
+      const endReason = reason === "failed" ? "failed" : "hangup";
+      const call = await finishCall(callId, endReason);
+      if (!call) return;
+      const otherId = call.callerId === userId ? call.calleeId : call.callerId;
+      io.to(userRoom(otherId)).emit("call:ended", { callId, reason: endReason });
+    });
+
+    // Relay puro de sinalização WebRTC -- o servidor nunca inspeciona SDP/
+    // ICE, só repassa pro outro participante do callId (mesmo modelo de
+    // confiança de routes/media.ts: só garante que os dois são realmente
+    // os participantes daquela chamada).
+    const relay = (event: string) => async (payload: { callId?: string; [k: string]: unknown }) => {
+      const call = payload?.callId ? callRegistry.getById(payload.callId) : null;
+      if (!call) return;
+      if (call.callerId !== userId && call.calleeId !== userId) return;
+      const otherId = call.callerId === userId ? call.calleeId : call.callerId;
+      io.to(userRoom(otherId)).emit(event, payload);
+    };
+    socket.on("webrtc:offer", relay("webrtc:offer"));
+    socket.on("webrtc:answer", relay("webrtc:answer"));
+    socket.on("webrtc:ice-candidate", relay("webrtc:ice-candidate"));
+
+    socket.on("disconnect", async () => {
+      // Se esse era o único socket desse usuário (não tem mais nenhum na
+      // sala pessoal) e ele tinha uma chamada ATIVA, espera um respiro
+      // (troca rápida de app/aba não deveria matar a chamada na hora) antes
+      // de encerrar como "failed".
+      setTimeout(async () => {
+        if (isOnline(io, userId)) return; // reconectou a tempo
+        const call = callRegistry.getActiveFor(userId);
+        if (!call) return;
+        const ended = await finishCall(call.id, "failed");
+        if (!ended) return;
+        const otherId = call.callerId === userId ? call.calleeId : call.callerId;
+        io.to(userRoom(otherId)).emit("call:ended", { callId: call.id, reason: "failed" });
+      }, DISCONNECT_GRACE_MS);
+    });
+  });
+
+  return io;
+}

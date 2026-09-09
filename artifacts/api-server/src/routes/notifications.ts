@@ -4,6 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { db, pushSubscriptionsTable, fcmTokensTable } from "@workspace/db";
 import { z } from "zod/v4";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
+import { requireContactAuth, type ContactAuthedRequest } from "../middlewares/contactAuth";
 
 const router: IRouter = Router();
 
@@ -131,6 +132,64 @@ router.post("/child/notifications/unsubscribe", requireChildAuth, async (req: Ch
   await db
     .delete(pushSubscriptionsTable)
     .where(and(eq(pushSubscriptionsTable.childId, childId), eq(pushSubscriptionsTable.endpoint, parsed.data.endpoint)));
+
+  return res.json({ ok: true });
+});
+
+/**
+ * POST /api/contact/notifications/subscribe
+ * Mesma coisa que /notifications/subscribe e /child/notifications/subscribe,
+ * pro lado do Contato -- autenticado por token de dispositivo (mesmo padrão
+ * de requireContactAuth). Item novo pra chamada de voz/vídeo (09/09): sem
+ * isso, o Contato nunca sabe que está sendo chamado se a aba não estiver
+ * aberta.
+ */
+router.post("/contact/notifications/subscribe", requireContactAuth, async (req: ContactAuthedRequest, res) => {
+  const contactUserId = req.contactUserId;
+  if (!contactUserId) return res.status(401).json({ error: "not_authenticated" });
+
+  const parsed = subscribeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+  }
+
+  await db
+    .insert(pushSubscriptionsTable)
+    .values({
+      contactUserId,
+      endpoint: parsed.data.endpoint,
+      p256dh: parsed.data.keys.p256dh,
+      auth: parsed.data.keys.auth,
+    })
+    .onConflictDoUpdate({
+      target: pushSubscriptionsTable.endpoint,
+      set: {
+        contactUserId,
+        parentUserId: null,
+        childId: null,
+        p256dh: parsed.data.keys.p256dh,
+        auth: parsed.data.keys.auth,
+      },
+    });
+
+  return res.status(201).json({ ok: true });
+});
+
+/**
+ * POST /api/contact/notifications/unsubscribe
+ */
+router.post("/contact/notifications/unsubscribe", requireContactAuth, async (req: ContactAuthedRequest, res) => {
+  const contactUserId = req.contactUserId;
+  if (!contactUserId) return res.status(401).json({ error: "not_authenticated" });
+
+  const parsed = unsubscribeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+  }
+
+  await db
+    .delete(pushSubscriptionsTable)
+    .where(and(eq(pushSubscriptionsTable.contactUserId, contactUserId), eq(pushSubscriptionsTable.endpoint, parsed.data.endpoint)));
 
   return res.json({ ok: true });
 });

@@ -66,3 +66,10 @@ export async function sendPushToParent(parentUserId: string, payload: PushPayloa
 export async function sendPushToChild(childId: string, payload: PushPayload): Promise<void> {
   await sendPushToSubscriptions(eq(pushSubscriptionsTable.childId, childId), payload, { childId });
 }
+
+// Mesma ideia, pro lado do Contato -- item novo (chamada de voz/vídeo,
+// 09/09): sem isso, um Contato aprovado (avó, tia etc) nunca saberia que
+// está sendo chamado se a aba não estiver em primeiro plano.
+export async function sendPushToContact(contactUserId: string, payload: PushPayload): Promise<void> {
+  await sendPushToSubscriptions(eq(pushSubscriptionsTable.contactUserId, contactUserId), payload, { contactUserId });
+}
