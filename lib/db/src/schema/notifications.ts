@@ -9,8 +9,8 @@ import { usersTable } from "./users";
 // não é 1:1 com usersTable, e uma notificação vai pra todas as assinaturas
 // dele. O endpoint é único por natureza (é a URL do serviço de push do
 // navegador daquele aparelho específico).
-// Nullable nos dois — cada linha pertence a UM dos dois lados (Responsável
-// OU Criança), nunca aos dois. Começou só com parentUserId (item 10, só o
+// Nullable nos três — cada linha pertence a UM dos três lados (Responsável,
+// Criança OU Contato), nunca a mais de um. Começou só com parentUserId (item 10, só o
 // Responsável era notificado); ganhou childId depois pra cobrir também a
 // Criança sendo notificada quando o Responsável manda mensagem — mesma
 // tabela, mesma lógica de envio (webPush.ts), só muda quem é o dono da
@@ -19,6 +19,11 @@ export const pushSubscriptionsTable = pgTable("push_subscriptions", {
   id: uuid("id").primaryKey().defaultRandom(),
   parentUserId: text("parent_user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   childId: text("child_id").references(() => usersTable.id, { onDelete: "cascade" }),
+  // Terceiro lado nullable do mesmo trio (pedido de chamada de voz/vídeo,
+  // 09/09: Contato também precisa ser avisado de chamada recebida quando a
+  // aba não está em primeiro plano). Mesma regra dos outros dois -- cada
+  // linha pertence a UM dos três, nunca a mais de um.
+  contactUserId: text("contact_user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   endpoint: text("endpoint").notNull().unique(),
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
