@@ -1,7 +1,7 @@
 import { Server as SocketIOServer, type Socket } from "socket.io";
 import type { Server as HttpServer } from "node:http";
 import { createHash } from "node:crypto";
-import { verifyToken } from "@clerk/express";
+import { clerkClient } from "@clerk/express";
 import { and, eq, inArray } from "drizzle-orm";
 import { childDeviceTokensTable, contactDeviceTokensTable, db, usersTable } from "@workspace/db";
 import { authorizeCall } from "../lib/calls";
@@ -76,25 +76,41 @@ function safeTimeout(event: string, fn: () => Promise<void>): () => void {
 // lib/socket.ts na PWA).
 async function resolveIdentity(auth: HandshakeAuth): Promise<Identity | null> {
   if (auth.clerkToken) {
-    // verifyToken NÃO lança em token inválido/expirado -- devolve
-    // { errors: [...] } (ver JwtReturnType em @clerk/backend). Achado
-    // revisando o código depois de escrever a versão com try/catch "solto"
-    // -- sem checar `.data`, isso deixaria TODO handshake de Responsável
-    // falhando silenciosamente (nunca autenticava, nunca dava erro claro).
+    // Trocado de verifyToken(token, {secretKey}) pra clerkClient.authenticateRequest(...)
+    // -- achado em produção (09-10) que verifyToken tava rejeitando TODO
+    // token do Responsável (logs mostravam "signaling_clerk_token_invalid"
+    // pra 100% das tentativas de handshake, mesmo com tokens frescos que a
+    // MESMA requisição HTTP, milissegundos antes, aceitava). authenticateRequest
+    // é o mecanismo que clerkMiddleware/getAuth já usa com sucesso pras
+    // rotas HTTP deste mesmo servidor (ver app.ts) -- construindo um Request
+    // sintético só com o header Authorization, reproduz exatamente a mesma
+    // validação já comprovada, em vez de reimplementar a verificação "na
+    // unha" com verifyToken (cuja assinatura {data,errors}/exceção difere
+    // sutilmente entre versões do @clerk/backend e não bateu com o
+    // comportamento real aqui).
     try {
-      const result = await verifyToken(auth.clerkToken, {
-        secretKey: process.env.CLERK_SECRET_KEY,
-      });
-      // Cast pontual: duas versões de @clerk/shared coexistem no repo (uma
-      // puxada por @workspace/api-server, outra transitiva de
-      // @clerk/backend), o que faz o tipo JwtPayload resolver como `{}`
-      // aqui por divergência de declaração entre as duas -- não é algo pra
-      // "consertar" trocando dependência compartilhada só por causa desta
-      // rota nova. Em runtime o claim `sub` sempre vem no payload de um JWT
-      // do Clerk (é o próprio exemplo da doc do verifyToken).
-      const sub = (result.data as { sub?: string } | undefined)?.sub;
-      if (sub) return { userId: sub, role: "parent" };
-      logger.warn({ errors: result.errors }, "signaling_clerk_token_invalid");
+      const requestState = await clerkClient.authenticateRequest(
+        new Request("https://signaling.internal/", {
+          headers: { Authorization: `Bearer ${auth.clerkToken}` },
+        }),
+        {
+          // Mesma lista de app.ts (clerkMiddleware) -- ver comentário lá.
+          authorizedParties: [
+            "https://pwa-production-336a.up.railway.app",
+            "https://api-server-production-c955.up.railway.app",
+            "https://responsavel.amparakids.com",
+            "https://crianca.amparakids.com",
+            "https://amparakids.com",
+          ],
+        },
+      );
+      const authObj = requestState.toAuth();
+      const userId = authObj?.userId;
+      if (userId) return { userId, role: "parent" };
+      logger.warn(
+        { reason: requestState.reason, message: requestState.message },
+        "signaling_clerk_token_invalid",
+      );
       return null;
     } catch (err) {
       logger.warn({ err }, "signaling_clerk_token_verify_threw");

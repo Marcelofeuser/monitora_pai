@@ -42,9 +42,16 @@ app.use(
     secretKey: process.env.CLERK_SECRET_KEY,
     // PWA e api-server ficam em domínios diferentes no Railway — sem isso,
     // o Clerk pode rejeitar o token por não reconhecer o domínio de origem.
+    // Domínios próprios (amparakids.com) adicionados em 10/09 -- mantém os
+    // *.up.railway.app na lista de propósito (fallback enquanto o DNS dos
+    // domínios próprios não propaga / pra continuar testando direto pela
+    // URL do Railway sem quebrar login).
     authorizedParties: [
       "https://pwa-production-336a.up.railway.app",
       "https://api-server-production-c955.up.railway.app",
+      "https://responsavel.amparakids.com",
+      "https://crianca.amparakids.com",
+      "https://amparakids.com",
     ],
   }),
 );

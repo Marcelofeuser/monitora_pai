@@ -455,7 +455,7 @@ export function ContactChat() {
         : null;
 
   return (
-    <main className="flex min-h-[100dvh] flex-col bg-[hsl(var(--background))]">
+    <main className="flex h-[100dvh] flex-col overflow-y-auto bg-[hsl(var(--background))]">
       <CallOverlays call={call} peerName={callTarget?.name} />
       <header className="flex items-center justify-between border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">

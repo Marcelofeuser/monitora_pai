@@ -792,7 +792,7 @@ export function PairingJoin() {
       <div aria-hidden="true" className="child-blob" style={{ width: 260, height: 260, right: -110, top: 260, background: 'hsl(174 72% 80%)', animationDelay: '2.2s' }} />
       <div aria-hidden="true" className="child-blob" style={{ width: 200, height: 200, left: -80, bottom: -70, background: 'hsl(330 85% 85%)', animationDelay: '4.4s' }} />
 
-      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center gap-2 p-3 pb-2 text-center">
+      <div className="relative z-10 mx-auto flex h-[100dvh] w-full max-w-md flex-col items-center gap-2 overflow-y-auto p-3 pb-2 text-center">
         {status === 'success' && (
           <div className="flex w-full shrink-0 items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--card)/.8)] px-3 py-1.5 shadow-sm backdrop-blur">
