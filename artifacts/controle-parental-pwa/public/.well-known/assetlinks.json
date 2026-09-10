@@ -3,9 +3,19 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.amparakids.app",
+      "package_name": "com.amparakids.responsavel",
       "sha256_cert_fingerprints": [
-        "5E:AA:1C:01:FE:04:EB:A7:57:C5:46:AE:BA:EF:A0:0F:DC:F0:C7:84:2B:5D:75:43:62:B0:D3:6F:9B:5B:6F:3B"
+        "8B:FA:94:12:28:CD:1B:37:F7:E3:3A:94:53:02:9D:4E:80:BE:35:12:76:47:14:C0:8B:41:E2:87:4D:23:90:10"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.amparakids.crianca",
+      "sha256_cert_fingerprints": [
+        "64:81:A9:3A:0F:53:1E:91:00:7E:E8:47:3A:DC:31:62:D8:66:B1:52:0B:55:45:D7:84:71:DA:25:EA:85:B2:24"
       ]
     }
   }

@@ -1,0 +1,63 @@
+plugins {
+    id 'com.android.application'
+}
+
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+def hasKeystore = keystorePropertiesFile.exists()
+if (hasKeystore) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    namespace "com.amparakids.responsavel"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.amparakids.responsavel"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    signingConfigs {
+        release {
+            if (hasKeystore) {
+                storeFile rootProject.file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (hasKeystore) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            if (hasKeystore) {
+                // Assina o debug com a mesma chave, pra Digital Asset Links
+                // (que valida contra o fingerprint em assetlinks.json) bater
+                // tanto rodando direto do Android Studio quanto num APK final.
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.browser:browser:1.8.0'
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.6.1'
+}
