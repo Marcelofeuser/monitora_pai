@@ -2,7 +2,7 @@ import express, { type Express } from "express";
 import * as Sentry from "@sentry/node";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import { clerkMiddleware } from "@clerk/express";
+import { clerkMiddleware, getAuth } from "@clerk/express";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import {
@@ -55,6 +55,36 @@ app.use(
     ],
   }),
 );
+
+// DIAGNÓSTICO TEMPORÁRIO: loga por que a autenticação do Clerk está
+// recusando a requisição (reason/message reais do Clerk, não só "401").
+// Remover depois de descobrir a causa raiz.
+app.use((req, _res, next) => {
+  if (req.path.startsWith("/api/")) {
+    const auth = getAuth(req);
+    if (!auth.userId) {
+      const authHeader = req.headers.authorization;
+      let clerkDebug: unknown;
+      try {
+        clerkDebug = typeof auth.debug === "function" ? auth.debug() : undefined;
+      } catch (err) {
+        clerkDebug = { debugError: String(err) };
+      }
+      logger.warn(
+        {
+          path: req.path,
+          origin: req.headers.origin,
+          host: req.headers.host,
+          hasAuthHeader: Boolean(authHeader),
+          authHeaderPrefix: authHeader?.slice(0, 24),
+          clerkDebug,
+        },
+        "clerk_auth_debug_401",
+      );
+    }
+  }
+  next();
+});
 
 app.use("/api", router);
 
