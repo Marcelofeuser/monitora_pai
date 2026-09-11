@@ -40,7 +40,6 @@ import {
   X,
 } from 'lucide-react';
 import { ClerkProvider, SignIn, SignUp, useClerk, useAuth } from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
 import '@clerk/themes/shadcn.css';
 import { Link, Route, Switch, useLocation } from 'wouter';
@@ -92,7 +91,12 @@ const PROFILE_KEY = 'amparo-profile';
 const CONTACTS_KEY = 'amparo-contacts';
 const LANGUAGE_KEY = 'amparo-language';
 const TOUR_KEY_PREFIX = 'amparo-onboarding-completed';
-const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
+// publishableKeyFromHost() foi removido: ele deriva a chave como
+// `clerk.<hostname-atual>` (pensado pra Clerk custom domain POR
+// subdominio). Aqui existe uma unica instancia Clerk compartilhada
+// em clerk.amparakids.com pra todos os dominios do app, entao a
+// chave configurada deve ser usada direto, sem derivacao por host.
+const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
