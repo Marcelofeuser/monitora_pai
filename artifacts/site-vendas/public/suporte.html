@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Suporte — Ampara</title>
+<meta name="description" content="Central de suporte do Ampara / Ampara Kids — como falar com a gente, dúvidas comuns sobre login, pareamento e notificações." />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="canonical" href="https://amparakids.com/suporte.html" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --cream: #F7F2E8;
+    --cream-2: #FBF7EF;
+    --ink: #24343A;
+    --ink-soft: #55636A;
+    --teal: #1F4C4A;
+    --teal-2: #2A615E;
+    --gold: #E7B867;
+    --gold-2: #D9A63F;
+    --line: #E4D9C4;
+    --radius-lg: 26px;
+    --radius-md: 16px;
+    --shadow: 0 18px 40px -18px rgba(31, 76, 74, 0.28);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Manrope', system-ui, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--teal); }
+  .serif { font-family: 'Newsreader', Georgia, serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  header.site {
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(247, 242, 232, 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; max-width: 1120px; margin: 0 auto; padding-left: 24px; padding-right: 24px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); }
+  .brand svg { flex: none; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; font-weight: 700; font-size: 14px; padding: 10px 18px; text-decoration: none; background: var(--teal); color: var(--cream-2); }
+
+  main { padding: 56px 0 96px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(231, 184, 103, 0.28); color: #8A5A16;
+    font-weight: 700; font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase;
+    padding: 7px 14px; border-radius: 999px; margin-bottom: 18px;
+  }
+  h1 { font-family: 'Newsreader', Georgia, serif; font-size: 40px; line-height: 1.12; margin: 0 0 12px; letter-spacing: -0.01em; }
+  .updated { color: var(--ink-soft); font-size: 14px; margin: 0 0 40px; }
+
+  .doc-card {
+    background: var(--cream-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: 40px clamp(20px, 5vw, 56px);
+  }
+
+  section.part { margin-top: 44px; }
+  section.part:first-of-type { margin-top: 0; }
+  h2 { font-family: 'Newsreader', Georgia, serif; font-size: 26px; color: var(--teal); margin: 0 0 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+  section.part:first-of-type h2 { border-top: none; padding-top: 0; }
+  h3 { font-size: 16px; font-weight: 800; margin: 24px 0 8px; }
+  p { margin: 0 0 14px; font-size: 15.5px; }
+  ul, ol.items { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 6px; font-size: 15.5px; }
+  strong { font-weight: 800; }
+
+  .faq-item {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    background: var(--cream);
+  }
+  .faq-item summary { font-weight: 700; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item summary .plus { color: var(--teal); font-size: 20px; font-weight: 800; }
+  .faq-item[open] summary .plus { transform: rotate(45deg); }
+  .faq-item p { margin-top: 10px; margin-bottom: 0; color: var(--ink-soft); }
+
+  .contact-card {
+    display: flex; flex-wrap: wrap; gap: 24px; justify-content: space-between;
+    background: var(--teal); color: var(--cream-2);
+    border-radius: var(--radius-md); padding: 24px 28px; margin-top: 8px;
+  }
+  .contact-card h3 { color: var(--cream-2); margin-top: 0; }
+  .contact-card a { color: var(--gold); font-weight: 700; }
+  .contact-card p { margin: 0; font-size: 14px; opacity: 0.9; }
+
+  footer.site { border-top: 1px solid var(--line); padding: 32px 0; }
+  .footer-bottom { max-width: 1120px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--ink-soft); font-size: 13px; }
+
+  @media (max-width: 640px) {
+    h1 { font-size: 30px; }
+    .doc-card { padding: 28px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="nav">
+    <a class="brand" href="/">
+      <svg width="30" height="30" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="180" height="180" rx="42" fill="#E7B867"/>
+        <path d="M90 35L133 51V84C133 112 114 132 90 144C66 132 47 112 47 84V51L90 35Z" fill="#1F4C4A"/>
+        <path d="M70 88L83 101L111 72" stroke="#F7F2E8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Ampara
+    </a>
+    <a class="btn" href="/">Voltar ao site</a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="eyebrow">Central de ajuda</div>
+    <h1>Suporte Ampara</h1>
+    <p class="updated">Estamos aqui pra ajudar você e sua família a usar o Ampara com tranquilidade.</p>
+
+    <div class="doc-card">
+
+      <section class="part" id="duvidas">
+        <h2>Dúvidas frequentes</h2>
+
+        <details class="faq-item">
+          <summary>Esqueci minha senha, como recupero o acesso?<span class="plus">+</span></summary>
+          <p>Na tela de login do app do Responsável, toque em "Esqueceu a senha?" e siga as instruções enviadas por e-mail para criar uma nova senha.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary>Como faço para vincular o dispositivo do meu filho?<span class="plus">+</span></summary>
+          <p>No painel do Responsável, acesse a área de crianças e siga o passo a passo de pareamento — ele gera um código para inserir no app instalado no dispositivo da criança.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary>Não estou recebendo notificações do app.<span class="plus">+</span></summary>
+          <p>Verifique se as notificações estão permitidas para o Ampara nos Ajustes do iPhone (Ajustes → Notificações → Ampara) e se o app tem permissão para atividade em segundo plano.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary>Como aprovo ou removo um contato da criança?<span class="plus">+</span></summary>
+          <p>Na tela de contatos do painel do Responsável, você aprova solicitações pendentes e pode remover ou restringir contatos já aprovados a qualquer momento.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary>Como excluo minha conta e meus dados?<span class="plus">+</span></summary>
+          <p>Envie um e-mail para <a href="mailto:contato@amparakids.com">contato@amparakids.com</a> solicitando a exclusão. Mais detalhes na nossa <a href="/privacidade.html">Política de Privacidade</a>.</p>
+        </details>
+      </section>
+
+      <section class="part" id="contato">
+        <h2>Fale com a gente</h2>
+        <div class="contact-card">
+          <div>
+            <h3>Atendimento Ampara</h3>
+            <p>Não encontrou o que precisava? Escreva pra gente:</p>
+          </div>
+          <div>
+            <a href="mailto:contato@amparakids.com">contato@amparakids.com</a>
+            <p style="margin-top:6px;">SEVENGO SMART TECNOLOGY INOVA SIMPLES (I.S.) — CNPJ 65.280.576/0001-03</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="footer-bottom">
+    <span>&copy; <span id="year"></span> Ampara. Todos os direitos reservados.</span>
+    <span>Goiânia, Brasil</span>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+
+</body>
+</html>
