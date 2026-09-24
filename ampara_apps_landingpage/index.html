@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Descarregar Ampara Kids & Apple</title>
+    <title>Descarregar Ampara Kids</title>
     <style>
         :root {
             --bg-color: #0d1117;
@@ -26,6 +26,7 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
+            box-sizing: border-box;
         }
         .container {
             width: 100%;
@@ -35,7 +36,6 @@
             border-radius: 12px;
             padding: 40px;
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-            box-sizing: border-box;
             text-align: center;
         }
         h1 {
@@ -60,9 +60,6 @@
             margin-top: 0;
             font-size: 18px;
             color: var(--text-main);
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
         .instructions {
             font-size: 14px;
@@ -122,12 +119,12 @@
             <div class="instructions">
                 Como instalar no Android:
                 <ol>
-                    <li>Clique no botão abaixo para descarregar o ficheiro APK.</li>
-                    <li>Abra o ficheiro descarregado e permita a instalação de fontes desconhecidas, se solicitado.</li>
+                    <li>Clique no botão abaixo para descarregar o APK.</li>
+                    <li>Abra o ficheiro e permita a instalação de fontes desconhecidas se o telemóvel pedir.</li>
                     <li>Conclua a instalação e abra a aplicação.</li>
                 </ol>
             </div>
-            <a href="./amparo-crianca.apk" class="btn btn-android">Descarregar Ampara Kids (APK)</a>
+            <a href="./ampara_apps_landingpage/amparo-crianca.apk" class="btn btn-android">Descarregar Ampara Kids (Android)</a>
         </div>
 
         <!-- APPLE SECTION -->
@@ -136,12 +133,11 @@
             <div class="instructions">
                 Como instalar no iPhone / iPad:
                 <ol>
-                    <li>Certifique-se de ter a aplicação TestFlight instalada no seu dispositivo Apple.</li>
-                    <li>Clique no botão abaixo para aceder ao convite de testes.</li>
+                    <li>Tenha a aplicação TestFlight instalada no seu dispositivo Apple.</li>
+                    <li>Clique no botão abaixo para aceder ao link de testes.</li>
                     <li>Aceite o convite e clique em Instalar.</li>
                 </ol>
             </div>
-            <!-- Inkorporarem ditoy ti pudno a URL ti TestFlight wenno App Store no addan kayon -->
             <a href="#" class="btn btn-apple">Instalar Ampara Kids (Apple)</a>
         </div>
 
