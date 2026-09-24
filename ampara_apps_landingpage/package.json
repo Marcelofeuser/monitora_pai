@@ -1,0 +1,10 @@
+{
+  "name": "ampara-landing-page",
+  "version": "1.0.0",
+  "description": "Landing page de download dos apps Ampara Kids",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {}
+}

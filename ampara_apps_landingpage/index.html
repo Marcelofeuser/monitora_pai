@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Descarregar Ampara Kids</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-main: #f0f6fc;
+            --text-muted: #8b949e;
+            --accent-green: #238636;
+            --accent-green-hover: #2ea043;
+            --accent-blue: #1f6feb;
+            --accent-blue-hover: #388bfd;
+            --border-color: #30363d;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 100%;
+            max-width: 650px;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            text-align: center;
+        }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: var(--text-main);
+        }
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 16px;
+            margin-bottom: 30px;
+        }
+        .section-box {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .section-box h3 {
+            margin-top: 0;
+            font-size: 18px;
+            color: var(--text-main);
+        }
+        .instructions {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        .instructions ol {
+            margin: 8px 0 0 20px;
+            padding: 0;
+        }
+        .instructions li {
+            margin-bottom: 4px;
+        }
+        .btn {
+            display: inline-block;
+            width: 100%;
+            padding: 14px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 6px;
+            box-sizing: border-box;
+            transition: background-color 0.2s;
+        }
+        .btn-android {
+            background-color: var(--accent-green);
+            color: white;
+        }
+        .btn-android:hover {
+            background-color: var(--accent-green-hover);
+        }
+        .btn-apple {
+            background-color: var(--accent-blue);
+            color: white;
+        }
+        .btn-apple:hover {
+            background-color: var(--accent-blue-hover);
+        }
+        .footer-note {
+            margin-top: 25px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Centro de Instalação — Ampara</h1>
+        <p class="subtitle">Escolha a versão correta abaixo para o seu dispositivo.</p>
+
+        <!-- ANDROID SECTION -->
+        <div class="section-box">
+            <h3>🤖 Ampara Kids (Android)</h3>
+            <div class="instructions">
+                Como instalar no Android:
+                <ol>
+                    <li>Clique no botão abaixo para descarregar o APK.</li>
+                    <li>Abra o ficheiro e permita a instalação de fontes desconhecidas se o telemóvel pedir.</li>
+                    <li>Conclua a instalação e abra a aplicação.</li>
+                </ol>
+            </div>
+            <a href="./ampara_apps_landingpage/amparo-crianca.apk" class="btn btn-android">Descarregar Ampara Kids (Android)</a>
+        </div>
+
+        <!-- APPLE SECTION -->
+        <div class="section-box">
+            <h3>🍏 Ampara Kids (Apple / iOS)</h3>
+            <div class="instructions">
+                Como instalar no iPhone / iPad:
+                <ol>
+                    <li>Tenha a aplicação TestFlight instalada no seu dispositivo Apple.</li>
+                    <li>Clique no botão abaixo para aceder ao link de testes.</li>
+                    <li>Aceite o convite e clique em Instalar.</li>
+                </ol>
+            </div>
+            <a href="#" class="btn btn-apple">Instalar Ampara Kids (Apple)</a>
+        </div>
+
+        <div class="footer-note">
+            Segurança e privacidade garantidas para toda a família.
+        </div>
+    </div>
+
+</body>
+</html>
