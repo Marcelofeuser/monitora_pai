@@ -11,3 +11,4 @@ export * from "./contactAuth";
 export * from "./guardians";
 export * from "./contactStats";
 export * from "./calls";
+export * from "./pairingRateLimits";
