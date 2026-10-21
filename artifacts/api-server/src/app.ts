@@ -5,12 +5,22 @@ import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { pairingRateLimitSecret } from "./lib/pairingRateLimit";
+import { getClerkAuthorizedParties } from "./lib/clerkConfig";
+import healthRouter from "./routes/health";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
 } from "./middlewares/clerkProxyMiddleware";
 
 const app: Express = express();
+// Falha no startup, em vez de aceitar tentativas sem a proteção configurada.
+pairingRateLimitSecret();
+// Lista de IPs/CIDRs dos proxies confiáveis; ausente = não confiar em headers.
+// Não usar true ou contagem de saltos sem verificar todos os caminhos de entrada.
+if (process.env.TRUSTED_PROXY_CIDRS) {
+  app.set("trust proxy", process.env.TRUSTED_PROXY_CIDRS.split(",").map((value) => value.trim()));
+}
 
 app.use(
   pinoHttp({
@@ -31,8 +41,11 @@ app.use(
     },
   }),
 );
+app.use(cors({ credentials: true, origin: true, exposedHeaders: ["Retry-After"] }));
+// Liveness pública: não depende de sessão, chamadas ao Clerk ou parsing de corpo.
+// Configuração inválida no startup continua impedindo a inicialização.
+app.use("/api", healthRouter);
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
-app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -40,19 +53,7 @@ app.use(
   clerkMiddleware({
     publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
     secretKey: process.env.CLERK_SECRET_KEY,
-    // PWA e api-server ficam em domínios diferentes no Railway — sem isso,
-    // o Clerk pode rejeitar o token por não reconhecer o domínio de origem.
-    // Domínios próprios (amparakids.com) adicionados em 10/09 -- mantém os
-    // *.up.railway.app na lista de propósito (fallback enquanto o DNS dos
-    // domínios próprios não propaga / pra continuar testando direto pela
-    // URL do Railway sem quebrar login).
-    authorizedParties: [
-      "https://pwa-production-336a.up.railway.app",
-      "https://api-server-production-c955.up.railway.app",
-      "https://responsavel.amparakids.com",
-      "https://crianca.amparakids.com",
-      "https://amparakids.com",
-    ],
+    authorizedParties: getClerkAuthorizedParties(),
   }),
 );
 

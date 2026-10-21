@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 
+vi.mock("../src/lib/pairingRateLimit", () => ({
+  allowPairingAttempt: vi.fn(async () => true),
+}));
+
 vi.mock("@workspace/db", () => ({
   db: {},
   pairingTokensTable: {},

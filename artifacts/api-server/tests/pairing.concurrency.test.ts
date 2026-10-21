@@ -158,6 +158,10 @@ const mocks = vi.hoisted(() => {
   };
 });
 
+vi.mock("../src/lib/pairingRateLimit", () => ({
+  allowPairingAttempt: vi.fn(async () => true),
+}));
+
 vi.mock("@workspace/db", () => ({
   db: mocks.db,
   pairingTokensTable: mocks.pairingTokensTable,
@@ -168,6 +172,8 @@ vi.mock("@workspace/db", () => ({
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((left, right) => ({ left, right })),
+  and: vi.fn((...conditions) => conditions),
+  isNull: vi.fn((column) => ({ column })),
 }));
 
 vi.mock("../src/lib/parentUser", () => ({

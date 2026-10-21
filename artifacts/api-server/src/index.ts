@@ -15,7 +15,7 @@ if (!rawPort) {
 
 const port = Number(rawPort);
 
-if (Number.isNaN(port) || port <= 0) {
+if (!Number.isInteger(port) || port <= 0 || port > 65535) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
@@ -27,11 +27,12 @@ if (Number.isNaN(port) || port <= 0) {
 const httpServer = createServer(app);
 attachSignaling(httpServer);
 
-httpServer.listen(port, (err?: Error) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
+// Falhas como EADDRINUSE são eventos "error", não argumentos do callback listen.
+httpServer.once("error", (err) => {
+  logger.error({ err }, "Error listening on port");
+  process.exit(1);
+});
 
+httpServer.listen(port, "0.0.0.0", () => {
   logger.info({ port }, "Server listening");
 });

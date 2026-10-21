@@ -6,6 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { childDeviceTokensTable, contactDeviceTokensTable, db, usersTable } from "@workspace/db";
 import { authorizeCall } from "../lib/calls";
 import { logger } from "../lib/logger";
+import { getClerkAuthorizedParties } from "../lib/clerkConfig";
 import {
   callRegistry,
   finishCall,
@@ -99,14 +100,7 @@ async function resolveIdentity(auth: HandshakeAuth): Promise<Identity | null> {
           headers: { Authorization: `Bearer ${auth.clerkToken}` },
         }),
         {
-          // Mesma lista de app.ts (clerkMiddleware) -- ver comentário lá.
-          authorizedParties: [
-            "https://pwa-production-336a.up.railway.app",
-            "https://api-server-production-c955.up.railway.app",
-            "https://responsavel.amparakids.com",
-            "https://crianca.amparakids.com",
-            "https://amparakids.com",
-          ],
+          authorizedParties: getClerkAuthorizedParties(),
         },
       );
       const authObj = requestState.toAuth();

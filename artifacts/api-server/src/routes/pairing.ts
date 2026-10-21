@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { randomBytes, randomUUID, createHash } from "crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   db,
   pairingTokensTable,
@@ -12,6 +12,8 @@ import {
 import { ensureParentUser } from "../lib/parentUser";
 import { isGuardianOfChild } from "../lib/guardians";
 import { z } from "zod/v4";
+import { allowPairingAttempt } from "../lib/pairingRateLimit";
+import { disconnectDeviceSockets } from "../signaling/revocation";
 
 const router: IRouter = Router();
 
@@ -45,6 +47,7 @@ router.post("/pairing", async (req, res) => {
   if (!auth.userId) {
     return res.status(401).json({ error: "not_authenticated" });
   }
+  if (!(await allowPairingAttempt(req, res, "generate", auth.userId))) return;
 
   const parsed = createPairingSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -101,6 +104,7 @@ router.post("/pairing/reconnect", async (req, res) => {
   if (!auth.userId) {
     return res.status(401).json({ error: "not_authenticated" });
   }
+  if (!(await allowPairingAttempt(req, res, "generate", auth.userId))) return;
 
   const parsed = reconnectPairingSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -136,7 +140,7 @@ router.post("/pairing/reconnect", async (req, res) => {
 });
 
 const confirmPairingSchema = z.object({
-  token: z.string().min(1),
+  token: z.string().min(1).max(256),
 });
 
 /**
@@ -146,6 +150,9 @@ const confirmPairingSchema = z.object({
  * FOR UPDATE serializa confirmacoes simultaneas do mesmo token.
  */
 router.post("/pairing/confirm", async (req, res) => {
+  // Conta também corpos inválidos; a gravação é independente da transação
+  // de pareamento para não desaparecer em um rollback.
+  if (!(await allowPairingAttempt(req, res, "confirm"))) return;
   const parsed = confirmPairingSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -179,12 +186,15 @@ router.post("/pairing/confirm", async (req, res) => {
     }
 
     let childUser: typeof usersTable.$inferSelect;
+    let revokedDeviceIds: string[] = [];
 
     if (pairing.reconnectChildId) {
       const [existing] = await tx
         .select()
         .from(usersTable)
         .where(eq(usersTable.id, pairing.reconnectChildId))
+        // Serializa QRs diferentes para a mesma criança, não só o mesmo QR.
+        .for("update")
         .limit(1);
 
       if (!existing || existing.role !== "child") {
@@ -192,6 +202,33 @@ router.post("/pairing/confirm", async (req, res) => {
       }
 
       childUser = existing;
+
+      // Revalida o vínculo no consumo do QR. A permissão pode ter sido
+      // removida nos 15 minutos entre a geração e a confirmação.
+      if (existing.parentId !== pairing.parentId) {
+        const [guardian] = await tx
+          .select({ id: childGuardiansTable.id })
+          .from(childGuardiansTable)
+          .where(and(
+            eq(childGuardiansTable.childId, existing.id),
+            eq(childGuardiansTable.parentId, pairing.parentId),
+          ))
+          .for("update")
+          .limit(1);
+        if (!guardian) {
+          return { ok: false as const, error: "not_the_parent_of_this_child" };
+        }
+      }
+
+      const revoked = await tx
+        .update(childDeviceTokensTable)
+        .set({ revokedAt: new Date() })
+        .where(and(
+          eq(childDeviceTokensTable.childId, existing.id),
+          isNull(childDeviceTokensTable.revokedAt),
+        ))
+        .returning({ id: childDeviceTokensTable.id });
+      revokedDeviceIds = revoked.map((device) => device.id);
     } else {
       const [created] = await tx
         .insert(usersTable)
@@ -253,12 +290,16 @@ router.post("/pairing/confirm", async (req, res) => {
       childUserId: childUser.id,
       parentId: pairing.parentId,
       childName: childUser.name,
+      revokedDeviceIds,
     };
   });
 
   if (!result.ok) {
     return res.status(400).json({ error: result.error });
   }
+
+  // Só desconecta depois do COMMIT: rollback preserva credenciais e sockets.
+  for (const deviceId of result.revokedDeviceIds) disconnectDeviceSockets(deviceId);
 
   return res.status(200).json({
     childUserId: result.childUserId,

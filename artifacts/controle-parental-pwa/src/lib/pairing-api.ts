@@ -9,6 +9,13 @@
 // em vez de um caminho relativo, pelo mesmo motivo (domínios diferentes).
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
+function checkPairingRateLimit(res: Response): void {
+  if (res.status !== 429) return;
+  const seconds = Number(res.headers.get('Retry-After'));
+  const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : 15;
+  throw new Error(`Muitas tentativas de pareamento. Aguarde ${minutes} minuto${minutes === 1 ? '' : 's'} e tente novamente.`);
+}
+
 function authHeaders(token?: string | null): HeadersInit {
   return {
     'Content-Type': 'application/json',
@@ -37,6 +44,7 @@ export async function createPairing(
   });
 
   if (!res.ok) {
+    checkPairingRateLimit(res);
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `pairing_request_failed_${res.status}`);
   }
@@ -57,6 +65,7 @@ export async function reconnectPairing(
   });
 
   if (!res.ok) {
+    checkPairingRateLimit(res);
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `pairing_reconnect_failed_${res.status}`);
   }
@@ -85,6 +94,7 @@ export async function confirmPairing(pairingToken: string): Promise<ConfirmPairi
   });
 
   if (!res.ok) {
+    checkPairingRateLimit(res);
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `pairing_confirm_failed_${res.status}`);
   }
