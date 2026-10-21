@@ -1,10 +1,16 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { randomBytes, randomUUID, createHash } from "crypto";
-import { eq, and, isNull, gt } from "drizzle-orm";
-import { db, pairingTokensTable, usersTable, childDeviceTokensTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import {
+  db,
+  pairingTokensTable,
+  usersTable,
+  childDeviceTokensTable,
+  childGuardiansTable,
+} from "@workspace/db";
 import { ensureParentUser } from "../lib/parentUser";
-import { ensureGuardian, isGuardianOfChild } from "../lib/guardians";
+import { isGuardianOfChild } from "../lib/guardians";
 import { z } from "zod/v4";
 
 const router: IRouter = Router();
@@ -135,92 +141,129 @@ const confirmPairingSchema = z.object({
 
 /**
  * POST /api/pairing/confirm
- * Chamado pelo aparelho da Criança depois de escanear o QR code.
- * Valida o token (existe, não expirou, não foi usado) e cria a conta da
- * Criança já vinculada ao Responsável via parentId.
+ *
+ * Consome o QR e cria/reconecta o dispositivo dentro de uma transacao.
+ * FOR UPDATE serializa confirmacoes simultaneas do mesmo token.
  */
 router.post("/pairing/confirm", async (req, res) => {
   const parsed = confirmPairingSchema.safeParse(req.body);
+
   if (!parsed.success) {
-    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+    return res.status(400).json({
+      error: "invalid_body",
+      details: parsed.error.flatten(),
+    });
   }
 
-  const [pairing] = await db
-    .select()
-    .from(pairingTokensTable)
-    .where(
-      and(
-        eq(pairingTokensTable.token, parsed.data.token),
-        isNull(pairingTokensTable.usedAt),
-        gt(pairingTokensTable.expiresAt, new Date()),
-      ),
-    )
-    .limit(1);
-
-  if (!pairing) {
-    // Não diferenciar "não existe" de "expirado" na resposta — evita
-    // dar dica útil pra quem estiver tentando forçar tokens.
-    return res.status(400).json({ error: "invalid_or_expired_token" });
-  }
-
-  // Reconexão (ver /api/pairing/reconnect): reaproveita a Criança que já
-  // existe em vez de criar outra — só o dispositivo muda, a identidade
-  // (e todo o histórico vinculado ao childId) continua a mesma.
-  let childUser: typeof usersTable.$inferSelect;
-  if (pairing.reconnectChildId) {
-    const [existing] = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.id, pairing.reconnectChildId))
-      .limit(1);
-    if (!existing) {
-      return res.status(400).json({ error: "child_no_longer_exists" });
-    }
-    childUser = existing;
-  } else {
-    const [created] = await db
-      .insert(usersTable)
-      .values({
-        // usersTable.id agora é TEXT (sem default no banco — ver
-        // schema/users.ts), porque pra role='parent' o id precisa ser
-        // exatamente o Clerk userId. Pra role='child' geramos o id aqui.
-        id: randomUUID(),
-        role: "child",
-        name: pairing.childName,
-        parentId: pairing.parentId,
-      })
-      .returning();
-    childUser = created;
-  }
-
-  await db
-    .update(pairingTokensTable)
-    .set({ usedAt: new Date(), resultingChildUserId: childUser.id })
-    .where(eq(pairingTokensTable.id, pairing.id));
-
-  // Item 13 do pedido (multiplos Responsaveis): garante que quem gerou o
-  // QR fica registrado como 'owner' em child_guardians desde o primeiro
-  // pareamento -- sem isso, so o fallback preguicoso de isGuardianOfChild
-  // cobriria essa crianca. Propaga o consentimento coletado em
-  // POST /api/pairing (pairing.consentAcceptedAt) -- em reconexão a linha
-  // já existe e onConflictDoNothing não sobrescreve, então isso não apaga
-  // um consentimento anterior nem tenta recriar um novo.
-  await ensureGuardian(childUser.id, pairing.parentId, "owner", pairing.consentAcceptedAt ?? undefined);
-
-  // A Criança não tem conta Clerk — este é o único momento em que ela
-  // recebe uma credencial. O aparelho dela guarda o token bruto (nunca
-  // reemitido); o servidor só guarda o hash. Ver middlewares/childAuth.ts.
   const rawDeviceToken = randomBytes(32).toString("base64url");
-  const deviceTokenHash = createHash("sha256").update(rawDeviceToken).digest("hex");
-  await db.insert(childDeviceTokensTable).values({
-    childId: childUser.id,
-    tokenHash: deviceTokenHash,
+  const deviceTokenHash = createHash("sha256")
+    .update(rawDeviceToken)
+    .digest("hex");
+
+  const result = await db.transaction(async (tx) => {
+    // Bloqueia o registro ate o fim da transacao. Uma segunda confirmacao
+    // do mesmo token precisa aguardar e depois observar o usedAt atualizado.
+    const [pairing] = await tx
+      .select()
+      .from(pairingTokensTable)
+      .where(eq(pairingTokensTable.token, parsed.data.token))
+      .for("update")
+      .limit(1);
+
+    if (
+      !pairing ||
+      pairing.usedAt !== null ||
+      pairing.expiresAt.getTime() <= Date.now()
+    ) {
+      return { ok: false as const, error: "invalid_or_expired_token" };
+    }
+
+    let childUser: typeof usersTable.$inferSelect;
+
+    if (pairing.reconnectChildId) {
+      const [existing] = await tx
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.id, pairing.reconnectChildId))
+        .limit(1);
+
+      if (!existing || existing.role !== "child") {
+        return { ok: false as const, error: "child_no_longer_exists" };
+      }
+
+      childUser = existing;
+    } else {
+      const [created] = await tx
+        .insert(usersTable)
+        .values({
+          id: randomUUID(),
+          role: "child",
+          name: pairing.childName,
+          parentId: pairing.parentId,
+        })
+        .returning();
+
+      childUser = created;
+    }
+
+    // Marca o token como consumido na mesma transacao da criacao do perfil
+    // e da credencial. Se qualquer etapa falhar, tudo sofre rollback.
+    const [consumed] = await tx
+      .update(pairingTokensTable)
+      .set({
+        usedAt: new Date(),
+        resultingChildUserId: childUser.id,
+      })
+      .where(eq(pairingTokensTable.id, pairing.id))
+      .returning({ id: pairingTokensTable.id });
+
+    if (!consumed) {
+      throw new Error("Falha ao consumir o token de pareamento.");
+    }
+
+    // O responsavel que criou a crianca e owner. Um responsavel adicional
+    // que reconecta um dispositivo continua sendo guardian.
+    const guardianRole =
+      childUser.parentId === pairing.parentId ? "owner" : "guardian";
+
+    await tx
+      .insert(childGuardiansTable)
+      .values({
+        childId: childUser.id,
+        parentId: pairing.parentId,
+        role: guardianRole,
+        consentAcceptedAt: pairing.consentAcceptedAt ?? undefined,
+      })
+      .onConflictDoNothing({
+        target: [
+          childGuardiansTable.childId,
+          childGuardiansTable.parentId,
+        ],
+      });
+
+    // O token bruto sera entregue uma unica vez ao dispositivo.
+    // No banco fica apenas o hash SHA-256.
+    await tx.insert(childDeviceTokensTable).values({
+      childId: childUser.id,
+      tokenHash: deviceTokenHash,
+    });
+
+    return {
+      ok: true as const,
+      childUserId: childUser.id,
+      parentId: pairing.parentId,
+      childName: childUser.name,
+    };
   });
 
+  if (!result.ok) {
+    return res.status(400).json({ error: result.error });
+  }
+
   return res.status(200).json({
-    childUserId: childUser.id,
-    parentId: pairing.parentId,
-    childName: childUser.name,
+    childUserId: result.childUserId,
+    parentId: result.parentId,
+    childName: result.childName,
     deviceToken: rawDeviceToken,
   });
 });

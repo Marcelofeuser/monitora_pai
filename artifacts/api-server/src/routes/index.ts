@@ -12,6 +12,7 @@ import groupsRouter from "./groups";
 import meRouter from "./me";
 import guardiansRouter from "./guardians";
 import callsRouter from "./calls";
+import devicesRouter from "./devices";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(groupsRouter);
 router.use(meRouter);
 router.use(guardiansRouter);
 router.use(callsRouter);
+router.use(devicesRouter);
 
 export default router;

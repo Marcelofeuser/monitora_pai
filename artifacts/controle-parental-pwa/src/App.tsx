@@ -65,6 +65,8 @@ import { fetchGroups, createGroup, uploadGroupPhoto, deleteGroup, addGroupMember
 import type { Group, GroupMessage } from '@/lib/groups-api';
 import { fetchChildren, fetchApprovedContacts, fetchBlockedContacts, fetchDeniedContacts, fetchDeletedContactsCount, fetchParentContactConversation, fetchPrivateConversation, sendPrivateMessage, addApprovedContact, deleteContact, inviteContact, updateContact, blockContact, fetchMyContactChat, sendMyContactMessage } from '@/lib/conversations-api';
 import type { ChildUser, ApprovedContact, PrivateMessage } from '@/lib/conversations-api';
+import { fetchChildDevices, revokeChildDevice } from '@/lib/devices-api';
+import type { ChildDevice } from '@/lib/devices-api';
 import { useLongPress } from '@/hooks/use-long-press';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { fetchChildLocation } from '@/lib/location-api';
@@ -3395,6 +3397,13 @@ function SettingsPage() {
   const [relationship, setRelationship] = useState<ParentRelationship | null>(null);
   const [relationshipBusy, setRelationshipBusy] = useState(false);
   const [relationshipSaved, setRelationshipSaved] = useState(false);
+  const [deviceChildren, setDeviceChildren] = useState<ChildUser[] | null>(null);
+  const [selectedDeviceChildId, setSelectedDeviceChildId] = useState<string | null>(null);
+  const [childDevices, setChildDevices] = useState<ChildDevice[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(true);
+  const [devicesError, setDevicesError] = useState<string | null>(null);
+  const [revokingDeviceId, setRevokingDeviceId] = useState<string | null>(null);
+  const [devicesRefreshVersion, setDevicesRefreshVersion] = useState(0);
 
   // Carrega o relacionamento já salvo no servidor (pedido do Marcelo: pai,
   // mãe, avó, tio etc — ver lib/relationship.ts). Vem do backend, não do
@@ -3410,6 +3419,122 @@ function SettingsPage() {
       cancelled = true;
     };
   }, [getToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDeviceChildren() {
+      try {
+        const token = await getToken();
+        const kids = await fetchChildren(token);
+
+        if (cancelled) return;
+
+        setDeviceChildren(kids);
+        setSelectedDeviceChildId((current) =>
+          current && kids.some((child) => child.id === current)
+            ? current
+            : kids[0]?.id ?? null,
+        );
+      } catch {
+        if (!cancelled) {
+          setDeviceChildren([]);
+          setDevicesError('Não foi possível carregar as crianças vinculadas. Tente novamente.');
+        }
+      }
+    }
+
+    void loadDeviceChildren();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, devicesRefreshVersion]);
+
+  // Carrega somente os dispositivos da criança selecionada.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDevices() {
+      if (!selectedDeviceChildId) {
+        setChildDevices([]);
+        setDevicesLoading(false);
+        return;
+      }
+
+      setDevicesLoading(true);
+      setDevicesError(null);
+
+      try {
+        const token = await getToken();
+        const devices = await fetchChildDevices(selectedDeviceChildId, token);
+
+        if (!cancelled) {
+          setChildDevices(devices);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setChildDevices([]);
+          const message = error instanceof Error ? error.message : '';
+
+          setDevicesError(
+            message.includes('_401')
+              ? 'Sua sessão expirou. Entre novamente e tente outra vez.'
+              : message.includes('_403')
+                ? 'Você não tem autorização para consultar os dispositivos desta criança.'
+                : 'Não foi possível carregar os dispositivos. Tente novamente.',
+          );
+        }
+      } finally {
+        if (!cancelled) setDevicesLoading(false);
+      }
+    }
+
+    void loadDevices();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, selectedDeviceChildId, devicesRefreshVersion]);
+
+  async function handleRevokeDevice(device: ChildDevice) {
+    if (!selectedDeviceChildId || revokingDeviceId) return;
+
+    const childName =
+      deviceChildren?.find((child) => child.id === selectedDeviceChildId)?.name ??
+      'esta criança';
+
+    const confirmed = window.confirm(
+      `Deseja revogar o acesso deste dispositivo de ${childName}? O dispositivo deixará de conseguir acessar a conta da criança com este vínculo. Esta ação não pode ser desfeita para este dispositivo.`,
+    );
+
+    if (!confirmed) return;
+
+    setRevokingDeviceId(device.id);
+    setDevicesError(null);
+
+    try {
+      const token = await getToken();
+
+      await revokeChildDevice(selectedDeviceChildId, device.id, token);
+
+      setDevicesRefreshVersion((version) => version + 1);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+
+      setDevicesError(
+        message.includes('_401')
+          ? 'Sua sessão expirou. Entre novamente e tente outra vez.'
+          : message.includes('_403')
+            ? 'Você não tem autorização para revogar este dispositivo.'
+            : message.includes('_404')
+              ? 'Este dispositivo não foi encontrado. Atualize a lista e tente novamente.'
+              : 'Não foi possível revogar o dispositivo. Tente novamente.',
+      );
+    } finally {
+      setRevokingDeviceId(null);
+    }
+  }
 
   async function chooseRelationship(next: ParentRelationship) {
     if (relationshipBusy || next === relationship) return;
@@ -3531,6 +3656,150 @@ function SettingsPage() {
            <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Users} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.relationshipTitle}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.relationshipText}</p><div className="mt-4 flex flex-wrap gap-2">{RELATIONSHIP_OPTIONS.filter((opt) => opt.value !== 'responsavel').map((opt) => (<button key={opt.value} type="button" disabled={relationshipBusy} onClick={() => { void chooseRelationship(opt.value); }} data-testid={`button-relationship-${opt.value}`} className={`min-h-9 rounded-full border px-4 text-xs font-bold transition-colors disabled:opacity-60 ${relationship === opt.value ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'border-[hsl(var(--card-border))] bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]'}`}>{opt.label}</button>))}</div>{relationshipSaved && <span className="mt-3 block text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-relationship-saved">{t.settings.relationshipSaved}</span>}</div></div></section>
            <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={CircleHelp} tone="teal" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.tutorialTitle}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.tutorialText}</p><button type="button" onClick={() => { window.dispatchEvent(new Event('amparo:start-tour')); }} data-testid="button-restart-tour" className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-4 text-xs font-bold text-[hsl(var(--primary-foreground))]">{t.settings.tutorialAction} <ArrowRight size={14} /></button></div></div></section>
           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Bell} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.notifications}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.notificationsText}</p>{notificationsError && <p className="mt-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{notificationsError}</p>}</div><button role="switch" aria-checked={notifications} disabled={notificationsBusy} onClick={() => { void toggleNotifications(); }} data-testid="switch-notifications" className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60 ${notifications ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${notifications ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></section>
+          <section
+            className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"
+            data-testid="section-child-devices"
+          >
+            <div className="flex items-start gap-4">
+              <IconBox icon={Smartphone} tone="teal" />
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-extrabold">Dispositivos das crianças</h2>
+                <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+                  Consulte os dispositivos vinculados e revogue individualmente os acessos que não devem mais ser utilizados.
+                </p>
+              </div>
+            </div>
+
+            {deviceChildren === null && (
+              <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]" role="status">
+                Carregando crianças…
+              </p>
+            )}
+
+            {deviceChildren !== null && deviceChildren.length === 0 && !devicesError && (
+              <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">
+                Nenhuma criança vinculada foi encontrada.
+              </p>
+            )}
+
+            {deviceChildren && deviceChildren.length > 0 && (
+              <div className="mt-5">
+                <label
+                  htmlFor="settings-device-child"
+                  className="mb-2 block text-xs font-bold"
+                >
+                  Criança
+                </label>
+                <select
+                  id="settings-device-child"
+                  value={selectedDeviceChildId ?? ''}
+                  onChange={(event) => setSelectedDeviceChildId(event.target.value || null)}
+                  data-testid="select-device-child"
+                  className="min-h-11 w-full rounded-xl border border-[hsl(var(--card-border))] bg-[hsl(var(--background))] px-3 text-sm"
+                >
+                  {deviceChildren.map((child) => (
+                    <option key={child.id} value={child.id}>
+                      {child.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {devicesError && (
+              <div className="mt-4" role="alert">
+                <p className="text-sm text-[hsl(var(--destructive))]">{devicesError}</p>
+                <button
+                  type="button"
+                  onClick={() => setDevicesRefreshVersion((version) => version + 1)}
+                  data-testid="button-retry-child-devices"
+                  className="mt-2 text-xs font-bold text-[hsl(var(--primary))] underline"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            )}
+
+            {devicesLoading && selectedDeviceChildId && (
+              <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]" role="status">
+                Carregando dispositivos…
+              </p>
+            )}
+
+            {!devicesLoading &&
+              !devicesError &&
+              selectedDeviceChildId &&
+              childDevices.length === 0 && (
+                <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">
+                  Nenhum dispositivo foi encontrado para esta criança.
+                </p>
+              )}
+
+            {!devicesLoading && childDevices.length > 0 && (
+              <div className="mt-4 space-y-3">
+                {childDevices.map((device) => (
+                  <article
+                    key={device.id}
+                    data-testid={`child-device-${device.id}`}
+                    className="rounded-2xl border border-[hsl(var(--card-border))] p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-bold">
+                        Dispositivo · {device.id.slice(0, 8)}
+                      </p>
+                      <span
+                        className={`rounded-full px-3 py-1 text-[11px] font-bold ${
+                          device.status === 'active'
+                            ? 'bg-[hsl(var(--primary)/.12)] text-[hsl(var(--primary))]'
+                            : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'
+                        }`}
+                      >
+                        {device.status === 'active' ? 'Ativo' : 'Revogado'}
+                      </span>
+                    </div>
+
+                    <dl className="mt-3 space-y-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
+                      <div>
+                        <dt className="inline font-semibold">Vinculado: </dt>
+                        <dd className="inline">
+                          {new Date(device.createdAt).toLocaleString('pt-BR')}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="inline font-semibold">Último uso: </dt>
+                        <dd className="inline">
+                          {device.lastUsedAt
+                            ? new Date(device.lastUsedAt).toLocaleString('pt-BR')
+                            : 'Ainda não registrado'}
+                        </dd>
+                      </div>
+                      {device.revokedAt && (
+                        <div>
+                          <dt className="inline font-semibold">Revogado em: </dt>
+                          <dd className="inline">
+                            {new Date(device.revokedAt).toLocaleString('pt-BR')}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+
+                    {device.status === 'active' && (
+                      <button
+                        type="button"
+                        onClick={() => void handleRevokeDevice(device)}
+                        disabled={revokingDeviceId !== null}
+                        data-testid={`button-revoke-device-${device.id}`}
+                        className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full border border-[hsl(var(--destructive)/.3)] px-4 text-xs font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {revokingDeviceId === device.id ? 'Revogando…' : 'Revogar acesso'}
+                      </button>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Smartphone} tone="teal" /><div><h2 className="text-lg font-extrabold">{t.settings.device}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.deviceText}</p></div></div><div className="mt-5 flex items-center gap-2 border-t border-[hsl(var(--border))] pt-4 text-xs font-bold text-[hsl(var(--primary))]"><Check size={14} /> {t.settings.browserData}</div></section>
           <section className="rounded-[26px] border border-[hsl(var(--destructive)/.2)] bg-[hsl(var(--destructive)/.04)] p-6 sm:p-7"><h2 className="text-sm font-extrabold text-[hsl(var(--destructive))]">{t.settings.remove}</h2><p className="mt-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.removeText}</p><button type="button" onClick={deleteProfile} data-testid="button-delete-profile" className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-full border border-[hsl(var(--destructive)/.3)] px-4 text-xs font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)]">{t.settings.removeButton} <X size={14} /></button></section>
         </div>

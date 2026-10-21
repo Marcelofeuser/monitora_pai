@@ -15,6 +15,7 @@ export const childDeviceTokensTable = pgTable("child_device_tokens", {
   tokenHash: text("token_hash").notNull().unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastUsedAt: timestamp("last_used_at"),
+  revokedAt: timestamp("revoked_at"),
 });
 
 // Histórico de posições reportadas pela Criança. Nunca inferida ou

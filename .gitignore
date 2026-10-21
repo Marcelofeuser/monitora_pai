@@ -49,3 +49,6 @@ Thumbs.db
 .cache/
 .local/
 .bridge-tmp-junk/
+
+# Variáveis de ambiente locais
+.env
