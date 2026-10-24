@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { confirmChildPairingCode } from './api';
+import { confirmChildPairingCode, fetchChildPrivateMessages, revokeChildDevice, sendChildPrivateMessage } from './api';
+import { PrivateChat } from './PrivateChat';
 
 const DEVICE_TOKEN_KEY = 'ampara-child-device-token';
 const CHILD_NAME_KEY = 'ampara-child-name';
@@ -13,7 +14,9 @@ export function ChildApp() {
   const colors = useColors();
   const [state, setState] = useState<'loading' | 'unpaired' | 'connecting' | 'paired' | 'error'>('loading');
   const [childName, setChildName] = useState('');
+  const [parentName, setParentName] = useState('responsável');
   const [childId, setChildId] = useState('');
+  const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [manualValue, setManualValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const scanLock = useRef(false);
@@ -26,6 +29,7 @@ export function ChildApp() {
     ]).then(([deviceToken, name, id]) => {
       setChildName(name ?? '');
       setChildId(id ?? '');
+      setDeviceToken(deviceToken);
       setState(deviceToken ? 'paired' : 'unpaired');
     }).catch(() => setState('unpaired'));
   }, []);
@@ -45,6 +49,7 @@ export function ChildApp() {
     try {
       const result = await confirmChildPairingCode(code);
       await SecureStore.setItemAsync(DEVICE_TOKEN_KEY, result.deviceToken);
+      setDeviceToken(result.deviceToken);
       await AsyncStorage.multiSet([
         [CHILD_NAME_KEY, result.childName],
         [CHILD_ID_KEY, result.childUserId],
@@ -62,13 +67,31 @@ export function ChildApp() {
   };
 
   const disconnect = async () => {
-    await SecureStore.deleteItemAsync(DEVICE_TOKEN_KEY);
-    await AsyncStorage.multiRemove([CHILD_NAME_KEY, CHILD_ID_KEY]);
-    setChildName('');
-    setChildId('');
-    setError(null);
-    setState('unpaired');
+    if (!deviceToken) return;
+    try {
+      await revokeChildDevice(deviceToken);
+      await SecureStore.deleteItemAsync(DEVICE_TOKEN_KEY);
+      await AsyncStorage.multiRemove([CHILD_NAME_KEY, CHILD_ID_KEY]);
+      setDeviceToken(null);
+      setChildName('');
+      setChildId('');
+      setError(null);
+      setState('unpaired');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível sair deste aparelho. Tente novamente com internet.');
+    }
   };
+
+  const loadMessages = useCallback(async () => {
+    if (!deviceToken) throw new Error('Este aparelho não está conectado.');
+    const conversation = await fetchChildPrivateMessages(deviceToken);
+    if (conversation.parentName) setParentName(conversation.parentName);
+    return conversation.messages;
+  }, [deviceToken]);
+  const sendMessage = useCallback(async (text: string) => {
+    if (!deviceToken) throw new Error('Este aparelho não está conectado.');
+    return sendChildPrivateMessage(deviceToken, text);
+  }, [deviceToken]);
 
   if (state === 'loading') {
     return <View style={[styles.center, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.primary} /></View>;
@@ -76,18 +99,14 @@ export function ChildApp() {
 
   if (state === 'paired') {
     return (
-      <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]}>
-        <Text style={[styles.eyebrow, { color: colors.primary }]}>AMPARA · CRIANÇA</Text>
-        <View style={[styles.badge, { backgroundColor: colors.successSoft }]}><Text style={[styles.badgeText, { color: colors.success }]}>APARELHO VINCULADO</Text></View>
-        <Text style={[styles.title, { color: colors.foreground }]}>Oi, {childName}!</Text>
-        <Text style={[styles.body, { color: colors.mutedForeground }]}>Seu aparelho está conectado ao espaço da família. O vínculo fica visível para você e pode ser removido em Ajustes.</Text>
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.foreground }]}>Seu espaço está pronto</Text>
-          <Text style={[styles.body, { color: colors.mutedForeground }]}>A próxima etapa vai habilitar as conversas e as opções de compartilhamento combinadas com o responsável.</Text>
-          <Text style={[styles.small, { color: colors.mutedForeground }]}>ID do perfil: {childId}</Text>
-        </View>
-        <Pressable onPress={() => void disconnect()} style={[styles.secondaryButton, { borderColor: colors.border }]}><Text style={{ color: colors.foreground }}>Desvincular este aparelho</Text></Pressable>
-      </ScrollView>
+      <PrivateChat
+        title={`Conversa · ${parentName}`}
+        subtitle={`Ampara Criança · conectado como ${childName}`}
+        ownUserId={childId}
+        loadMessages={loadMessages}
+        sendMessage={sendMessage}
+        headerAction={<Pressable disabled={!deviceToken} onPress={() => void disconnect()}><Text style={{ color: colors.destructive }}>Sair</Text></Pressable>}
+      />
     );
   }
 

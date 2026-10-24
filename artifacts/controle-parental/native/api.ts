@@ -5,6 +5,7 @@ export type PairingResult = {
   pairingCode: string;
   joinUrl: string;
   expiresAt: string;
+  childName?: string;
 };
 
 export type ConfirmPairingResult = {
@@ -13,6 +14,18 @@ export type ConfirmPairingResult = {
   childName: string;
   deviceToken: string;
 };
+
+export type PrivateMessage = {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  type: string;
+  textContent: string | null;
+  contentUrl: string | null;
+  createdAt: string;
+};
+
+export type ChildProfile = { id: string; name: string };
 
 function apiUrl(path: string): string {
   if (!API_URL) {
@@ -49,6 +62,16 @@ export async function createChildPairing(
   return response.json();
 }
 
+export async function createChildReconnectPairing(childId: string, authToken: string): Promise<PairingResult> {
+  const response = await fetch(apiUrl('/api/pairing/reconnect'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({ childId }),
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
 export async function confirmChildPairing(token: string): Promise<ConfirmPairingResult> {
   const response = await fetch(apiUrl('/api/pairing/confirm'), {
     method: 'POST',
@@ -67,6 +90,62 @@ export async function confirmChildPairingCode(code: string): Promise<ConfirmPair
   });
   if (!response.ok) throw await readError(response);
   return response.json();
+}
+
+export async function fetchParentChildren(authToken: string): Promise<ChildProfile[]> {
+  const response = await fetch(apiUrl('/api/children'), {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function fetchParentPrivateMessages(childId: string, authToken: string): Promise<PrivateMessage[]> {
+  const response = await fetch(`${apiUrl('/api/conversations/private')}?childId=${encodeURIComponent(childId)}`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  const result = await response.json();
+  return result.messages;
+}
+
+export async function sendParentPrivateMessage(childId: string, textContent: string, authToken: string): Promise<PrivateMessage> {
+  const response = await fetch(apiUrl('/api/conversations/private/messages'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({ childId, textContent }),
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function fetchChildPrivateMessages(deviceToken: string): Promise<{
+  messages: PrivateMessage[];
+  parentName: string | null;
+}> {
+  const response = await fetch(apiUrl('/api/child/conversations/private'), {
+    headers: { 'X-Child-Token': deviceToken },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function sendChildPrivateMessage(deviceToken: string, textContent: string): Promise<PrivateMessage> {
+  const response = await fetch(apiUrl('/api/child/conversations/private/messages'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Child-Token': deviceToken },
+    body: JSON.stringify({ textContent }),
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function revokeChildDevice(deviceToken: string): Promise<void> {
+  const response = await fetch(apiUrl('/api/child/device/revoke'), {
+    method: 'POST',
+    headers: { 'X-Child-Token': deviceToken },
+  });
+  if (!response.ok) throw await readError(response);
 }
 
 export function pairingTokenFromQr(data: string): string | null {

@@ -31,19 +31,14 @@ module.exports = ({ config }) => {
     const name = Array.isArray(plugin) ? plugin[0] : plugin;
     return name !== 'expo-camera' && name !== '@clerk/expo' && name !== 'expo-secure-store';
   });
-  if (variant.role === 'child') {
-    plugins.push([
-      'expo-camera',
-      {
-        cameraPermission: 'Permita que o Ampara leia o QR de pareamento.',
-        recordAudioAndroid: false,
-      },
-    ]);
-  } else {
+  if (variant.role === 'parent') {
     plugins.push('@clerk/expo');
   }
   plugins.push('expo-secure-store');
   plugins.push('./plugins/with-android-packaging');
+  if (variant.role === 'child') {
+    plugins.push('./plugins/with-child-ios-pods');
+  }
 
   return {
     ...config,

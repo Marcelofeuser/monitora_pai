@@ -1,11 +1,14 @@
 import { ClerkProvider, useAuth, useSignIn, useUser } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { useColors } from '@/hooks/useColors';
-import { createChildPairing, type PairingResult } from './api';
+import { createChildPairing, createChildReconnectPairing, fetchParentChildren, fetchParentPrivateMessages, sendParentPrivateMessage, type ChildProfile, type PairingResult } from './api';
+import { PrivateChat } from './PrivateChat';
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const childDownloadUrl = process.env.EXPO_PUBLIC_CHILD_DOWNLOAD_URL;
 
 export function ParentApp() {
   const colors = useColors();
@@ -27,14 +30,57 @@ export function ParentApp() {
 
 function ParentSession() {
   const colors = useColors();
-  const { isLoaded, isSignedIn, getToken, signOut } = useAuth();
+  const { isLoaded, isSignedIn, getToken, signOut, userId } = useAuth();
   const { user } = useUser();
   const [pairing, setPairing] = useState<PairingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [children, setChildren] = useState<ChildProfile[]>([]);
+  const [selectedChild, setSelectedChild] = useState<ChildProfile | null>(null);
+  const [addingChild, setAddingChild] = useState(false);
+
+  const refreshChildren = useCallback(async () => {
+    if (!isSignedIn) return;
+    try {
+      const token = await getToken();
+      if (token) setChildren(await fetchParentChildren(token));
+    } catch {
+      // Falha transitória não apaga a lista já mostrada.
+    }
+  }, [getToken, isSignedIn]);
+
+  useEffect(() => {
+    void refreshChildren();
+    const timer = setInterval(() => void refreshChildren(), 5000);
+    return () => clearInterval(timer);
+  }, [refreshChildren]);
+
+  const loadMessages = useCallback(async (childId: string) => {
+    const token = await getToken();
+    if (!token) throw new Error('A sessão expirou. Entre novamente.');
+    return fetchParentPrivateMessages(childId, token);
+  }, [getToken]);
+
+  const sendMessage = useCallback(async (childId: string, text: string) => {
+    const token = await getToken();
+    if (!token) throw new Error('A sessão expirou. Entre novamente.');
+    return sendParentPrivateMessage(childId, text, token);
+  }, [getToken]);
+  const selectedChildId = selectedChild?.id;
+  const loadSelectedMessages = useCallback(() => {
+    if (!selectedChildId) throw new Error('Selecione uma criança para abrir a conversa.');
+    return loadMessages(selectedChildId);
+  }, [loadMessages, selectedChildId]);
+  const sendSelectedMessage = useCallback((text: string) => {
+    if (!selectedChildId) throw new Error('Selecione uma criança para enviar a mensagem.');
+    return sendMessage(selectedChildId, text);
+  }, [sendMessage, selectedChildId]);
 
   if (!isLoaded) return <View style={[styles.center, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.primary} /></View>;
   if (!isSignedIn) return <ParentSignIn />;
+  if (selectedChild && userId) {
+    return <PrivateChat title={selectedChild.name} ownUserId={userId} loadMessages={loadSelectedMessages} sendMessage={sendSelectedMessage} onBack={() => setSelectedChild(null)} />;
+  }
 
   const issuePairing = async (childName: string, childAge: string, consent: boolean) => {
     if (!consent) {
@@ -59,21 +105,54 @@ function ParentSession() {
     }
   };
 
+  const issueReconnect = async (child: ChildProfile) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('A sessão expirou. Entre novamente.');
+      setPairing(await createChildReconnectPairing(child.id, token));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível gerar o código de reconexão.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]}>
       <Text style={[styles.eyebrow, { color: colors.primary }]}>AMPARA · RESPONSÁVEIS</Text>
       <Text style={[styles.title, { color: colors.foreground }]}>Olá, {user?.firstName || 'responsável'}</Text>
-      <Text style={[styles.body, { color: colors.mutedForeground }]}>Vincule o aparelho da criança. O código vale por 15 minutos e só pode ser usado uma vez.</Text>
+      <Text style={[styles.body, { color: colors.mutedForeground }]}>Converse em privado e vincule os aparelhos da família.</Text>
+      {!addingChild && !pairing && (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTitle, { color: colors.foreground }]}>Crianças da família</Text>
+          {children.length === 0 ? <Text style={[styles.body, { color: colors.mutedForeground }]}>Ainda não há perfis vinculados.</Text> : children.map((child) => (
+            <Pressable key={child.id} onPress={() => setSelectedChild(child)} style={[styles.childRow, { borderColor: colors.border }]}>
+              <View style={[styles.childAvatar, { backgroundColor: colors.primary }]}><Text style={{ color: colors.primaryForeground, fontWeight: '700' }}>{child.name.charAt(0).toUpperCase()}</Text></View>
+              <Text style={[styles.childName, { color: colors.foreground }]}>{child.name}</Text>
+              <Text style={{ color: colors.primary }}>Abrir conversa ›</Text>
+            </Pressable>
+          ))}
+          {children.map((child) => <Pressable key={`reconnect-${child.id}`} disabled={busy} onPress={() => void issueReconnect(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Conectar outro aparelho de {child.name}</Text></Pressable>)}
+          <Pressable onPress={() => { setAddingChild(true); setPairing(null); }} style={[styles.primaryButton, { backgroundColor: colors.primary }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Adicionar criança</Text></Pressable>
+        </View>
+      )}
       {pairing ? (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.foreground }]}>Código de pareamento</Text>
+          <Text style={[styles.cardTitle, { color: colors.foreground }]}>{pairing.childName ? `Novo aparelho · ${pairing.childName}` : 'Código de pareamento'}</Text>
           <Text accessibilityLabel={`Código ${pairing.pairingCode}`} style={[styles.pairingCode, { color: colors.primary }]}>{pairing.pairingCode.replace(/(\d{4})(\d{4})/, '$1 $2')}</Text>
           <Text style={[styles.body, { color: colors.mutedForeground }]}>Digite este código no app Ampara Criança. Ele vale até {new Date(pairing.expiresAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} e só pode ser usado uma vez.</Text>
-          <Pressable onPress={() => setPairing(null)} style={[styles.secondaryButton, { borderColor: colors.border }]}><Text style={{ color: colors.foreground }}>Gerar outro código</Text></Pressable>
+          <View style={[styles.downloadBox, { borderTopColor: colors.border }]}>
+            <Text style={[styles.cardTitle, { color: colors.foreground }]}>1. Baixe o app da criança</Text>
+            {childDownloadUrl ? <><View style={styles.qr}><QRCode value={childDownloadUrl} size={176} /></View><Text style={[styles.body, { color: colors.mutedForeground }]}>Este QR abre a página que encaminha para a loja do aparelho.</Text></> : <Text style={[styles.body, { color: colors.mutedForeground }]}>O QR de download será exibido depois que a página das lojas for configurada.</Text>}
+            <Text style={[styles.cardTitle, { color: colors.foreground, marginTop: 8 }]}>2. Digite o código no app</Text>
+          </View>
+          <Pressable onPress={() => { setPairing(null); setAddingChild(false); void refreshChildren(); }} style={[styles.secondaryButton, { borderColor: colors.border }]}><Text style={{ color: colors.foreground }}>Voltar para a família</Text></Pressable>
         </View>
-      ) : (
+      ) : addingChild ? (
         <PairingForm colors={colors} busy={busy} error={error} onSubmit={issuePairing} />
-      )}
+      ) : null}
       <Pressable onPress={() => void signOut()} style={styles.linkButton}><Text style={{ color: colors.primary }}>Sair da conta</Text></Pressable>
     </ScrollView>
   );
@@ -174,5 +253,11 @@ const styles = StyleSheet.create({
   checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5 },
   consentText: { flex: 1, fontSize: 12, lineHeight: 18 },
   pairingCode: { fontSize: 36, lineHeight: 48, fontWeight: '800', letterSpacing: 5, textAlign: 'center', paddingVertical: 14 },
+  downloadBox: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 12, paddingTop: 18 },
+  qr: { alignItems: 'center', padding: 14 },
+  childRow: { minHeight: 60, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  childAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  childName: { flex: 1, fontSize: 15, fontWeight: '600' },
+  reconnectButton: { paddingVertical: 9 },
   secondaryButton: { minHeight: 44, borderWidth: 1, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
 });

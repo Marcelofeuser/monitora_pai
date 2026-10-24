@@ -36,11 +36,17 @@ mesmo aparelho porque têm identificadores diferentes.
 
 ## Fluxos implementados
 
-- O app Responsáveis autentica pelo Clerk e gera QR usando `POST /api/pairing`.
-- O app Criança lê o QR pela câmera, confirma em `POST /api/pairing/confirm` e
-  guarda o token de dispositivo no armazenamento seguro do Android.
+- O app Responsáveis autentica pelo Clerk, lista os perfis da família e gera
+  um código numérico de 8 dígitos usando `POST /api/pairing`.
+- O app Criança informa o código em `POST /api/pairing/confirm` e guarda o
+  token do dispositivo no armazenamento seguro do aparelho.
+- Responsável e criança trocam mensagens de texto no canal privado da família;
+  o histórico atualiza automaticamente e o app da criança pode revogar o token
+  deste aparelho ao sair.
 - O convite exige confirmação explícita do vínculo e a API aplica expiração e
   limite de tentativas.
 
-Conversas, chamadas, localização em segundo plano e notificações nativas ainda
-precisam ser ligados à API antes de distribuir os apps.
+Chamadas, contatos e grupos, mídias, localização em segundo plano, controle de
+tempo de tela e notificações nativas ainda precisam ser portados e validados
+antes da distribuição. O QR de download também depende dos links oficiais das
+lojas, ainda não publicados.
