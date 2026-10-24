@@ -10,6 +10,8 @@
 - [x] Saída da Criança revoga no servidor o token do aparelho atual.
 - [x] Página `/baixar/crianca` detecta iOS/Android e encaminha para a loja quando os links estiverem configurados.
 - [x] Verificados: TypeScript do workspace, build da API e build da PWA.
+- [x] Compilação iOS da variante Criança concluída para simulador (sem assinatura de distribuição).
+- [x] Compilação iOS da variante Responsáveis concluída para simulador anteriormente.
 
 ## Antes de enviar para as lojas
 
