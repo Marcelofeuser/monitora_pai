@@ -43,6 +43,7 @@ module.exports = ({ config }) => {
     plugins.push('@clerk/expo');
   }
   plugins.push('expo-secure-store');
+  plugins.push('./plugins/with-android-packaging');
 
   return {
     ...config,
