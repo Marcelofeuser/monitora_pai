@@ -2,6 +2,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/+$/, '');
 
 export type PairingResult = {
   token: string;
+  pairingCode: string;
   joinUrl: string;
   expiresAt: string;
 };
@@ -53,6 +54,16 @@ export async function confirmChildPairing(token: string): Promise<ConfirmPairing
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function confirmChildPairingCode(code: string): Promise<ConfirmPairingResult> {
+  const response = await fetch(apiUrl('/api/pairing/confirm'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
   });
   if (!response.ok) throw await readError(response);
   return response.json();

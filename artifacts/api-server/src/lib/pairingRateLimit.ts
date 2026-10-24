@@ -53,7 +53,7 @@ export async function consumePairingAttempt(sourceHash: string, limit: number) {
 export async function allowPairingAttempt(
   req: Request,
   res: Response,
-  scope: "confirm" | "generate",
+  scope: "confirm" | "confirm_code" | "generate",
   parentId?: string,
 ): Promise<boolean> {
   // req.ip respeita apenas os proxies explicitamente configurados no Express.
@@ -61,7 +61,7 @@ export async function allowPairingAttempt(
   const source = parentId ?? req.ip ?? req.socket.remoteAddress ?? "unknown";
   const result = await consumePairingAttempt(
     pairingSourceHash(scope, source),
-    scope === "confirm" ? 30 : 20,
+    scope === "confirm_code" ? 5 : scope === "confirm" ? 30 : 20,
   );
   if (result.allowed) return true;
   res.setHeader("Retry-After", String(result.retryAfter));

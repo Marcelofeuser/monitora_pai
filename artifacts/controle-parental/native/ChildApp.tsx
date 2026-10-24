@@ -1,10 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as SecureStore from 'expo-secure-store';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { confirmChildPairing, pairingTokenFromQr } from './api';
+import { confirmChildPairingCode } from './api';
 
 const DEVICE_TOKEN_KEY = 'ampara-child-device-token';
 const CHILD_NAME_KEY = 'ampara-child-name';
@@ -12,8 +11,7 @@ const CHILD_ID_KEY = 'ampara-child-id';
 
 export function ChildApp() {
   const colors = useColors();
-  const [permission, requestPermission] = useCameraPermissions();
-  const [state, setState] = useState<'loading' | 'unpaired' | 'scanning' | 'connecting' | 'paired' | 'error'>('loading');
+  const [state, setState] = useState<'loading' | 'unpaired' | 'connecting' | 'paired' | 'error'>('loading');
   const [childName, setChildName] = useState('');
   const [childId, setChildId] = useState('');
   const [manualValue, setManualValue] = useState('');
@@ -32,12 +30,12 @@ export function ChildApp() {
     }).catch(() => setState('unpaired'));
   }, []);
 
-  const pairWithValue = async (value: string) => {
+  const pairWithCode = async (value: string) => {
     if (scanLock.current) return;
     scanLock.current = true;
-    const token = pairingTokenFromQr(value);
-    if (!token) {
-      setError('Este QR não parece ser um convite válido do Ampara.');
+    const code = value.replace(/\D/g, '');
+    if (!/^\d{8}$/.test(code)) {
+      setError('Digite os 8 números mostrados no app Ampara Responsáveis.');
       setState('error');
       scanLock.current = false;
       return;
@@ -45,7 +43,7 @@ export function ChildApp() {
     setState('connecting');
     setError(null);
     try {
-      const result = await confirmChildPairing(token);
+      const result = await confirmChildPairingCode(code);
       await SecureStore.setItemAsync(DEVICE_TOKEN_KEY, result.deviceToken);
       await AsyncStorage.multiSet([
         [CHILD_NAME_KEY, result.childName],
@@ -99,41 +97,18 @@ export function ChildApp() {
     <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]}>
       <Text style={[styles.eyebrow, { color: colors.primary }]}>AMPARA · CRIANÇA</Text>
       <Text style={[styles.title, { color: colors.foreground }]}>Conecte seu aparelho</Text>
-      <Text style={[styles.body, { color: colors.mutedForeground }]}>Peça ao responsável para abrir o app Ampara Responsáveis e mostrar o QR de pareamento. O código expira em 15 minutos.</Text>
-      {state === 'scanning' ? (
-        <View style={[styles.cameraFrame, { borderColor: colors.border }]}>
-          {permission?.granted ? (
-            <CameraView
-              style={styles.camera}
-              facing="back"
-              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-              onBarcodeScanned={({ data }) => void pairWithValue(data)}
-            />
-          ) : (
-            <View style={styles.permissionBox}>
-              <Text style={[styles.body, { color: colors.mutedForeground }]}>Precisamos da câmera para ler o QR que o responsável está mostrando.</Text>
-              <Pressable onPress={() => void requestPermission()} style={[styles.primaryButton, { backgroundColor: colors.primary }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Permitir câmera</Text></Pressable>
-            </View>
-          )}
-          <Pressable onPress={() => { setState('unpaired'); setError(null); }} style={styles.linkButton}><Text style={{ color: colors.primary }}>Voltar</Text></Pressable>
-        </View>
-      ) : (
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Text style={[styles.body, { color: colors.mutedForeground }]}>Peça ao responsável para abrir o app Ampara Responsáveis e gerar o código de 8 dígitos. O QR usado para baixar este app é separado do pareamento.</Text>
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {activeError}
           {state === 'connecting' ? (
             <View style={styles.connecting}><ActivityIndicator color={colors.primary} /><Text style={[styles.body, { color: colors.mutedForeground }]}>Confirmando o vínculo…</Text></View>
           ) : (
             <>
-              <Pressable onPress={() => { setState('scanning'); setError(null); }} style={[styles.primaryButton, { backgroundColor: colors.primary }]}>
-                <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Abrir câmera e ler QR</Text>
-              </Pressable>
-              <Text style={[styles.orText, { color: colors.mutedForeground }]}>ou digite o link/código</Text>
-              <TextInput autoCapitalize="none" autoCorrect={false} value={manualValue} onChangeText={setManualValue} placeholder="Cole o link ou código do convite" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
-              <Pressable disabled={!manualValue.trim()} onPress={() => void pairWithValue(manualValue)} style={[styles.secondaryButton, { borderColor: colors.border, opacity: manualValue.trim() ? 1 : 0.55 }]}><Text style={{ color: colors.foreground }}>Confirmar código</Text></Pressable>
+              <TextInput accessibilityLabel="Código de pareamento" keyboardType="number-pad" maxLength={8} value={manualValue} onChangeText={(value) => setManualValue(value.replace(/\D/g, '').slice(0, 8))} placeholder="00000000" placeholderTextColor={colors.mutedForeground} style={[styles.input, styles.codeInput, { color: colors.foreground, borderColor: colors.border }]} />
+              <Pressable disabled={manualValue.length !== 8} onPress={() => void pairWithCode(manualValue)} style={[styles.primaryButton, { backgroundColor: colors.primary, opacity: manualValue.length === 8 ? 1 : 0.55 }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Conectar aparelho</Text></Pressable>
             </>
           )}
         </View>
-      )}
       <Text style={[styles.privacy, { color: colors.mutedForeground }]}>Você verá quando o vínculo estiver ativo. Nenhum dado é compartilhado antes da confirmação.</Text>
     </ScrollView>
   );
@@ -149,14 +124,11 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 17, fontWeight: '700', marginBottom: 9 },
   badge: { alignSelf: 'flex-start', borderRadius: 9, paddingHorizontal: 10, paddingVertical: 6, marginTop: 8 },
   badgeText: { fontSize: 10, letterSpacing: 0.7, fontWeight: '700' },
-  cameraFrame: { minHeight: 380, overflow: 'hidden', borderWidth: 1, borderRadius: 22, marginTop: 10 },
-  camera: { height: 360, width: '100%' },
-  permissionBox: { flex: 1, minHeight: 350, justifyContent: 'center', padding: 20 },
   primaryButton: { minHeight: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   buttonText: { fontSize: 15, fontWeight: '700' },
   input: { height: 50, borderWidth: 1, borderRadius: 13, paddingHorizontal: 13, fontSize: 14, marginTop: 5 },
+  codeInput: { height: 64, fontSize: 28, fontWeight: '700', letterSpacing: 7, textAlign: 'center' },
   secondaryButton: { minHeight: 46, borderWidth: 1, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
-  orText: { fontSize: 12, textAlign: 'center', marginVertical: 12 },
   linkButton: { alignSelf: 'center', padding: 15 },
   error: { fontSize: 13, lineHeight: 19, marginBottom: 6 },
   connecting: { minHeight: 100, alignItems: 'center', justifyContent: 'center', gap: 10 },

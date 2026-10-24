@@ -2,7 +2,6 @@ import { ClerkProvider, useAuth, useSignIn, useUser } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
 import { useColors } from '@/hooks/useColors';
 import { createChildPairing, type PairingResult } from './api';
 
@@ -67,9 +66,9 @@ function ParentSession() {
       <Text style={[styles.body, { color: colors.mutedForeground }]}>Vincule o aparelho da criança. O código vale por 15 minutos e só pode ser usado uma vez.</Text>
       {pairing ? (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.foreground }]}>Leia este QR no app da criança</Text>
-          <View style={styles.qr}><QRCode value={pairing.joinUrl} size={220} /></View>
-          <Text style={[styles.body, { color: colors.mutedForeground }]}>Expira em {new Date(pairing.expiresAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.</Text>
+          <Text style={[styles.cardTitle, { color: colors.foreground }]}>Código de pareamento</Text>
+          <Text accessibilityLabel={`Código ${pairing.pairingCode}`} style={[styles.pairingCode, { color: colors.primary }]}>{pairing.pairingCode.replace(/(\d{4})(\d{4})/, '$1 $2')}</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>Digite este código no app Ampara Criança. Ele vale até {new Date(pairing.expiresAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} e só pode ser usado uma vez.</Text>
           <Pressable onPress={() => setPairing(null)} style={[styles.secondaryButton, { borderColor: colors.border }]}><Text style={{ color: colors.foreground }}>Gerar outro código</Text></Pressable>
         </View>
       ) : (
@@ -151,7 +150,7 @@ function PairingForm({ colors, busy, error, onSubmit }: {
       </Pressable>
       {error && <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text>}
       <Pressable disabled={busy || name.trim().length < 2} onPress={() => void onSubmit(name, age, consent)} style={[styles.primaryButton, { backgroundColor: colors.primary, opacity: busy ? 0.65 : 1 }]}>
-        {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Gerar QR de pareamento</Text>}
+        {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Gerar código de 8 dígitos</Text>}
       </Pressable>
     </View>
   );
@@ -174,6 +173,6 @@ const styles = StyleSheet.create({
   consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 16 },
   checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5 },
   consentText: { flex: 1, fontSize: 12, lineHeight: 18 },
-  qr: { alignItems: 'center', padding: 18 },
+  pairingCode: { fontSize: 36, lineHeight: 48, fontWeight: '800', letterSpacing: 5, textAlign: 'center', paddingVertical: 14 },
   secondaryButton: { minHeight: 44, borderWidth: 1, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
 });
