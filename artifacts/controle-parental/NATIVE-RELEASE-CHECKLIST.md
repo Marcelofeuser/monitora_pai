@@ -8,6 +8,7 @@
 - [x] App Criança aceita o código e guarda o token em armazenamento seguro do sistema.
 - [x] Conversa privada de texto entre responsável e criança, com atualização automática.
 - [x] Saída da Criança revoga no servidor o token do aparelho atual.
+- [x] Criança pode compartilhar a localização atual sob demanda, após conceder permissão em primeiro plano; o responsável vê horário/precisão e abre o ponto no mapa.
 - [x] Página `/baixar/crianca` detecta iOS/Android e encaminha para a loja quando os links estiverem configurados.
 - [x] Verificados: TypeScript do workspace, build da API e build da PWA.
 - [x] Compilação iOS da variante Criança concluída para simulador (sem assinatura de distribuição).
@@ -16,7 +17,7 @@
 ## Antes de enviar para as lojas
 
 - [ ] Completar e validar chamadas de voz/vídeo nos apps nativos, incluindo chamada recebida em segundo plano.
-- [ ] Portar e validar os demais recursos que já existem no PWA (contatos/grupos, mídias, localização e tempo de tela).
+- [ ] Portar e validar os demais recursos que já existem no PWA (contatos/grupos, mídias, localização em segundo plano e tempo de tela).
 - [ ] Configurar notificações push nativas para iOS e Android e testar com aparelhos reais.
 - [ ] Instalar, parear e testar cada app em aparelhos iPhone e Android, incluindo reconexão e revogação.
 - [ ] Configurar os projetos nativos no Clerk com os dois bundle/application IDs.

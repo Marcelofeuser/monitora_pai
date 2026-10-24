@@ -4,8 +4,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useColors } from '@/hooks/useColors';
-import { createChildPairing, createChildReconnectPairing, fetchParentChildren, fetchParentPrivateMessages, sendParentPrivateMessage, type ChildProfile, type PairingResult } from './api';
+import { createChildPairing, createChildReconnectPairing, fetchParentChildLocation, fetchParentChildren, fetchParentPrivateMessages, sendParentPrivateMessage, type ChildProfile, type PairingResult } from './api';
 import { PrivateChat } from './PrivateChat';
+import { ParentLocation } from './ParentLocation';
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const childDownloadUrl = process.env.EXPO_PUBLIC_CHILD_DOWNLOAD_URL;
@@ -37,6 +38,7 @@ function ParentSession() {
   const [busy, setBusy] = useState(false);
   const [children, setChildren] = useState<ChildProfile[]>([]);
   const [selectedChild, setSelectedChild] = useState<ChildProfile | null>(null);
+  const [viewingLocation, setViewingLocation] = useState<ChildProfile | null>(null);
   const [addingChild, setAddingChild] = useState(false);
 
   const refreshChildren = useCallback(async () => {
@@ -75,9 +77,19 @@ function ParentSession() {
     if (!selectedChildId) throw new Error('Selecione uma criança para enviar a mensagem.');
     return sendMessage(selectedChildId, text);
   }, [sendMessage, selectedChildId]);
+  const locationChildId = viewingLocation?.id;
+  const loadChildLocation = useCallback(async () => {
+    if (!locationChildId) throw new Error('Selecione uma criança para consultar a localização.');
+    const token = await getToken();
+    if (!token) throw new Error('A sessão expirou. Entre novamente.');
+    return fetchParentChildLocation(locationChildId, token);
+  }, [getToken, locationChildId]);
 
   if (!isLoaded) return <View style={[styles.center, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.primary} /></View>;
   if (!isSignedIn) return <ParentSignIn />;
+  if (viewingLocation) {
+    return <ParentLocation childName={viewingLocation.name} loadLocation={loadChildLocation} onBack={() => setViewingLocation(null)} />;
+  }
   if (selectedChild && userId) {
     return <PrivateChat title={selectedChild.name} ownUserId={userId} loadMessages={loadSelectedMessages} sendMessage={sendSelectedMessage} onBack={() => setSelectedChild(null)} />;
   }
@@ -128,11 +140,14 @@ function ParentSession() {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.foreground }]}>Crianças da família</Text>
           {children.length === 0 ? <Text style={[styles.body, { color: colors.mutedForeground }]}>Ainda não há perfis vinculados.</Text> : children.map((child) => (
-            <Pressable key={child.id} onPress={() => setSelectedChild(child)} style={[styles.childRow, { borderColor: colors.border }]}>
-              <View style={[styles.childAvatar, { backgroundColor: colors.primary }]}><Text style={{ color: colors.primaryForeground, fontWeight: '700' }}>{child.name.charAt(0).toUpperCase()}</Text></View>
-              <Text style={[styles.childName, { color: colors.foreground }]}>{child.name}</Text>
-              <Text style={{ color: colors.primary }}>Abrir conversa ›</Text>
-            </Pressable>
+            <View key={child.id} style={[styles.childRow, { borderColor: colors.border }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Abrir conversa com ${child.name}`} onPress={() => setSelectedChild(child)} style={styles.childMain}>
+                <View style={[styles.childAvatar, { backgroundColor: colors.primary }]}><Text style={{ color: colors.primaryForeground, fontWeight: '700' }}>{child.name.charAt(0).toUpperCase()}</Text></View>
+                <Text style={[styles.childName, { color: colors.foreground }]}>{child.name}</Text>
+                <Text style={{ color: colors.primary }}>Conversa ›</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={() => setViewingLocation(child)} style={styles.locationLink}><Text style={{ color: colors.mutedForeground }}>Localização</Text></Pressable>
+            </View>
           ))}
           {children.map((child) => <Pressable key={`reconnect-${child.id}`} disabled={busy} onPress={() => void issueReconnect(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Conectar outro aparelho de {child.name}</Text></Pressable>)}
           <Pressable onPress={() => { setAddingChild(true); setPairing(null); }} style={[styles.primaryButton, { backgroundColor: colors.primary }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Adicionar criança</Text></Pressable>
@@ -255,7 +270,9 @@ const styles = StyleSheet.create({
   pairingCode: { fontSize: 36, lineHeight: 48, fontWeight: '800', letterSpacing: 5, textAlign: 'center', paddingVertical: 14 },
   downloadBox: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 12, paddingTop: 18 },
   qr: { alignItems: 'center', padding: 14 },
-  childRow: { minHeight: 60, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  childRow: { minHeight: 64, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  childMain: { minHeight: 60, flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  locationLink: { paddingHorizontal: 8, paddingVertical: 12 },
   childAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   childName: { flex: 1, fontSize: 15, fontWeight: '600' },
   reconnectButton: { paddingVertical: 9 },

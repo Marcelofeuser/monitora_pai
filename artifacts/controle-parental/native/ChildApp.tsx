@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { confirmChildPairingCode, fetchChildPrivateMessages, revokeChildDevice, sendChildPrivateMessage } from './api';
+import { confirmChildPairingCode, fetchChildPrivateMessages, reportChildLocation, revokeChildDevice, sendChildPrivateMessage } from './api';
 import { PrivateChat } from './PrivateChat';
 
 const DEVICE_TOKEN_KEY = 'ampara-child-device-token';
@@ -17,6 +18,7 @@ export function ChildApp() {
   const [parentName, setParentName] = useState('responsável');
   const [childId, setChildId] = useState('');
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
+  const [sharingLocation, setSharingLocation] = useState(false);
   const [manualValue, setManualValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const scanLock = useRef(false);
@@ -93,6 +95,29 @@ export function ChildApp() {
     return sendChildPrivateMessage(deviceToken, text);
   }, [deviceToken]);
 
+  const shareLocation = async () => {
+    if (!deviceToken || sharingLocation) return;
+    setSharingLocation(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permissão necessária', 'Para compartilhar sua localização, permita o acesso enquanto estiver usando o app.');
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      await reportChildLocation(deviceToken, {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracyMeters: position.coords.accuracy ?? undefined,
+      });
+      Alert.alert('Localização compartilhada', 'Seu responsável recebeu a posição atual deste aparelho.');
+    } catch (cause) {
+      Alert.alert('Não foi possível compartilhar', cause instanceof Error ? cause.message : 'Verifique a permissão e a conexão com a internet.');
+    } finally {
+      setSharingLocation(false);
+    }
+  };
+
   if (state === 'loading') {
     return <View style={[styles.center, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.primary} /></View>;
   }
@@ -105,7 +130,12 @@ export function ChildApp() {
         ownUserId={childId}
         loadMessages={loadMessages}
         sendMessage={sendMessage}
-        headerAction={<Pressable disabled={!deviceToken} onPress={() => void disconnect()}><Text style={{ color: colors.destructive }}>Sair</Text></Pressable>}
+        headerAction={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Pressable accessibilityRole="button" disabled={!deviceToken || sharingLocation} onPress={() => void shareLocation()}>
+            {sharingLocation ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={{ color: colors.primary }}>Compartilhar localização</Text>}
+          </Pressable>
+          <Pressable accessibilityRole="button" disabled={!deviceToken} onPress={() => void disconnect()}><Text style={{ color: colors.destructive }}>Sair</Text></Pressable>
+        </View>}
       />
     );
   }

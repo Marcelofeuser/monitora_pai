@@ -26,6 +26,12 @@ export type PrivateMessage = {
 };
 
 export type ChildProfile = { id: string; name: string };
+export type ChildLocation = {
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
+  recordedAt: string;
+};
 
 function apiUrl(path: string): string {
   if (!API_URL) {
@@ -146,6 +152,29 @@ export async function revokeChildDevice(deviceToken: string): Promise<void> {
     headers: { 'X-Child-Token': deviceToken },
   });
   if (!response.ok) throw await readError(response);
+}
+
+export async function reportChildLocation(
+  deviceToken: string,
+  location: { latitude: number; longitude: number; accuracyMeters?: number },
+): Promise<void> {
+  const response = await fetch(apiUrl('/api/location'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Child-Token': deviceToken },
+    body: JSON.stringify(location),
+  });
+  if (!response.ok) throw await readError(response);
+}
+
+export async function fetchParentChildLocation(
+  childId: string,
+  authToken: string,
+): Promise<ChildLocation | null> {
+  const response = await fetch(apiUrl(`/api/location/${encodeURIComponent(childId)}`), {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
 }
 
 export function pairingTokenFromQr(data: string): string | null {

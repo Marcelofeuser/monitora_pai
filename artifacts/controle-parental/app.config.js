@@ -33,6 +33,18 @@ module.exports = ({ config }) => {
   });
   if (variant.role === 'parent') {
     plugins.push('@clerk/expo');
+  } else {
+    plugins.push([
+      'expo-location',
+      {
+        locationWhenInUsePermission: 'Permita que o Ampara compartilhe sua localização atual com seu responsável quando você tocar em Compartilhar localização.',
+        locationAlwaysAndWhenInUsePermission: false,
+        locationAlwaysPermission: false,
+        isIosBackgroundLocationEnabled: false,
+        isAndroidBackgroundLocationEnabled: false,
+        isAndroidForegroundServiceEnabled: false,
+      },
+    ]);
   }
   plugins.push('expo-secure-store');
   plugins.push('./plugins/with-android-packaging');
