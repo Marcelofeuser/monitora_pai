@@ -6,10 +6,11 @@ esta sequência deriva do resumo fornecido e não substitui um documento ausente
 
 ## Contrato desta alteração
 
-- O QR de instalação é independente do pareamento e deverá apontar para uma
-  página que encaminhe à loja correta. Os links oficiais das lojas ainda não
-  foram publicados/configurados; o app nativo não deve apresentar um QR de
-  pareamento como se fosse o QR de download.
+- O QR de instalação é independente do pareamento e aponta para uma página que
+  identifica o sistema e encaminha ao APK Android hospedado no domínio do
+  Ampara quando a URL for configurada. No Brasil, a instalação pública iOS
+  pelo site depende de marketplace alternativo autorizado pela Apple. O app
+  nativo não deve apresentar um QR de pareamento como se fosse o QR de download.
 - Mantém QR com token aleatório de 192 bits, validade de 15 minutos e uso único.
 - Os apps nativos usam código numérico aleatório de 8 dígitos, válido por
   15 minutos e de uso único. O endpoint ainda aceita tokens longos para manter

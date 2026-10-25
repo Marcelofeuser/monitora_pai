@@ -33,14 +33,14 @@ export AMPARA_APP
 trap 'unset ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD' EXIT
 
 pnpm exec expo prebuild --platform android
-(cd android && ./gradlew bundleRelease)
+(cd android && ./gradlew assembleRelease)
 
-OUTPUT_FILE="$NATIVE_DIR/android/app/build/outputs/bundle/release/app-release.aab"
+OUTPUT_FILE="$NATIVE_DIR/android/app/build/outputs/apk/release/app-release.apk"
 DELIVERY_DIR="$NATIVE_DIR/dist/releases"
-DELIVERY_FILE="$DELIVERY_DIR/ampara-${AMPARA_APP}.aab"
+DELIVERY_FILE="$DELIVERY_DIR/ampara-${AMPARA_APP}.apk"
 mkdir -p "$DELIVERY_DIR"
 cp "$OUTPUT_FILE" "$DELIVERY_FILE"
 
 echo ""
-echo "Build concluído: $DELIVERY_FILE"
+echo "APK assinado para distribuição pelo site: $DELIVERY_FILE"
 echo "Variante: $AMPARA_APP"
