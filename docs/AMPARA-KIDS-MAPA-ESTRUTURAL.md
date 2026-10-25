@@ -93,7 +93,7 @@ O serviço de vendas encaminha `/superadmin`, autenticação e assets para a ori
 
 ## 6. Apps nativos — React Native + Expo
 
-`artifacts/controle-parental/native` contém telas e integração nativas. O app Responsáveis lista e pareia crianças, abre o espelho, compartilha localização, cria grupos com contatos aprovados e conversa em grupos. Agora também permite cadastrar contatos, gerar/compartilhar convites por QR e bloquear/reativar o acesso. O app Criança pareia com código, conversa em privado, abre os grupos da família e compartilha a localização sob demanda. Ambos incluem chat nativo com texto, fotos e figurinhas e chamadas de voz/vídeo em primeiro plano. `app.config.js` gera duas identidades:
+`artifacts/controle-parental/native` contém telas e integração nativas. O app Responsáveis lista e pareia crianças, abre o espelho, compartilha localização, cria grupos com contatos aprovados e conversa em grupos. Permite cadastrar contatos, gerar/compartilhar convites por QR, bloquear/reativar acesso e configurar o limite diário do app Ampara. O app Criança pareia com código, conversa em privado, abre os grupos da família, compartilha a localização sob demanda e consulta o bloqueio/contabiliza minutos de uso enquanto está em primeiro plano. Ambos incluem chat nativo com texto, fotos e figurinhas e chamadas de voz/vídeo em primeiro plano. O contador mede o uso do Ampara, não o tempo total no dispositivo. `app.config.js` gera duas identidades:
 
 | Variante | Papel | Identificador Android/iOS |
 |---|---|---|

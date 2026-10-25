@@ -2,9 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { confirmChildPairingCode, fetchChildGroupMessages, fetchChildGroups, fetchChildPrivateMessages, reportChildLocation, revokeChildDevice, sendChildGroupMessage, sendChildPrivateMessage, type GroupProfile, type PrivateMessageInput } from './api';
+import { confirmChildPairingCode, fetchChildGroupMessages, fetchChildGroups, fetchChildPrivateMessages, fetchChildScreenTimeStatus, reportChildLocation, revokeChildDevice, sendChildGroupMessage, sendChildPrivateMessage, sendChildScreenTimeHeartbeat, type ChildLockStatus, type GroupProfile, type PrivateMessageInput } from './api';
 import { PrivateChat } from './PrivateChat';
 import { NativeCallOverlay } from './NativeCallOverlay';
 import { useNativeCall } from './useNativeCall';
@@ -25,11 +25,58 @@ export function ChildApp() {
   const [selectedGroup, setSelectedGroup] = useState<GroupProfile | null>(null);
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
+  const [childLockStatus, setChildLockStatus] = useState<ChildLockStatus | null>(null);
+  const [screenTimeError, setScreenTimeError] = useState<string | null>(null);
   const [sharingLocation, setSharingLocation] = useState(false);
   const [manualValue, setManualValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const scanLock = useRef(false);
   const call = useNativeCall(deviceToken ? { kind: 'child', token: deviceToken } : null);
+
+  const refreshChildLockStatus = useCallback(async () => {
+    if (!deviceToken) return;
+    const status = await fetchChildScreenTimeStatus(deviceToken);
+    setChildLockStatus(status);
+    setScreenTimeError(null);
+  }, [deviceToken]);
+
+  useEffect(() => {
+    if (!deviceToken) {
+      setChildLockStatus(null);
+      setScreenTimeError(null);
+      return;
+    }
+    let active = true;
+    const refresh = () => void refreshChildLockStatus().catch((cause) => {
+      if (active) {
+        setChildLockStatus(null);
+        setScreenTimeError(cause instanceof Error ? cause.message : 'Não foi possível verificar o acesso.');
+      }
+    });
+    refresh();
+    const timer = setInterval(() => {
+      if (AppState.currentState !== 'active') return;
+      void sendChildScreenTimeHeartbeat(deviceToken).then((status) => {
+        if (active) {
+          setChildLockStatus(status);
+          setScreenTimeError(null);
+        }
+      }).catch((cause) => {
+        if (active) {
+          setChildLockStatus(null);
+          setScreenTimeError(cause instanceof Error ? cause.message : 'Não foi possível atualizar o tempo de uso.');
+        }
+      });
+    }, 60_000);
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refresh();
+    });
+    return () => {
+      active = false;
+      clearInterval(timer);
+      appStateSubscription.remove();
+    };
+  }, [deviceToken, refreshChildLockStatus]);
 
   useEffect(() => {
     void Promise.all([
@@ -155,6 +202,30 @@ export function ChildApp() {
 
   if (state === 'loading') {
     return <View style={[styles.center, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.primary} /></View>;
+  }
+
+  if (state === 'paired' && !childLockStatus) {
+    return (
+      <View style={[styles.center, { backgroundColor: colors.background, padding: 24, gap: 12 }]}>
+        {screenTimeError ? <>
+          <Text style={[styles.title, { color: colors.foreground, textAlign: 'center' }]}>Não foi possível verificar o acesso</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground, textAlign: 'center' }]}>{screenTimeError}</Text>
+          <Pressable accessibilityRole="button" onPress={() => void refreshChildLockStatus().catch((cause) => setScreenTimeError(cause instanceof Error ? cause.message : 'Tente novamente.'))} style={[styles.primaryButton, { backgroundColor: colors.primary, paddingHorizontal: 22 }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Tentar novamente</Text></Pressable>
+        </> : <><ActivityIndicator color={colors.primary} /><Text style={[styles.body, { color: colors.mutedForeground }]}>Verificando o acesso…</Text></>}
+      </View>
+    );
+  }
+
+  if (state === 'paired' && childLockStatus?.locked) {
+    return (
+      <View style={[styles.center, { backgroundColor: colors.background, padding: 28, gap: 12 }]}>
+        <Text style={[styles.eyebrow, { color: colors.primary }]}>AMPARA · CRIANÇA</Text>
+        <Text style={[styles.title, { color: colors.foreground, textAlign: 'center' }]}>Acesso pausado</Text>
+        <Text style={[styles.body, { color: colors.mutedForeground, textAlign: 'center' }]}>{childLockStatus.lockReason === 'manual' ? 'Seu responsável pausou o acesso ao app. Fale com ele para liberar.' : 'Você atingiu o limite diário de uso. O acesso volta quando o limite diário for renovado.'}</Text>
+        {screenTimeError && <Text style={[styles.error, { color: colors.destructive }]}>{screenTimeError}</Text>}
+        <Pressable accessibilityRole="button" onPress={() => void refreshChildLockStatus().catch((cause) => setScreenTimeError(cause instanceof Error ? cause.message : 'Tente novamente.'))} style={[styles.primaryButton, { backgroundColor: colors.primary, paddingHorizontal: 22 }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Verificar de novo</Text></Pressable>
+      </View>
+    );
   }
 
   if (state === 'paired') {

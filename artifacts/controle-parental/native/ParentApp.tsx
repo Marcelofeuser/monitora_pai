@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useColors } from '@/hooks/useColors';
-import { createChildPairing, createChildReconnectPairing, createParentContact, createParentContactInvite, createParentGroup, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentContacts, fetchParentGroupMessages, fetchParentGroups, fetchParentMirroredConversation, fetchParentPrivateMessages, sendParentGroupMessage, sendParentPrivateMessage, setParentContactStatus, type ChildProfile, type GroupProfile, type MirroredContact, type PairingResult, type PrivateMessageInput } from './api';
+import { createChildPairing, createChildReconnectPairing, createParentContact, createParentContactInvite, createParentGroup, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentContacts, fetchParentGroupMessages, fetchParentGroups, fetchParentMirroredConversation, fetchParentPrivateMessages, fetchParentScreenTime, sendParentGroupMessage, sendParentPrivateMessage, setParentChildLock, setParentContactStatus, setParentDailyLimit, type ChildProfile, type GroupProfile, type MirroredContact, type PairingResult, type PrivateMessageInput, type ScreenTimeStatus } from './api';
 import { PrivateChat } from './PrivateChat';
 import { ParentLocation } from './ParentLocation';
 import { NativeCallOverlay } from './NativeCallOverlay';
@@ -43,6 +43,7 @@ function ParentSession() {
   const [children, setChildren] = useState<ChildProfile[]>([]);
   const [selectedChild, setSelectedChild] = useState<ChildProfile | null>(null);
   const [contactChild, setContactChild] = useState<ChildProfile | null>(null);
+  const [screenTimeChild, setScreenTimeChild] = useState<ChildProfile | null>(null);
   const [viewingLocation, setViewingLocation] = useState<ChildProfile | null>(null);
   const [mirrorChild, setMirrorChild] = useState<ChildProfile | null>(null);
   const [mirrorContact, setMirrorContact] = useState<MirroredContact | null>(null);
@@ -125,6 +126,9 @@ function ParentSession() {
   if (contactChild) {
     return <><ParentContacts child={contactChild} getToken={getToken} onBack={() => setContactChild(null)} /><NativeCallOverlay call={call} /></>;
   }
+  if (screenTimeChild) {
+    return <><ParentScreenTime child={screenTimeChild} getToken={getToken} onBack={() => setScreenTimeChild(null)} /><NativeCallOverlay call={call} /></>;
+  }
   if (mirrorContact && userId) {
     const contactUserId = mirrorContact.contactUserId;
     const loadMirror = () => contactUserId ? loadMirroredMessages(contactUserId) : Promise.resolve([]);
@@ -203,6 +207,7 @@ function ParentSession() {
           ))}
           {children.map((child) => <Pressable key={`reconnect-${child.id}`} disabled={busy} onPress={() => void issueReconnect(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Conectar outro aparelho de {child.name}</Text></Pressable>)}
           {children.map((child) => <Pressable key={`contacts-${child.id}`} accessibilityRole="button" onPress={() => setContactChild(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Gerenciar contatos de {child.name}</Text></Pressable>)}
+          {children.map((child) => <Pressable key={`time-${child.id}`} accessibilityRole="button" onPress={() => setScreenTimeChild(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Tempo de uso e bloqueio de {child.name}</Text></Pressable>)}
           <Pressable onPress={() => { setAddingChild(true); setPairing(null); }} style={[styles.primaryButton, { backgroundColor: colors.primary }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Adicionar criança</Text></Pressable>
         </View>
       )}
@@ -357,6 +362,111 @@ function ParentContacts({ child, getToken, onBack }: {
           {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Adicionar e autorizar</Text>}
         </Pressable>
       </View>
+    </ScrollView>
+  );
+}
+
+function ParentScreenTime({ child, getToken, onBack }: {
+  child: ChildProfile;
+  getToken: () => Promise<string | null>;
+  onBack: () => void;
+}) {
+  const colors = useColors();
+  const [status, setStatus] = useState<ScreenTimeStatus | null>(null);
+  const [limitInput, setLimitInput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error('A sessão expirou. Entre novamente.');
+    const next = await fetchParentScreenTime(child.id, token);
+    setStatus(next);
+    setLimitInput(next.dailyLimitMinutes == null ? '' : String(next.dailyLimitMinutes));
+  }, [child.id, getToken]);
+
+  useEffect(() => {
+    let active = true;
+    void refresh().catch((cause) => {
+      if (active) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar o tempo de uso.');
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [refresh]);
+
+  const saveLimit = async () => {
+    if (busy) return;
+    const trimmed = limitInput.trim();
+    const limit = trimmed ? Number(trimmed) : null;
+    if (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > 1440)) {
+      setError('Informe um limite entre 1 e 1440 minutos, ou deixe em branco para remover o limite.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('A sessão expirou. Entre novamente.');
+      await setParentDailyLimit(child.id, limit, token);
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível salvar o limite.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleManualLock = () => {
+    if (!status || busy || status.lockReason === 'limit') return;
+    const locked = status.lockReason !== 'manual';
+    Alert.alert(locked ? 'Bloquear agora?' : 'Desbloquear agora?', locked
+      ? `O app da criança ficará bloqueado até você liberar o acesso.`
+      : `A criança poderá voltar a usar o app, desde que o limite diário não tenha sido atingido.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: locked ? 'Bloquear' : 'Desbloquear', style: locked ? 'destructive' : 'default', onPress: () => {
+        void (async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            const token = await getToken();
+            if (!token) throw new Error('A sessão expirou. Entre novamente.');
+            await setParentChildLock(child.id, locked, token);
+            await refresh();
+          } catch (cause) {
+            setError(cause instanceof Error ? cause.message : 'Não foi possível alterar o bloqueio.');
+          } finally {
+            setBusy(false);
+          }
+        })();
+      } },
+    ]);
+  };
+
+  return (
+    <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]} keyboardShouldPersistTaps="handled">
+      <Pressable accessibilityRole="button" onPress={onBack}><Text style={{ color: colors.primary }}>‹ Voltar à família</Text></Pressable>
+      <Text style={[styles.title, { color: colors.foreground }]}>Tempo de uso · {child.name}</Text>
+      <Text style={[styles.body, { color: colors.mutedForeground }]}>Acompanhe o uso do app e defina um limite diário. O bloqueio se aplica enquanto a criança usa o app Ampara.</Text>
+      {loading ? <ActivityIndicator color={colors.primary} /> : status && (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTitle, { color: colors.foreground }]}>Uso de hoje</Text>
+          <Text style={[styles.title, { color: colors.primary }]}>{status.minutesUsedToday} min</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>{status.dailyLimitMinutes == null ? 'Sem limite diário definido.' : `Limite: ${status.dailyLimitMinutes} min por dia.`}</Text>
+          {status.locked && <Text style={[styles.error, { color: colors.destructive }]}>{status.lockReason === 'manual' ? 'Acesso bloqueado manualmente.' : 'Limite diário atingido; o acesso ficará bloqueado até a virada do dia.'}</Text>}
+          <Pressable accessibilityRole="button" disabled={busy || status.lockReason === 'limit'} onPress={toggleManualLock} style={[styles.primaryButton, { backgroundColor: status.lockReason === 'manual' ? colors.primary : colors.destructive, opacity: busy || status.lockReason === 'limit' ? 0.55 : 1 }]}>
+            {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>{status.lockReason === 'manual' ? 'Desbloquear agora' : status.lockReason === 'limit' ? 'Limite atingido' : 'Bloquear agora'}</Text>}
+          </Pressable>
+        </View>
+      )}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.cardTitle, { color: colors.foreground }]}>Limite diário</Text>
+        <Text style={[styles.body, { color: colors.mutedForeground }]}>Defina de 1 a 1440 minutos. Deixe vazio para remover o limite.</Text>
+        <TextInput value={limitInput} onChangeText={(value) => setLimitInput(value.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" maxLength={4} placeholder="Ex.: 90 minutos" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+        <Pressable accessibilityRole="button" disabled={busy} onPress={() => void saveLimit()} style={[styles.secondaryButton, { borderColor: colors.border, opacity: busy ? 0.55 : 1 }]}>
+          {busy ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary, fontWeight: '700' }}>Salvar limite</Text>}
+        </Pressable>
+      </View>
+      {error && <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text>}
     </ScrollView>
   );
 }
