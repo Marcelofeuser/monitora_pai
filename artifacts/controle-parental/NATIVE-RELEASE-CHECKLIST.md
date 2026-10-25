@@ -7,29 +7,37 @@
 - [x] Lista de crianças da família e geração/reconexão pelo código de 8 dígitos.
 - [x] App Criança aceita o código e guarda o token em armazenamento seguro do sistema.
 - [x] Conversa privada de texto entre responsável e criança, com atualização automática.
+- [x] Envio de fotos e figurinhas no chat privado nativo, usando as rotas de mídia já existentes.
+- [x] Responsável consulta o espelho de conversas da criança com contatos aprovados, em modo somente leitura; o chat privado familiar fica fora do espelho.
 - [x] Saída da Criança revoga no servidor o token do aparelho atual.
 - [x] Criança pode compartilhar a localização atual sob demanda, após conceder permissão em primeiro plano; o responsável vê horário/precisão e abre o ponto no mapa.
 - [x] Página `/baixar/crianca` detecta iOS/Android e encaminha para a loja quando os links estiverem configurados.
-- [x] Verificados: TypeScript do workspace, build da API e build da PWA.
-- [x] Compilação iOS da variante Criança concluída para simulador (sem assinatura de distribuição).
-- [x] Compilação iOS da variante Responsáveis concluída para simulador anteriormente.
+- [x] Verificados: TypeScript do workspace completo (incluindo chamadas nativas, API e PWA).
+- [x] APK de debug Android do Responsável gerado e assinatura validada (`com.amparakids.responsavel`).
+- [x] APK de debug Android da Criança gerado e assinatura validada (`com.amparakids.crianca`).
+- [x] Compilação iOS ARM para simulador concluída para ambas as variantes com o código atual (sem assinatura de distribuição): `dist/Ampara-Responsavel-Simulator.app` e `dist/Ampara-Crianca-Simulator.app`.
 
 ## Antes de enviar para as lojas
 
-- [ ] Completar e validar chamadas de voz/vídeo nos apps nativos, incluindo chamada recebida em segundo plano.
+- [x] Implementar chamadas de voz/vídeo entre Responsável e Criança enquanto ambos os apps estão abertos.
+- [ ] Configurar chamadas recebidas com o app em segundo plano/fechado usando push nativo e validar em aparelhos reais.
 - [ ] Portar e validar os demais recursos que já existem no PWA (contatos/grupos, mídias, localização em segundo plano e tempo de tela).
 - [ ] Configurar notificações push nativas para iOS e Android e testar com aparelhos reais.
 - [ ] Instalar, parear e testar cada app em aparelhos iPhone e Android, incluindo reconexão e revogação.
+- [ ] Validar chamadas de voz/vídeo e permissões de microfone/câmera em aparelhos iPhone e Android.
+- [ ] Recompilar os APKs Android de debug com o espelho nativo recém-adicionado; os APKs já existentes foram compilados antes desta mudança.
 - [ ] Configurar os projetos nativos no Clerk com os dois bundle/application IDs.
 - [ ] Criar builds assinados com as contas de publicação Apple e Google.
+- [ ] Instalar e testar os APKs Android em aparelhos reais; não havia aparelho/emulador conectado neste Mac.
 - [ ] Preencher as fichas das lojas, política de privacidade, termos, classificação etária e declarações de dados/permissões.
 - [ ] Publicar os dois apps e inserir as URLs oficiais das lojas em `VITE_CHILD_IOS_STORE_URL` e `VITE_CHILD_ANDROID_STORE_URL`.
 
 ## Bloqueios externos conhecidos
 
-- O acesso/publicação Google Play ainda aguarda liberação, conforme informado pelo responsável do projeto.
-- A conta Apple está aprovada, mas este ambiente não tem acesso ao App Store Connect nem certificados/perfis de assinatura.
-- O Mac deste ambiente não tem Java/JDK disponível; não foi possível validar um APK/AAB localmente.
-- O build iOS do simulador não gera um arquivo assinado para distribuição. Ele valida compilação, não publicação nem funcionamento em aparelho.
+- O acesso/publicação Google Play e a situação do D-U-N-S ainda dependem da verificação da empresa e da conta do responsável.
+- Marcelo informou que tem uma conta pessoal Apple Developer. Os builds iOS atuais são de simulador e ainda não foram assinados; é preciso configurar/confirmar o acesso à equipe, certificados e perfis antes de distribuir ou publicar.
+- Os APKs entregues são de debug, assinados com a chave de depuração. Servem para instalação/teste, não para publicação no Google Play.
+- As compilações iOS de simulador validam que as duas variantes compilam, mas não geram arquivos assinados para iPhone/App Store nem substituem o teste em aparelho real.
+- O WebRTC atual toca e conecta enquanto os dois apps estão abertos; não implementa ainda a experiência de chamada recebida com o app suspenso/fechado.
 
 Não considerar os apps prontos para lançamento até concluir todos os itens acima e fazer a validação em aparelhos reais.

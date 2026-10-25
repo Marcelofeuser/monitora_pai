@@ -24,6 +24,22 @@ pnpm --filter @workspace/controle-parental prebuild:responsavel
 pnpm --filter @workspace/controle-parental prebuild:crianca
 ```
 
+Para abrir a variante desejada no simulador iOS:
+
+```sh
+cd artifacts/controle-parental
+AMPARA_APP=responsavel pnpm exec expo run:ios
+AMPARA_APP=crianca pnpm exec expo run:ios
+```
+
+## APKs de verificação
+
+Os arquivos `dist/ampara-responsavel-debug.apk` e
+`dist/ampara-crianca-debug.apk` foram gerados e tiveram a assinatura e o
+identificador do pacote conferidos. São APKs de depuração para instalação e
+teste; a Google Play exige um build de lançamento assinado com a chave da
+conta da empresa.
+
 Antes de iniciar, copie `.env.example` para `.env` e configure a URL pública
 do `api-server` e a publishable key do Clerk do ambiente de staging. A chave
 publishable é própria do cliente; não use a secret key do Clerk no app.
@@ -41,12 +57,16 @@ mesmo aparelho porque têm identificadores diferentes.
 - O app Criança informa o código em `POST /api/pairing/confirm` e guarda o
   token do dispositivo no armazenamento seguro do aparelho.
 - Responsável e criança trocam mensagens de texto no canal privado da família;
-  o histórico atualiza automaticamente e o app da criança pode revogar o token
-  deste aparelho ao sair.
+  o histórico atualiza automaticamente, ambos podem enviar fotos e figurinhas,
+  e o app da criança pode revogar o token deste aparelho ao sair.
 - O convite exige confirmação explícita do vínculo e a API aplica expiração e
   limite de tentativas.
+- Responsável e criança podem iniciar e atender chamadas de voz/vídeo quando
+  os dois apps estão abertos. O servidor autentica a sinalização e fornece
+  credenciais ICE/TURN; microfone e câmera só são solicitados ao iniciar ou
+  atender uma chamada.
 
-Chamadas, contatos e grupos, mídias, localização em segundo plano, controle de
-tempo de tela e notificações nativas ainda precisam ser portados e validados
-antes da distribuição. O QR de download também depende dos links oficiais das
-lojas, ainda não publicados.
+Contatos e grupos, mídias, localização em segundo plano e controle de tempo de
+tela ainda precisam ser portados. Chamadas recebidas com o app fechado ou em
+segundo plano dependem de push nativo e validação em aparelhos reais. O QR de
+download depende dos links oficiais das lojas, ainda não publicados.

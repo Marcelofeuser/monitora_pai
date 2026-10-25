@@ -4,12 +4,15 @@ import * as SecureStore from 'expo-secure-store';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { confirmChildPairingCode, fetchChildPrivateMessages, reportChildLocation, revokeChildDevice, sendChildPrivateMessage } from './api';
+import { confirmChildPairingCode, fetchChildPrivateMessages, reportChildLocation, revokeChildDevice, sendChildPrivateMessage, type PrivateMessageInput } from './api';
 import { PrivateChat } from './PrivateChat';
+import { NativeCallOverlay } from './NativeCallOverlay';
+import { useNativeCall } from './useNativeCall';
 
 const DEVICE_TOKEN_KEY = 'ampara-child-device-token';
 const CHILD_NAME_KEY = 'ampara-child-name';
 const CHILD_ID_KEY = 'ampara-child-id';
+const PARENT_ID_KEY = 'ampara-parent-id';
 
 export function ChildApp() {
   const colors = useColors();
@@ -17,20 +20,24 @@ export function ChildApp() {
   const [childName, setChildName] = useState('');
   const [parentName, setParentName] = useState('responsável');
   const [childId, setChildId] = useState('');
+  const [parentId, setParentId] = useState('');
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [sharingLocation, setSharingLocation] = useState(false);
   const [manualValue, setManualValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const scanLock = useRef(false);
+  const call = useNativeCall(deviceToken ? { kind: 'child', token: deviceToken } : null);
 
   useEffect(() => {
     void Promise.all([
       SecureStore.getItemAsync(DEVICE_TOKEN_KEY),
       AsyncStorage.getItem(CHILD_NAME_KEY),
       AsyncStorage.getItem(CHILD_ID_KEY),
-    ]).then(([deviceToken, name, id]) => {
+      AsyncStorage.getItem(PARENT_ID_KEY),
+    ]).then(([deviceToken, name, id, parent]) => {
       setChildName(name ?? '');
       setChildId(id ?? '');
+      setParentId(parent ?? '');
       setDeviceToken(deviceToken);
       setState(deviceToken ? 'paired' : 'unpaired');
     }).catch(() => setState('unpaired'));
@@ -55,9 +62,11 @@ export function ChildApp() {
       await AsyncStorage.multiSet([
         [CHILD_NAME_KEY, result.childName],
         [CHILD_ID_KEY, result.childUserId],
+        [PARENT_ID_KEY, result.parentId],
       ]);
       setChildName(result.childName);
       setChildId(result.childUserId);
+      setParentId(result.parentId);
       setManualValue('');
       setState('paired');
     } catch (cause) {
@@ -73,10 +82,11 @@ export function ChildApp() {
     try {
       await revokeChildDevice(deviceToken);
       await SecureStore.deleteItemAsync(DEVICE_TOKEN_KEY);
-      await AsyncStorage.multiRemove([CHILD_NAME_KEY, CHILD_ID_KEY]);
+      await AsyncStorage.multiRemove([CHILD_NAME_KEY, CHILD_ID_KEY, PARENT_ID_KEY]);
       setDeviceToken(null);
       setChildName('');
       setChildId('');
+      setParentId('');
       setError(null);
       setState('unpaired');
     } catch (cause) {
@@ -88,11 +98,15 @@ export function ChildApp() {
     if (!deviceToken) throw new Error('Este aparelho não está conectado.');
     const conversation = await fetchChildPrivateMessages(deviceToken);
     if (conversation.parentName) setParentName(conversation.parentName);
+    if (conversation.parentId && conversation.parentId !== parentId) {
+      setParentId(conversation.parentId);
+      await AsyncStorage.setItem(PARENT_ID_KEY, conversation.parentId);
+    }
     return conversation.messages;
-  }, [deviceToken]);
-  const sendMessage = useCallback(async (text: string) => {
+  }, [deviceToken, parentId]);
+  const sendMessage = useCallback(async (input: PrivateMessageInput) => {
     if (!deviceToken) throw new Error('Este aparelho não está conectado.');
-    return sendChildPrivateMessage(deviceToken, text);
+    return sendChildPrivateMessage(deviceToken, input);
   }, [deviceToken]);
 
   const shareLocation = async () => {
@@ -124,6 +138,7 @@ export function ChildApp() {
 
   if (state === 'paired') {
     return (
+      <>
       <PrivateChat
         title={`Conversa · ${parentName}`}
         subtitle={`Ampara Criança · conectado como ${childName}`}
@@ -131,12 +146,17 @@ export function ChildApp() {
         loadMessages={loadMessages}
         sendMessage={sendMessage}
         headerAction={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Pressable accessibilityRole="button" disabled={!parentId || call.phase !== 'idle'} onPress={() => void call.startCall(parentId, parentName)}>
+            <Text style={{ color: colors.primary }}>Ligar</Text>
+          </Pressable>
           <Pressable accessibilityRole="button" disabled={!deviceToken || sharingLocation} onPress={() => void shareLocation()}>
             {sharingLocation ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={{ color: colors.primary }}>Compartilhar localização</Text>}
           </Pressable>
           <Pressable accessibilityRole="button" disabled={!deviceToken} onPress={() => void disconnect()}><Text style={{ color: colors.destructive }}>Sair</Text></Pressable>
         </View>}
       />
+      <NativeCallOverlay call={call} />
+      </>
     );
   }
 

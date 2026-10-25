@@ -53,6 +53,8 @@ import { ContactJoin } from '@/pages/ContactJoin';
 import { ContactChat } from '@/pages/ContactChat';
 import { ContactBio } from '@/pages/ContactBio';
 import { GuardianJoin } from '@/pages/GuardianJoin';
+import { SuperadminPage } from '@/pages/SuperadminPage';
+import { BillingPage } from '@/pages/BillingPage';
 import QRCode from 'qrcode';
 import { ThemeProvider, ThemeSwitcher } from '@/lib/theme';
 import { EmojiPicker } from '@/components/emoji-picker';
@@ -3984,7 +3986,7 @@ function SignUpPage() {
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/baixar/crianca" component={ChildAppDownload} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/invites" component={InvitesRoute} /><Route path="/groups/new" component={CreateGroupRoute} /><Route path="/meu-chat" component={MyChatRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route path="/join-contact" component={ContactJoin} /><Route path="/aceitar-responsavel" component={GuardianJoin} /><Route path="/contact" component={ContactChat} /><Route path="/contact/bio" component={ContactBio} /><Route path="/perfil" component={ParentBioRoute} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/baixar/crianca" component={ChildAppDownload} /><Route path="/superadmin" component={SuperadminRoute} /><Route path="/billing" component={BillingRoute} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/invites" component={InvitesRoute} /><Route path="/groups/new" component={CreateGroupRoute} /><Route path="/meu-chat" component={MyChatRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route path="/join-contact" component={ContactJoin} /><Route path="/aceitar-responsavel" component={GuardianJoin} /><Route path="/contact" component={ContactChat} /><Route path="/contact/bio" component={ContactBio} /><Route path="/perfil" component={ParentBioRoute} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 // /join não exige o Responsável logado — é a rota que o QR code abre no
 // aparelho da Criança, que ainda não tem conta. /pair é o gerador do QR,
@@ -4023,6 +4025,8 @@ function LocationRoute() { return <RequireSignedIn><AppShell><LocationPage /></A
 function ScreenTimeRoute() { return <RequireSignedIn><AppShell><ScreenTimePage /></AppShell></RequireSignedIn>; }
 function SettingsRoute() { return <RequireSignedIn><AppShell><SettingsPage /></AppShell></RequireSignedIn>; }
 function ParentBioRoute() { return <RequireSignedIn><AppShell><ParentBio /></AppShell></RequireSignedIn>; }
+function SuperadminRoute() { return <RequireSignedIn><SuperadminPage /></RequireSignedIn>; }
+function BillingRoute() { return <RequireSignedIn><BillingPage /></RequireSignedIn>; }
 
 function NotFound() {
   const { t } = useLanguage();

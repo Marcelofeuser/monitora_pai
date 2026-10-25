@@ -25,7 +25,15 @@ export type PrivateMessage = {
   createdAt: string;
 };
 
+export type NativeUploadFile = { uri: string; name: string; type: string };
+export type PrivateMessageInput =
+  | { textContent: string }
+  | { file: NativeUploadFile; caption?: string }
+  | { stickerEmoji: string };
+
 export type ChildProfile = { id: string; name: string };
+export type MirroredContact = { id: string; contactName: string; contactUserId: string | null; status: string };
+export type MirroredConversation = { messages: PrivateMessage[]; contactName: string; childName: string };
 export type ChildLocation = {
   latitude: number;
   longitude: number;
@@ -106,6 +114,22 @@ export async function fetchParentChildren(authToken: string): Promise<ChildProfi
   return response.json();
 }
 
+export async function fetchParentApprovedContacts(childId: string, authToken: string): Promise<MirroredContact[]> {
+  const response = await fetch(`${apiUrl('/api/contacts')}?childId=${encodeURIComponent(childId)}&status=approved`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function fetchParentMirroredConversation(contactUserId: string, authToken: string): Promise<MirroredConversation> {
+  const response = await fetch(`${apiUrl(`/api/parent/contacts/${encodeURIComponent(contactUserId)}/messages`)}`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
 export async function fetchParentPrivateMessages(childId: string, authToken: string): Promise<PrivateMessage[]> {
   const response = await fetch(`${apiUrl('/api/conversations/private')}?childId=${encodeURIComponent(childId)}`, {
     headers: { Authorization: `Bearer ${authToken}` },
@@ -115,11 +139,29 @@ export async function fetchParentPrivateMessages(childId: string, authToken: str
   return result.messages;
 }
 
-export async function sendParentPrivateMessage(childId: string, textContent: string, authToken: string): Promise<PrivateMessage> {
+export async function sendParentPrivateMessage(childId: string, input: PrivateMessageInput, authToken: string): Promise<PrivateMessage> {
+  if ('file' in input || 'stickerEmoji' in input) {
+    const form = new FormData();
+    form.append('childId', childId);
+    if ('file' in input) {
+      form.append('file', input.file as unknown as Blob);
+      if (input.caption) form.append('textContent', input.caption);
+    } else {
+      form.append('stickerEmoji', input.stickerEmoji);
+    }
+    const response = await fetch(apiUrl('/api/conversations/private/messages'), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}` },
+      body: form,
+    });
+    if (!response.ok) throw await readError(response);
+    return response.json();
+  }
+
   const response = await fetch(apiUrl('/api/conversations/private/messages'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-    body: JSON.stringify({ childId, textContent }),
+    body: JSON.stringify({ childId, textContent: input.textContent }),
   });
   if (!response.ok) throw await readError(response);
   return response.json();
@@ -128,6 +170,7 @@ export async function sendParentPrivateMessage(childId: string, textContent: str
 export async function fetchChildPrivateMessages(deviceToken: string): Promise<{
   messages: PrivateMessage[];
   parentName: string | null;
+  parentId: string | null;
 }> {
   const response = await fetch(apiUrl('/api/child/conversations/private'), {
     headers: { 'X-Child-Token': deviceToken },
@@ -136,11 +179,28 @@ export async function fetchChildPrivateMessages(deviceToken: string): Promise<{
   return response.json();
 }
 
-export async function sendChildPrivateMessage(deviceToken: string, textContent: string): Promise<PrivateMessage> {
+export async function sendChildPrivateMessage(deviceToken: string, input: PrivateMessageInput): Promise<PrivateMessage> {
+  if ('file' in input || 'stickerEmoji' in input) {
+    const form = new FormData();
+    if ('file' in input) {
+      form.append('file', input.file as unknown as Blob);
+      if (input.caption) form.append('textContent', input.caption);
+    } else {
+      form.append('stickerEmoji', input.stickerEmoji);
+    }
+    const response = await fetch(apiUrl('/api/child/conversations/private/messages'), {
+      method: 'POST',
+      headers: { 'X-Child-Token': deviceToken },
+      body: form,
+    });
+    if (!response.ok) throw await readError(response);
+    return response.json();
+  }
+
   const response = await fetch(apiUrl('/api/child/conversations/private/messages'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Child-Token': deviceToken },
-    body: JSON.stringify({ textContent }),
+    body: JSON.stringify({ textContent: input.textContent }),
   });
   if (!response.ok) throw await readError(response);
   return response.json();

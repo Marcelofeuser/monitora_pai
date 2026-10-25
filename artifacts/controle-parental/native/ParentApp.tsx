@@ -4,12 +4,15 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useColors } from '@/hooks/useColors';
-import { createChildPairing, createChildReconnectPairing, fetchParentChildLocation, fetchParentChildren, fetchParentPrivateMessages, sendParentPrivateMessage, type ChildProfile, type PairingResult } from './api';
+import { createChildPairing, createChildReconnectPairing, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentMirroredConversation, fetchParentPrivateMessages, sendParentPrivateMessage, type ChildProfile, type MirroredContact, type PairingResult, type PrivateMessageInput } from './api';
 import { PrivateChat } from './PrivateChat';
 import { ParentLocation } from './ParentLocation';
+import { NativeCallOverlay } from './NativeCallOverlay';
+import { useNativeCall } from './useNativeCall';
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
-const childDownloadUrl = process.env.EXPO_PUBLIC_CHILD_DOWNLOAD_URL;
+const childDownloadUrl = process.env.EXPO_PUBLIC_CHILD_DOWNLOAD_URL?.trim()
+  || 'https://responsavel.amparakids.com/baixar/crianca';
 
 export function ParentApp() {
   const colors = useColors();
@@ -33,12 +36,15 @@ function ParentSession() {
   const colors = useColors();
   const { isLoaded, isSignedIn, getToken, signOut, userId } = useAuth();
   const { user } = useUser();
+  const call = useNativeCall(isSignedIn ? { kind: 'parent', getToken } : null);
   const [pairing, setPairing] = useState<PairingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [children, setChildren] = useState<ChildProfile[]>([]);
   const [selectedChild, setSelectedChild] = useState<ChildProfile | null>(null);
   const [viewingLocation, setViewingLocation] = useState<ChildProfile | null>(null);
+  const [mirrorChild, setMirrorChild] = useState<ChildProfile | null>(null);
+  const [mirrorContact, setMirrorContact] = useState<MirroredContact | null>(null);
   const [addingChild, setAddingChild] = useState(false);
 
   const refreshChildren = useCallback(async () => {
@@ -63,20 +69,30 @@ function ParentSession() {
     return fetchParentPrivateMessages(childId, token);
   }, [getToken]);
 
-  const sendMessage = useCallback(async (childId: string, text: string) => {
+  const sendMessage = useCallback(async (childId: string, input: PrivateMessageInput) => {
     const token = await getToken();
     if (!token) throw new Error('A sessão expirou. Entre novamente.');
-    return sendParentPrivateMessage(childId, text, token);
+    return sendParentPrivateMessage(childId, input, token);
   }, [getToken]);
   const selectedChildId = selectedChild?.id;
   const loadSelectedMessages = useCallback(() => {
     if (!selectedChildId) throw new Error('Selecione uma criança para abrir a conversa.');
     return loadMessages(selectedChildId);
   }, [loadMessages, selectedChildId]);
-  const sendSelectedMessage = useCallback((text: string) => {
+  const sendSelectedMessage = useCallback((input: PrivateMessageInput) => {
     if (!selectedChildId) throw new Error('Selecione uma criança para enviar a mensagem.');
-    return sendMessage(selectedChildId, text);
+    return sendMessage(selectedChildId, input);
   }, [sendMessage, selectedChildId]);
+  const loadMirroredMessages = useCallback(async (contactUserId: string) => {
+    const token = await getToken();
+    if (!token) throw new Error('A sessão expirou. Entre novamente.');
+    return (await fetchParentMirroredConversation(contactUserId, token)).messages;
+  }, [getToken]);
+  const loadMirroredContacts = useCallback(async (childId: string) => {
+    const token = await getToken();
+    if (!token) throw new Error('A sessão expirou. Entre novamente.');
+    return fetchParentApprovedContacts(childId, token);
+  }, [getToken]);
   const locationChildId = viewingLocation?.id;
   const loadChildLocation = useCallback(async () => {
     if (!locationChildId) throw new Error('Selecione uma criança para consultar a localização.');
@@ -88,10 +104,18 @@ function ParentSession() {
   if (!isLoaded) return <View style={[styles.center, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.primary} /></View>;
   if (!isSignedIn) return <ParentSignIn />;
   if (viewingLocation) {
-    return <ParentLocation childName={viewingLocation.name} loadLocation={loadChildLocation} onBack={() => setViewingLocation(null)} />;
+    return <><ParentLocation childName={viewingLocation.name} loadLocation={loadChildLocation} onBack={() => setViewingLocation(null)} /><NativeCallOverlay call={call} /></>;
+  }
+  if (mirrorContact && userId) {
+    const contactUserId = mirrorContact.contactUserId;
+    const loadMirror = () => contactUserId ? loadMirroredMessages(contactUserId) : Promise.resolve([]);
+    return <><PrivateChat title={mirrorContact.contactName} subtitle="Espelho somente leitura · Criança e contato" ownUserId={userId} loadMessages={loadMirror} sendMessage={async () => { throw new Error('Este espelho é somente para leitura.'); }} readOnly onBack={() => setMirrorContact(null)} /><NativeCallOverlay call={call} /></>;
+  }
+  if (mirrorChild && userId) {
+    return <><MirroredContacts child={mirrorChild} loadContacts={loadMirroredContacts} onSelect={setMirrorContact} onBack={() => setMirrorChild(null)} /><NativeCallOverlay call={call} /></>;
   }
   if (selectedChild && userId) {
-    return <PrivateChat title={selectedChild.name} ownUserId={userId} loadMessages={loadSelectedMessages} sendMessage={sendSelectedMessage} onBack={() => setSelectedChild(null)} />;
+    return <><PrivateChat title={selectedChild.name} ownUserId={userId} loadMessages={loadSelectedMessages} sendMessage={sendSelectedMessage} onBack={() => setSelectedChild(null)} headerAction={<Pressable accessibilityRole="button" disabled={call.phase !== 'idle'} onPress={() => void call.startCall(selectedChild.id, selectedChild.name)}><Text style={{ color: colors.primary, fontWeight: '700' }}>Ligar</Text></Pressable>} /><NativeCallOverlay call={call} /></>;
   }
 
   const issuePairing = async (childName: string, childAge: string, consent: boolean) => {
@@ -132,6 +156,7 @@ function ParentSession() {
   };
 
   return (
+    <>
     <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]}>
       <Text style={[styles.eyebrow, { color: colors.primary }]}>AMPARA · RESPONSÁVEIS</Text>
       <Text style={[styles.title, { color: colors.foreground }]}>Olá, {user?.firstName || 'responsável'}</Text>
@@ -147,6 +172,7 @@ function ParentSession() {
                 <Text style={{ color: colors.primary }}>Conversa ›</Text>
               </Pressable>
               <Pressable accessibilityRole="button" onPress={() => setViewingLocation(child)} style={styles.locationLink}><Text style={{ color: colors.mutedForeground }}>Localização</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => setMirrorChild(child)} style={styles.locationLink}><Text style={{ color: colors.primary }}>Espelho</Text></Pressable>
             </View>
           ))}
           {children.map((child) => <Pressable key={`reconnect-${child.id}`} disabled={busy} onPress={() => void issueReconnect(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Conectar outro aparelho de {child.name}</Text></Pressable>)}
@@ -169,6 +195,43 @@ function ParentSession() {
         <PairingForm colors={colors} busy={busy} error={error} onSubmit={issuePairing} />
       ) : null}
       <Pressable onPress={() => void signOut()} style={styles.linkButton}><Text style={{ color: colors.primary }}>Sair da conta</Text></Pressable>
+    </ScrollView>
+    <NativeCallOverlay call={call} />
+    </>
+  );
+}
+
+function MirroredContacts({ child, loadContacts, onSelect, onBack }: {
+  child: ChildProfile;
+  loadContacts: (childId: string) => Promise<MirroredContact[]>;
+  onSelect: (contact: MirroredContact) => void;
+  onBack: () => void;
+}) {
+  const colors = useColors();
+  const [contacts, setContacts] = useState<MirroredContact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void loadContacts(child.id).then((result) => {
+      if (active) setContacts(result.filter((contact) => contact.contactUserId));
+    }).catch((cause) => {
+      if (active) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar os contatos.');
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [child.id, loadContacts]);
+
+  return (
+    <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]}>
+      <Pressable accessibilityRole="button" onPress={onBack}><Text style={{ color: colors.primary }}>‹ Voltar</Text></Pressable>
+      <Text style={[styles.title, { color: colors.foreground }]}>Espelho de {child.name}</Text>
+      <Text style={[styles.body, { color: colors.mutedForeground }]}>Conversas da criança com contatos aprovados. Somente leitura; o chat privado da família não aparece aqui.</Text>
+      {loading ? <ActivityIndicator color={colors.primary} /> : error ? <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text> : contacts.length === 0 ? <Text style={[styles.body, { color: colors.mutedForeground }]}>Ainda não há contatos aprovados com conta conectada.</Text> : contacts.map((contact) => (
+        <Pressable key={contact.id} accessibilityRole="button" onPress={() => onSelect(contact)} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTitle, { color: colors.foreground }]}>{contact.contactName}</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>Abrir conversa espelhada ›</Text>
+        </Pressable>
+      ))}
     </ScrollView>
   );
 }

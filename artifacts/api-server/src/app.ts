@@ -46,6 +46,8 @@ app.use(cors({ credentials: true, origin: true, exposedHeaders: ["Retry-After"] 
 // Configuração inválida no startup continua impedindo a inicialização.
 app.use("/api", healthRouter);
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
+// Webhooks Stripe precisam do corpo bruto para validar a assinatura HMAC.
+app.use("/api/billing/webhook", express.raw({ type: "application/json", limit: "1mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

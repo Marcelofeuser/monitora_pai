@@ -69,7 +69,10 @@ export function GuardianJoin() {
       setStatus('done');
     } catch (err) {
       setStatus('error');
-      setErrorMessage(err instanceof Error ? err.message : 'Erro ao confirmar convite.');
+      const message = err instanceof Error ? err.message : 'Erro ao confirmar convite.';
+      setErrorMessage(message.includes('guardians_limit_reached')
+        ? 'Este plano já atingiu o limite de responsáveis. O titular da assinatura pode revisar o plano para ampliar o espaço da família.'
+        : message);
     }
   }
 

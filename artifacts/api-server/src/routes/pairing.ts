@@ -1,16 +1,17 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
 import { randomBytes, randomUUID, createHash, randomInt } from "crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import {
   db,
   pairingTokensTable,
   usersTable,
   childDeviceTokensTable,
   childGuardiansTable,
+  subscriptionsTable,
 } from "@workspace/db";
 import { ensureParentUser } from "../lib/parentUser";
-import { isGuardianOfChild } from "../lib/guardians";
+import { getGuardianChildIds, isGuardianOfChild } from "../lib/guardians";
 import { z } from "zod/v4";
 import { allowPairingAttempt } from "../lib/pairingRateLimit";
 import { disconnectDeviceSockets } from "../signaling/revocation";
@@ -63,6 +64,20 @@ router.post("/pairing", async (req, res) => {
   // lib/parentUser.ts).
   const parentUser = await ensureParentUser(auth.userId);
   const parentId = parentUser.id;
+  const [subscription] = await db.select({ childrenLimit: subscriptionsTable.childrenLimit, status: subscriptionsTable.status, plan: subscriptionsTable.plan })
+    .from(subscriptionsTable).where(eq(subscriptionsTable.parentUserId, parentId)).limit(1);
+  if (subscription?.plan === "paid" && subscription.status === "active") {
+    const children = await getGuardianChildIds(parentId);
+    const pendingPairings = await db.select({ id: pairingTokensTable.id }).from(pairingTokensTable).where(and(
+      eq(pairingTokensTable.parentId, parentId),
+      isNull(pairingTokensTable.usedAt),
+      isNull(pairingTokensTable.reconnectChildId),
+      gt(pairingTokensTable.expiresAt, new Date()),
+    ));
+    if (children.length + pendingPairings.length >= subscription.childrenLimit) {
+      return res.status(403).json({ error: "children_limit_reached", childrenLimit: subscription.childrenLimit });
+    }
+  }
 
   const token = generateToken();
   const pairingCode = generatePairingCode();
