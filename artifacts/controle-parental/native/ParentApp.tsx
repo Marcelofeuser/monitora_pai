@@ -12,7 +12,7 @@ import { useNativeCall } from './useNativeCall';
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const childDownloadUrl = process.env.EXPO_PUBLIC_CHILD_DOWNLOAD_URL?.trim()
-  || 'https://responsavel.amparakids.com/baixar/crianca';
+  || 'https://baixar.amparakids.com/crianca';
 
 export function ParentApp() {
   const colors = useColors();

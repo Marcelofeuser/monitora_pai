@@ -38,7 +38,7 @@ O repositório `Marcelofeuser/monitora_pai` é um monorepo pnpm. O código nativ
 | `api-server` | API HTTP, Clerk, WebSocket/sinalização e integração com serviços externos | Domínio Railway de produção; deploy `SUCCESS` no commit `6f0573b`; `/api/healthz` HTTP 200 |
 | `pwa` | Interface web para Responsável e Criança | `responsavel.amparakids.com` e `crianca.amparakids.com`; deploy `SUCCESS` no commit `6f0573b` |
 | `site-vendas` | Site institucional e proxy para o PWA em `/superadmin` | `amparakids.com`; deploy `SUCCESS` no commit `6f0573b` |
-| `landing page apps` | Página de download e escolha de loja por plataforma | `baixar.amparakids.com`; deploy `SUCCESS` no commit `6f0573b` |
+| `landing page apps` | Download: QR abre app Criança por padrão; rota `/responsavel` abre o app de responsáveis; detecção de iOS/Android encaminha à loja configurada | `baixar.amparakids.com`; correção do APK antigo está no PR #10 |
 | `postgres` | Banco PostgreSQL persistente | Em produção, volume `postgres-data`; serviço `SUCCESS` |
 | `media-storage` | Arquivos enviados, montados no serviço da API | Volume Railway associado à API |
 
@@ -100,7 +100,7 @@ O serviço de vendas encaminha `/superadmin`, autenticação e assets para a ori
 | Responsáveis | Login Clerk, gestão da família, pareamento e conversa | `com.amparakids.responsavel` |
 | Criança | Entrada pelo código familiar, chat e compartilhamento explícito de localização | `com.amparakids.crianca` |
 
-O checklist nativo do repositório documenta APKs debug e builds iOS de simulador, além do código de chamada WebRTC. Os APKs debug estão no repo local; não encontrei `.aab`, `.ipa` nem chaves de assinatura. Isso não equivale a builds assinados/distribuíveis nem a validação em aparelhos reais. O documento `artifacts/controle-parental/NATIVE-RELEASE-CHECKLIST.md` é a referência de publicação e ainda lista trabalho pendente.
+O checklist nativo do repositório documenta APKs debug e builds iOS de simulador, além do código de chamada WebRTC. O APK TWA antigo foi removido da landing page; a página espera URLs oficiais das lojas e não distribui APK avulso. Não encontrei `.aab`, `.ipa` nem chaves de assinatura. Isso não equivale a builds assinados/distribuíveis nem a validação em aparelhos reais. O documento `artifacts/controle-parental/NATIVE-RELEASE-CHECKLIST.md` é a referência de publicação e ainda lista trabalho pendente.
 
 ## 7. SuperAdmin, vouchers e Stripe
 
@@ -136,7 +136,7 @@ Stripe Checkout usa `kids_solo`, `kids_duo` e `kids_family`, com preço mensal, 
 2. Criar e configurar a chave, webhook e preços Stripe live antes de habilitar cobrança real.
 3. Compilar APKs release assinados e builds iOS para dispositivo/App Store; preencher metadados, privacidade e classificação etária.
 4. Validar login, pareamento, chat, chamadas, notificações e revogação em aparelhos físicos Android e iPhone. Chamadas com o app em segundo plano/fechado e o restante da paridade nativa constam como pendentes no checklist nativo.
-5. Confirmar situação do D-U-N-S/conta Google Play, equipe/certificados Apple e URLs oficiais das lojas na página de download.
+5. Confirmar situação do D-U-N-S/conta Google Play, equipe/certificados Apple e inserir as quatro URLs oficiais das lojas no serviço `landing page apps` (`CHILD_ANDROID_STORE_URL`, `CHILD_IOS_STORE_URL`, `PARENT_ANDROID_STORE_URL`, `PARENT_IOS_STORE_URL`).
 
 ### Fora desta versão
 

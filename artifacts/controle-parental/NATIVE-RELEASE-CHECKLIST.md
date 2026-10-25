@@ -11,7 +11,7 @@
 - [x] Responsável consulta o espelho de conversas da criança com contatos aprovados, em modo somente leitura; o chat privado familiar fica fora do espelho.
 - [x] Saída da Criança revoga no servidor o token do aparelho atual.
 - [x] Criança pode compartilhar a localização atual sob demanda, após conceder permissão em primeiro plano; o responsável vê horário/precisão e abre o ponto no mapa.
-- [x] Página `/baixar/crianca` detecta iOS/Android e encaminha para a loja quando os links estiverem configurados.
+- [x] Landing page `baixar.amparakids.com` encaminha por sistema operacional quando as lojas estiverem configuradas; o QR nativo usa a rota da Criança por padrão. A correção do APK antigo está no PR #10.
 - [x] Verificados: TypeScript do workspace completo (incluindo chamadas nativas, API e PWA).
 - [x] APK de debug Android do Responsável gerado e assinatura validada (`com.amparakids.responsavel`).
 - [x] APK de debug Android da Criança gerado e assinatura validada (`com.amparakids.crianca`).
@@ -30,7 +30,7 @@
 - [ ] Criar builds assinados com as contas de publicação Apple e Google.
 - [ ] Instalar e testar os APKs Android em aparelhos reais; não havia aparelho/emulador conectado neste Mac.
 - [ ] Preencher as fichas das lojas, política de privacidade, termos, classificação etária e declarações de dados/permissões.
-- [ ] Publicar os dois apps e inserir as URLs oficiais das lojas em `VITE_CHILD_IOS_STORE_URL` e `VITE_CHILD_ANDROID_STORE_URL`.
+- [ ] Publicar os quatro apps e configurar no serviço `landing page apps` as URLs `CHILD_ANDROID_STORE_URL`, `CHILD_IOS_STORE_URL`, `PARENT_ANDROID_STORE_URL` e `PARENT_IOS_STORE_URL`.
 
 ## Bloqueios externos conhecidos
 
