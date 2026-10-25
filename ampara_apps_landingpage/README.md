@@ -1,20 +1,26 @@
-# Página de download dos apps Ampara
+# Portal de download dos apps Ampara Kids
 
-O domínio `baixar.amparakids.com` é a entrada de QR do app da criança. Em celulares, o servidor identifica Android ou iOS e redireciona para a loja correspondente quando a URL estiver configurada. `/responsavel` abre o fluxo do app dos responsáveis.
+O domínio `baixar.amparakids.com` identifica Android ou iOS e encaminha para o
+download do app selecionado. `/crianca` e `/responsavel` identificam a variante;
+`/baixar/crianca` e `/baixar/responsavel` são aliases. O QR de download é
+separado do código de pareamento de 8 dígitos.
 
-Configure estas variáveis no serviço Railway `landing page apps`:
+## Variáveis do Railway (`landing page apps`)
 
-| Variável | Destino esperado |
+| Variável | Valor |
 | --- | --- |
-| `CHILD_ANDROID_STORE_URL` | Página do Ampara Criança no Google Play (`https://play.google.com/...`) |
-| `CHILD_IOS_STORE_URL` | Página do Ampara Criança na App Store ou convite TestFlight |
-| `PARENT_ANDROID_STORE_URL` | Página do Ampara Responsáveis no Google Play (`https://play.google.com/...`) |
-| `PARENT_IOS_STORE_URL` | Página do Ampara Responsáveis na App Store ou convite TestFlight |
+| `CHILD_ANDROID_APK_URL` | URL HTTPS do APK assinado de Ampara Criança |
+| `PARENT_ANDROID_APK_URL` | URL HTTPS do APK assinado de Ampara Responsáveis |
+| `CHILD_IOS_DISTRIBUTION_URL` | URL HTTPS de instalação fornecida por marketplace alternativo autorizado pela Apple, quando disponível |
+| `PARENT_IOS_DISTRIBUTION_URL` | URL HTTPS de instalação fornecida por marketplace alternativo autorizado pela Apple, quando disponível |
 
-Enquanto a URL da loja do aparelho estiver ausente, a página informa que o app ainda não está publicado. URLs aceitas precisam usar HTTPS e o domínio oficial da loja. A aplicação não hospeda APKs.
+As URLs são opcionais. O servidor só aceita HTTPS. Se o APK Android não estiver
+configurado, a página explica que o download ainda não foi liberado. Para iOS,
+não configure um link direto para `.app` de simulador ou `.ipa`: no Brasil, o
+download pelo site depende de um marketplace alternativo autorizado pela Apple.
 
-## Rotas
+## Instalação
 
-- `/` e `/crianca`: download do app da criança (rota padrão para QR).
-- `/responsavel`: download do app dos responsáveis.
-- `/baixar/crianca` e `/baixar/responsavel`: aliases explícitos.
+No Android, o usuário baixa o APK assinado e autoriza a instalação para a origem
+usada no aparelho. No iPhone, o endereço só deve ser ativado quando vier de uma
+via autorizada de distribuição iOS compatível com o Brasil.

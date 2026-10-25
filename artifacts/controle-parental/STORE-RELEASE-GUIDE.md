@@ -1,35 +1,68 @@
-# Preparar os apps para as lojas
+# Distribuir os apps pelo site do Ampara Kids
 
-## Android: chave de upload e AAB
+Este guia considera a decisão atual: disponibilizar os apps Android e iOS pelo
+site do Ampara Kids, sem publicar nas lojas tradicionais.
 
-Antes de começar, instale um JDK 17 ou compatível com o Gradle 8.14.3 e confirme que `java -version` funciona no Terminal.
+## Android: APK assinado no site
 
-1. No Terminal, entre em `artifacts/controle-parental`.
-2. Crie a chave localmente: `bash scripts/create-android-upload-key.sh`.
-3. Guarde o arquivo `~/.amparakids/credentials/android-upload.jks` e as senhas em um cofre seguro. Faça uma cópia de backup fora deste Mac. **Não envie a chave nem as senhas por chat, e-mail ou GitHub.**
-4. No Google Play Console, use `android-upload-certificate.pem` quando o cadastro do app pedir o certificado da chave de upload.
-5. Gere cada AAB com o prompt protegido (não salva as senhas):
+O Android permite distribuir um APK de lançamento assinado pelo próprio site.
+Ao instalar, cada pessoa precisa autorizar a instalação de apps daquela origem
+nas configurações do Android.
+
+1. Instale um JDK compatível com o Gradle do projeto e confirme `java -version`.
+2. Se ainda não houver uma chave de assinatura preservada, crie-a localmente:
+   `bash scripts/create-android-upload-key.sh`.
+3. Guarde `~/.amparakids/credentials/android-upload.jks` e as senhas em um
+   cofre seguro e faça cópia de backup. Não envie esses dados por chat, e-mail
+   ou GitHub. A mesma chave deve assinar todas as atualizações dos dois apps.
+4. Gere os APKs de lançamento:
 
    ```sh
    bash scripts/build-android-release.sh responsavel
    bash scripts/build-android-release.sh crianca
    ```
 
-   Cada chamada pede as senhas sem mostrá-las e grava uma cópia com nome próprio em `dist/releases/ampara-responsavel.aab` ou `dist/releases/ampara-crianca.aab`.
+   O script solicita as senhas sem mostrá-las e grava
+   `dist/releases/ampara-responsavel.apk` e
+   `dist/releases/ampara-crianca.apk`.
+5. Teste os APKs assinados em aparelhos Android reais antes de disponibilizá-los.
+6. Hospede cada APK em HTTPS sob domínio controlado pelo Ampara Kids. Configure
+   no serviço Railway `landing page apps` as variáveis
+   `PARENT_ANDROID_APK_URL` e `CHILD_ANDROID_APK_URL` com os links públicos.
+7. O portal detecta o sistema do aparelho e encaminha para o APK correspondente.
+   O Android exibirá a confirmação e poderá pedir autorização para instalar
+   apps baixados pelo navegador.
 
-O projeto não gera `release` assinado com a chave debug. Se a chave de upload já existir no Play Console, use essa mesma chave; criar outra pode impedir atualizações sem uma redefinição no Play Console.
+Não gere outra chave caso o arquivo atual já exista. Sem a chave original, uma
+atualização instalada não poderá ser assinada como continuação da mesma linha.
 
-## iOS: assinatura e TestFlight
+## iPhone e iPad no Brasil
 
-1. Abra o Xcode e entre na conta Apple Developer em **Xcode → Settings → Accounts**. Selecione a equipe correta.
-2. Gere ou confirme um certificado Apple Distribution e perfis para `com.amparakids.responsavel` e `com.amparakids.crianca`.
-3. Ative a assinatura automática no Xcode para cada bundle ID e confirme os recursos necessários, incluindo notificações push quando a implementação nativa estiver pronta.
-4. Arquive cada variante para um dispositivo iOS e envie pelo Organizer ao App Store Connect/TestFlight.
-5. Preencha a ficha de cada app, privacidade, classificação etária, termos e política de privacidade antes de solicitar revisão.
+Um arquivo `.ipa` hospedado como um link comum não é um método de instalação
+para consumidores no Brasil. Desde iOS 26.5, a instalação de apps do site no
+Brasil acontece por meio de um **marketplace alternativo autorizado pela
+Apple**. O marketplace é um app próprio com servidor e site; a Apple exige
+autorização, conta Apple Developer de organização e critérios adicionais de
+elegibilidade, além de responsabilidades contínuas de segurança e suporte.
 
-## Ainda dependente de contas/publicação
+Portanto, a conta Apple Developer pessoal informada até aqui não basta para
+publicar o app diretamente pelo site. O botão de iPhone permanecerá informativo
+até que exista uma via de distribuição aceita pela Apple. Não publique um link
+para `.app` de simulador ou `.ipa` sem distribuição autorizada.
 
-- A conta Google Play e a verificação D-U-N-S informadas anteriormente precisam estar liberadas para criar/publicar apps.
-- O time/certificado Apple precisa aparecer no Xcode. Neste Mac, a verificação anterior encontrou zero certificados e zero perfis de distribuição.
-- Após aprovação/publicação, configure no Railway `landing page apps` as quatro URLs `CHILD_ANDROID_STORE_URL`, `CHILD_IOS_STORE_URL`, `PARENT_ANDROID_STORE_URL` e `PARENT_IOS_STORE_URL`.
-- O lançamento completo ainda exige concluir os itens do [checklist nativo](NATIVE-RELEASE-CHECKLIST.md), incluindo chamadas em segundo plano, push e testes em aparelhos reais.
+Para testes limitados em aparelhos, use um canal de teste Apple apropriado.
+Isso é diferente do lançamento público solicitado e não deve ser apresentado
+como download direto pelo site.
+
+## Estado dos artefatos
+
+- Os APKs existentes em `dist/` são de depuração e não servem como versão de
+  distribuição.
+- As pastas `.app` existentes são builds de simulador; não instalam em iPhone.
+- O script Android agora produz APK assinado para hospedagem no site.
+- A distribuição pública para iOS continua bloqueada até obter autorização e
+  infraestrutura de marketplace alternativo da Apple.
+
+Referências oficiais: [distribuição pelo site no Android](https://developer.android.com/studio/publish),
+[requisitos de marketplace alternativo no Brasil](https://developer.apple.com/support/alternative-app-marketplace-br/) e
+[opções de distribuição no Brasil](https://developer.apple.com/br/support/app-distribution-in-brazil/).

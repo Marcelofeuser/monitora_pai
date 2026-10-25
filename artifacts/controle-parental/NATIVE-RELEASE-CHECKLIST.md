@@ -14,14 +14,14 @@
 - [x] App do responsável consulta tempo de uso do Ampara, define limite diário e pausa/libera o acesso; app da criança atualiza o uso em primeiro plano e respeita o bloqueio.
 - [x] Saída da Criança revoga no servidor o token do aparelho atual.
 - [x] Criança pode compartilhar a localização atual sob demanda, após conceder permissão em primeiro plano; o responsável vê horário/precisão e abre o ponto no mapa.
-- [x] Landing page `baixar.amparakids.com` encaminha por sistema operacional quando as lojas estiverem configuradas; o QR nativo usa a rota da Criança por padrão. A correção do APK antigo está no PR #10.
+- [x] Landing page `baixar.amparakids.com` identifica o sistema e tem rotas separadas para Criança e Responsáveis; QR de download da Criança separado do pareamento.
 - [x] Verificados: TypeScript do workspace completo (incluindo chamadas nativas, API e PWA).
 - [x] APK de debug Android do Responsável gerado e assinatura validada (`com.amparakids.responsavel`).
 - [x] APK de debug Android da Criança gerado e assinatura validada (`com.amparakids.crianca`).
 - [x] APKs Android recompilados com os grupos, gravação de voz e gestão de contatos atuais: `dist/ampara-responsavel-debug.apk` e `dist/ampara-crianca-debug.apk`.
 - [x] Compilação iOS ARM para simulador concluída para ambas as variantes, com mínimo iOS 15.1 e sem assinatura de distribuição: `dist/Ampara-Responsavel-Audio-iOS151.app` e `dist/Ampara-Crianca-Audio-iOS151.app`.
 
-## Antes de enviar para as lojas
+## Antes de distribuir pelo site
 
 - [x] Implementar chamadas de voz/vídeo entre Responsável e Criança enquanto ambos os apps estão abertos.
 - [ ] Configurar chamadas recebidas com o app em segundo plano/fechado usando push nativo e validar em aparelhos reais.
@@ -33,20 +33,22 @@
 - [ ] Validar o contador e o bloqueio de tempo de uso em aparelhos reais; a contagem nativa ocorre enquanto o app está em primeiro plano e não impõe limites ao sistema operacional inteiro.
 - [x] Recompilar APKs Android de debug com os grupos e a gestão nativa de contatos; ambos foram compilados e tiveram assinatura e identificador verificados.
 - [ ] Configurar os projetos nativos no Clerk com os dois bundle/application IDs.
-- [ ] Criar builds assinados com as contas de publicação Apple e Google.
-- [ ] Criar/confirmar uma chave de upload Android e usá-la com `scripts/build-android-release.sh`. O script solicita os quatro valores localmente sem gravá-los no Railway ou GitHub. O Gradle bloqueia builds `release` sem assinatura de lançamento; a chave de depuração não é aceita para publicação.
+- [ ] Confirmar e preservar a chave Android de assinatura de lançamento. O script solicita os quatro valores localmente e o Gradle bloqueia builds `release` sem assinatura.
 - [ ] Instalar e testar os APKs Android em aparelhos reais; não havia aparelho/emulador conectado neste Mac.
-- [ ] Preencher as fichas das lojas, política de privacidade, termos, classificação etária e declarações de dados/permissões.
-- [ ] Publicar os quatro apps e configurar no serviço `landing page apps` as URLs `CHILD_ANDROID_STORE_URL`, `CHILD_IOS_STORE_URL`, `PARENT_ANDROID_STORE_URL` e `PARENT_IOS_STORE_URL`.
+- [ ] Gerar os APKs assinados de lançamento com `scripts/build-android-release.sh responsavel` e `scripts/build-android-release.sh crianca`.
+- [ ] Hospedar os APKs finais em HTTPS no domínio do Ampara Kids e configurar `PARENT_ANDROID_APK_URL` e `CHILD_ANDROID_APK_URL` no serviço Railway `landing page apps`.
+- [ ] Testar o fluxo de download, autorização de instalação e atualização dos dois APKs em aparelhos Android reais.
+- [ ] Definir com a Apple uma rota para iOS no Brasil. A instalação pública pelo site depende de marketplace alternativo autorizado pela Apple; conta pessoal e link direto para `.ipa` não bastam.
+- [ ] Se a distribuição por marketplace Apple for aprovada, construir o marketplace, cumprir requisitos de segurança/suporte, autenticar os apps e configurar os destinos iOS no portal.
 
 ## Bloqueios externos conhecidos
 
-- O acesso/publicação Google Play e a situação do D-U-N-S ainda dependem da verificação da empresa e da conta do responsável.
-- Marcelo informou que tem uma conta pessoal Apple Developer. Os builds iOS atuais são de simulador e ainda não foram assinados; é preciso configurar/confirmar o acesso à equipe, certificados e perfis antes de distribuir ou publicar.
-- Instruções e scripts para criar a chave Android com prompt seguro e gerar AABs separados estão em `STORE-RELEASE-GUIDE.md` e `scripts/`.
-- Os APKs entregues são de debug, assinados com a chave de depuração. Servem para instalação/teste, não para publicação no Google Play.
-- As compilações iOS de simulador validam que as duas variantes compilam, mas não geram arquivos assinados para iPhone/App Store nem substituem o teste em aparelho real.
+- A criação e a preservação da chave Android de assinatura dependem de uma ação local do responsável; não há confirmação de que exista keystore pronto.
+- Os APKs atuais são de debug, assinados com a chave de depuração, e não devem ser hospedados como lançamento.
+- As compilações iOS atuais são de simulador e não instalam em iPhones.
+- Para distribuição pública de iOS pelo site no Brasil, a Apple exige operação de marketplace alternativo autorizada. O requisito inclui conta Apple Developer de organização e critérios de elegibilidade (histórico de dois anos e mais de um milhão de instalações anuais, ou carta de crédito standby de US$ 1 milhão), além de obrigações operacionais.
+- A disponibilidade de APK pelo site não exige publicação no Google Play, mas Android solicita que o usuário autorize instalação da origem.
 - O WebRTC atual toca e conecta enquanto os dois apps estão abertos; não implementa ainda a experiência de chamada recebida com o app suspenso/fechado.
 - A localização atual é compartilhada somente quando a Criança toca no botão e aceita a permissão enquanto usa o app; não existe rastreamento em segundo plano na PWA nem nos apps nativos.
 
-Não considerar os apps prontos para lançamento até concluir todos os itens acima e fazer a validação em aparelhos reais.
+Não considerar os apps prontos para lançamento até concluir todos os itens aplicáveis, validar em aparelhos reais e liberar uma rota compatível para iOS.

@@ -218,7 +218,7 @@ function ParentSession() {
           <Text style={[styles.body, { color: colors.mutedForeground }]}>Digite este código no app Ampara Criança. Ele vale até {new Date(pairing.expiresAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} e só pode ser usado uma vez.</Text>
           <View style={[styles.downloadBox, { borderTopColor: colors.border }]}>
             <Text style={[styles.cardTitle, { color: colors.foreground }]}>1. Baixe o app da criança</Text>
-            {childDownloadUrl ? <><View style={styles.qr}><QRCode value={childDownloadUrl} size={176} /></View><Text style={[styles.body, { color: colors.mutedForeground }]}>Este QR abre a página que encaminha para a loja do aparelho.</Text></> : <Text style={[styles.body, { color: colors.mutedForeground }]}>O QR de download será exibido depois que a página das lojas for configurada.</Text>}
+            {childDownloadUrl ? <><View style={styles.qr}><QRCode value={childDownloadUrl} size={176} /></View><Text style={[styles.body, { color: colors.mutedForeground }]}>Este QR abre a página de download do Ampara Criança para o aparelho.</Text></> : <Text style={[styles.body, { color: colors.mutedForeground }]}>O QR de download será exibido depois que a página do Ampara estiver configurada.</Text>}
             <Text style={[styles.cardTitle, { color: colors.foreground, marginTop: 8 }]}>2. Digite o código no app</Text>
           </View>
           <Pressable onPress={() => { setPairing(null); setAddingChild(false); void refreshChildren(); }} style={[styles.secondaryButton, { borderColor: colors.border }]}><Text style={{ color: colors.foreground }}>Voltar para a família</Text></Pressable>

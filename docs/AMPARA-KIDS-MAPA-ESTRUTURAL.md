@@ -100,7 +100,7 @@ O serviço de vendas encaminha `/superadmin`, autenticação e assets para a ori
 | Responsáveis | Login Clerk, gestão da família, pareamento e conversa | `com.amparakids.responsavel` |
 | Criança | Entrada pelo código familiar, chat, grupos e compartilhamento explícito de localização | `com.amparakids.crianca` |
 
-O checklist nativo do repositório documenta APKs debug e builds iOS para simulador, além do código de chamada WebRTC. Os artefatos locais atuais são `dist/ampara-responsavel-debug.apk`, `dist/ampara-crianca-debug.apk`, `dist/Ampara-Responsavel-Audio-iOS151.app` e `dist/Ampara-Crianca-Audio-iOS151.app`. Os APKs são de debug; as pastas `.app` são para simulador. Não há `.aab`, `.ipa` nem assinatura de distribuição. O Gradle recusa `release` sem keystore de upload e credenciais próprias, em vez de assinar release com a chave debug. Há scripts e instruções em `artifacts/controle-parental/STORE-RELEASE-GUIDE.md`. Esses artefatos não equivalem a builds assinados/distribuíveis nem a validação em aparelhos reais.
+O checklist nativo do repositório documenta APKs debug e builds iOS para simulador, além do código de chamada WebRTC. Os artefatos locais atuais são `dist/ampara-responsavel-debug.apk`, `dist/ampara-crianca-debug.apk`, `dist/Ampara-Responsavel-Audio-iOS151.app` e `dist/Ampara-Crianca-Audio-iOS151.app`. Os APKs são de debug; as pastas `.app` são para simulador. Não há APK de lançamento assinado, `.ipa` ou assinatura iOS de distribuição. O Gradle recusa `release` sem keystore de assinatura e credenciais próprias, em vez de usar a chave debug. O script agora prepara APKs de lançamento para hospedagem no site. Há scripts e instruções em `artifacts/controle-parental/STORE-RELEASE-GUIDE.md`. Esses artefatos não equivalem a builds assinados/distribuíveis nem a validação em aparelhos reais.
 
 ## 7. SuperAdmin, vouchers e Stripe
 
@@ -133,9 +133,9 @@ Stripe Checkout usa `kids_solo`, `kids_duo` e `kids_family`, com preço mensal, 
 
 1. Fazer login e testar o portal SuperAdmin autenticado; criar voucher/embaixador de teste e conferir acesso negado para outra conta. `/superadmin` e seus assets passam pelo domínio Ampara; o endpoint administrativo sem sessão devolve 401.
 2. Criar e configurar a chave, webhook e preços Stripe live antes de habilitar cobrança real.
-3. Compilar APKs release assinados e builds iOS para dispositivo/App Store; preencher metadados, privacidade e classificação etária.
+3. Compilar APKs release Android assinados e preparar hospedagem HTTPS no domínio Ampara Kids.
 4. Validar login, pareamento, chat, chamadas, notificações, compartilhamento de localização e revogação em aparelhos físicos Android e iPhone. Chamadas com o app em segundo plano/fechado e o restante da paridade nativa constam como pendentes no checklist nativo.
-5. Confirmar situação do D-U-N-S/conta Google Play, equipe/certificados Apple e inserir as quatro URLs oficiais das lojas no serviço `landing page apps` (`CHILD_ANDROID_STORE_URL`, `CHILD_IOS_STORE_URL`, `PARENT_ANDROID_STORE_URL`, `PARENT_IOS_STORE_URL`).
+5. Configurar no Railway `landing page apps` as URLs HTTPS `CHILD_ANDROID_APK_URL` e `PARENT_ANDROID_APK_URL` quando os APKs estiverem hospedados. A distribuição pública iOS pelo site no Brasil requer marketplace alternativo autorizado pela Apple; isso depende de conta Apple Developer de organização e critérios próprios de elegibilidade.
 6. Decidir se o produto deve oferecer localização em segundo plano. O comportamento atual, coerente com a PWA, é compartilhamento pontual iniciado pela Criança; não há coleta passiva.
 
 ### Fora desta versão

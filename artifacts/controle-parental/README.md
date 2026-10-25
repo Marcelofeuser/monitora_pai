@@ -37,19 +37,20 @@ AMPARA_APP=crianca pnpm exec expo run:ios
 Os arquivos `dist/ampara-responsavel-debug.apk` e
 `dist/ampara-crianca-debug.apk` foram gerados e tiveram a assinatura e o
 identificador do pacote conferidos. São APKs de depuração para instalação e
-teste; a Google Play exige um build de lançamento assinado com a chave de
-upload da conta. As pastas `.app` em `dist/` são builds de simulador iOS,
+teste; a distribuição pelo site exige um build de lançamento assinado. As
+pastas `.app` em `dist/` são builds de simulador iOS,
 sem assinatura de distribuição, e não podem ser instaladas em iPhones.
 
 ## Assinatura de lançamento Android
 
-O build `release` não usa a chave de depuração. Para gerar um APK/AAB de
+O build `release` não usa a chave de depuração. Para gerar um APK de
 lançamento, configure no ambiente de build `ANDROID_KEYSTORE_FILE`,
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` e `ANDROID_KEY_PASSWORD`.
 O projeto falha explicitamente se alguém tentar gerar um artefato `release`
 sem as quatro configurações. Guarde o arquivo keystore e as senhas em local
-seguro e fora do repositório; a chave de upload deve ser preservada para as
-próximas atualizações do app.
+seguro e fora do repositório; a chave de assinatura deve ser preservada para as
+próximas atualizações. O arquivo mantém o nome legado `android-upload.jks` para
+reaproveitar uma chave que já possa ter sido criada anteriormente.
 
 Antes de iniciar, copie `.env.example` para `.env` e configure a URL pública
 do `api-server` e a publishable key do Clerk do ambiente de staging. A chave
@@ -62,7 +63,8 @@ identificador Android/iOS e perfil fixo. Os dois apps podem ser instalados no
 mesmo aparelho porque têm identificadores diferentes.
 
 Consulte [`STORE-RELEASE-GUIDE.md`](STORE-RELEASE-GUIDE.md) para criar a chave
-de upload Android localmente, gerar AABs e preparar a assinatura/publicação iOS.
+de assinatura Android localmente, gerar APKs para o site e entender o estado da
+distribuição pública iOS pelo site no Brasil.
 
 ## Fluxos implementados
 
@@ -89,7 +91,8 @@ de upload Android localmente, gerar AABs e preparar a assinatura/publicação iO
 
 Chamadas recebidas com o app fechado ou em segundo plano dependem de push
 nativo, integração de chamada do sistema e validação em aparelhos reais.
-Notificações nativas, funcionamento em aparelhos físicos, assinaturas das
-lojas e publicação continuam pendentes. O QR de download depende dos links
-oficiais das lojas, ainda não publicados. O checklist e o guia para publicação
-estão em `NATIVE-RELEASE-CHECKLIST.md` e `STORE-RELEASE-GUIDE.md`.
+Notificações nativas e funcionamento em aparelhos físicos continuam pendentes.
+O QR depende dos links HTTPS dos APKs Android no site; a distribuição pública
+iOS pelo site no Brasil depende de marketplace alternativo autorizado pela
+Apple. O checklist e o guia estão em `NATIVE-RELEASE-CHECKLIST.md` e
+`STORE-RELEASE-GUIDE.md`.

@@ -5,25 +5,22 @@ const APPS = {
   crianca: {
     title: 'Ampara Criança',
     description: 'O app para a criança conversar com a família e usar o código de 8 dígitos gerado pelo responsável.',
-    android: process.env.CHILD_ANDROID_STORE_URL,
-    ios: process.env.CHILD_IOS_STORE_URL,
+    android: process.env.CHILD_ANDROID_APK_URL,
+    ios: process.env.CHILD_IOS_DISTRIBUTION_URL,
   },
   responsavel: {
     title: 'Ampara Responsáveis',
     description: 'O app para responsáveis gerenciarem os perfis da família e criarem o pareamento seguro da criança.',
-    android: process.env.PARENT_ANDROID_STORE_URL,
-    ios: process.env.PARENT_IOS_STORE_URL,
+    android: process.env.PARENT_ANDROID_APK_URL,
+    ios: process.env.PARENT_IOS_DISTRIBUTION_URL,
   },
 };
 
-function validStoreUrl(value, platform) {
+function validDownloadUrl(value) {
   if (!value) return null;
   try {
     const url = new URL(value);
-    const allowedHosts = platform === 'android'
-      ? ['play.google.com']
-      : ['apps.apple.com', 'testflight.apple.com'];
-    return url.protocol === 'https:' && allowedHosts.includes(url.hostname) ? url.toString() : null;
+    return url.protocol === 'https:' ? url.toString() : null;
   } catch {
     return null;
   }
@@ -37,17 +34,21 @@ function escapeHtml(value) {
 
 function page(appKey, available, detectedPlatform) {
   const app = APPS[appKey];
-  const stores = [
-    ['android', 'Google Play', available.android],
-    ['ios', 'App Store', available.ios],
-  ].filter(([platform, , storeUrl]) => storeUrl && (!detectedPlatform || platform === detectedPlatform));
+  const downloads = [
+    ['android', 'APK Android', available.android],
+    ['ios', 'Distribuição iOS', available.ios],
+  ].filter(([platform, , downloadUrl]) => downloadUrl && (!detectedPlatform || platform === detectedPlatform));
   const status = detectedPlatform && !available[detectedPlatform]
-    ? 'O app ainda não está publicado na loja deste aparelho.'
-    : stores.length
-      ? 'Abra esta página no celular para ir automaticamente à loja compatível.'
-      : 'Os apps ainda estão em preparação para publicação nas lojas.';
-  const storeLinks = stores.map(([platform, name, url]) =>
-    `<a class="store" href="${escapeHtml(url)}">Abrir ${name}${platform === 'android' ? ' (Android)' : ' (iPhone/iPad)'}</a>`,
+    ? detectedPlatform === 'ios'
+      ? 'A instalação pública de apps pelo site no Brasil exige um marketplace alternativo autorizado pela Apple. Essa distribuição ainda não está disponível.'
+      : 'O APK de lançamento deste app ainda não está disponível para download.'
+    : downloads.length
+      ? detectedPlatform === 'android'
+        ? 'Baixe o APK. O Android poderá pedir autorização para instalar apps baixados pelo navegador.'
+        : 'Continue para a instalação oferecida pelo marketplace autorizado.'
+      : 'Os links de download ainda estão sendo preparados.';
+  const downloadLinks = downloads.map(([platform, name, url]) =>
+    `<a class="store" href="${escapeHtml(url)}">${platform === 'android' ? 'Baixar' : 'Continuar para'} ${name}</a>`,
   ).join('');
   const switchLink = appKey === 'crianca'
     ? '<a class="secondary" href="/responsavel">Precisa do app de responsável?</a>'
@@ -79,7 +80,7 @@ function page(appKey, available, detectedPlatform) {
   <h1>${escapeHtml(app.title)}</h1>
   <p>${escapeHtml(app.description)}</p>
   <div class="status" role="status">${escapeHtml(status)}</div>
-  ${storeLinks}
+  ${downloadLinks}
   ${switchLink}
   <footer>Depois de instalar, abra o app e siga as instruções de pareamento.</footer>
 </main></body></html>`;
@@ -112,8 +113,8 @@ const server = http.createServer((req, res) => {
   }
 
   const available = {
-    android: validStoreUrl(APPS[appKey].android, 'android'),
-    ios: validStoreUrl(APPS[appKey].ios, 'ios'),
+    android: validDownloadUrl(APPS[appKey].android),
+    ios: validDownloadUrl(APPS[appKey].ios),
   };
   const platform = detectPlatform(req.headers['user-agent']);
   if (platform && available[platform]) {
