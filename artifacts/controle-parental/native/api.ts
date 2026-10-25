@@ -45,6 +45,8 @@ export type GroupConversation = {
   participantNames: Record<string, string>;
 };
 export type MirroredContact = { id: string; contactName: string; contactUserId: string | null; status: string };
+export type ParentContact = MirroredContact & { contactPhone?: string | null; relation?: string | null; isFavorite?: boolean };
+export type ContactInvite = { token: string; joinUrl: string; expiresAt: string; contactName: string };
 export type MirroredConversation = { messages: PrivateMessage[]; contactName: string; childName: string };
 export type ChildLocation = {
   latitude: number;
@@ -128,6 +130,43 @@ export async function fetchParentChildren(authToken: string): Promise<ChildProfi
 
 export async function fetchParentApprovedContacts(childId: string, authToken: string): Promise<MirroredContact[]> {
   const response = await fetch(`${apiUrl('/api/contacts')}?childId=${encodeURIComponent(childId)}&status=approved`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function fetchParentContacts(childId: string, authToken: string): Promise<ParentContact[]> {
+  const response = await fetch(`${apiUrl('/api/contacts')}?childId=${encodeURIComponent(childId)}`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function createParentContact(input: { childId: string; contactName: string; contactPhone?: string; relation?: string }, authToken: string): Promise<ParentContact> {
+  const response = await fetch(apiUrl('/api/contacts'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function setParentContactStatus(contactId: string, decision: 'approved' | 'denied' | 'revoked', authToken: string): Promise<ParentContact> {
+  const response = await fetch(apiUrl(`/api/contacts/${encodeURIComponent(contactId)}/decision`), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({ decision }),
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function createParentContactInvite(contactId: string, authToken: string): Promise<ContactInvite> {
+  const response = await fetch(apiUrl(`/api/contacts/${encodeURIComponent(contactId)}/invite`), {
+    method: 'POST',
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!response.ok) throw await readError(response);
