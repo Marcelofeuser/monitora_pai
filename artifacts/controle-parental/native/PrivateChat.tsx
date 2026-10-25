@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import type { PrivateMessage, PrivateMessageInput } from './api';
@@ -16,6 +17,16 @@ type Props = {
   readOnly?: boolean;
 };
 
+function AudioMessage({ uri, mine, colors }: { uri: string; mine: boolean; colors: ReturnType<typeof useColors> }) {
+  const player = useAudioPlayer(uri);
+  const status = useAudioPlayerStatus(player);
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={status.playing ? 'Pausar mensagem de áudio' : 'Reproduzir mensagem de áudio'} onPress={() => status.playing ? player.pause() : player.play()} style={styles.mediaLink}>
+      <Text style={{ color: mine ? colors.primaryForeground : colors.primary }}>{status.playing ? 'Ⅱ Pausar áudio' : '▶ Reproduzir áudio'}</Text>
+    </Pressable>
+  );
+}
+
 export function PrivateChat({ title, subtitle = 'Conversa privada da família', ownUserId, loadMessages, sendMessage, onBack, headerAction, readOnly = false }: Props) {
   const colors = useColors();
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
@@ -24,6 +35,14 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stickerPickerOpen, setStickerPickerOpen] = useState(false);
+  const recorder = useAudioRecorder({
+    ...RecordingPresets.LOW_QUALITY,
+    extension: '.m4a',
+    android: { ...RecordingPresets.LOW_QUALITY.android, extension: '.m4a', outputFormat: 'mpeg4', audioEncoder: 'aac' },
+  });
+  const recorderState = useAudioRecorderState(recorder);
+  const finishingRecording = useRef(false);
+  const wasRecording = useRef(false);
   const listRef = useRef<FlatList<PrivateMessage>>(null);
 
   const refresh = useCallback(async (showLoading = false) => {
@@ -88,6 +107,48 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
     void submit({ stickerEmoji });
   };
 
+  const finishRecording = async () => {
+    if (finishingRecording.current || !wasRecording.current) return;
+    finishingRecording.current = true;
+    wasRecording.current = false;
+    try {
+      await recorder.stop();
+      const uri = recorder.uri ?? recorder.getStatus().url;
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
+      if (!uri) throw new Error('Não foi possível finalizar a gravação.');
+      await submit({ file: { uri, name: `ampara-audio-${Date.now()}.m4a`, type: 'audio/mp4' } });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível enviar o áudio.');
+    } finally {
+      finishingRecording.current = false;
+    }
+  };
+
+  useEffect(() => {
+    if (recorderState.isRecording && recorderState.durationMillis >= 300_000) void finishRecording();
+  }, [recorderState.durationMillis, recorderState.isRecording]);
+
+  const toggleRecording = async () => {
+    if (recorderState.isRecording) {
+      await finishRecording();
+      return;
+    }
+    setError(null);
+    try {
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        setError('Permita o acesso ao microfone para gravar uma mensagem de voz.');
+        return;
+      }
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      wasRecording.current = true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível iniciar a gravação.');
+    }
+  };
+
   return (
     <KeyboardAvoidingView style={[styles.root, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -120,9 +181,10 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
                   <View style={[styles.bubble, { backgroundColor: mine ? colors.primary : colors.card, borderColor: colors.border }]}>
                     {!mine && item.senderName ? <Text style={[styles.senderName, { color: colors.mutedForeground }]}>{item.senderName}</Text> : null}
                     {item.type === 'photo' && mediaUrl ? <Image accessibilityLabel="Foto enviada na conversa" source={{ uri: mediaUrl }} resizeMode="cover" style={styles.photo} /> : null}
-                    {(item.type === 'video' || item.type === 'audio') && mediaUrl ? (
+                    {item.type === 'audio' && mediaUrl ? <AudioMessage uri={mediaUrl} mine={mine} colors={colors} /> : null}
+                    {item.type === 'video' && mediaUrl ? (
                       <Pressable accessibilityRole="button" onPress={() => void Linking.openURL(mediaUrl)} style={styles.mediaLink}>
-                        <Text style={{ color: mine ? colors.primaryForeground : colors.primary }}>{item.type === 'video' ? '▶ Abrir vídeo' : '▶ Reproduzir áudio'}</Text>
+                        <Text style={{ color: mine ? colors.primaryForeground : colors.primary }}>▶ Abrir vídeo</Text>
                       </Pressable>
                     ) : null}
                     {item.textContent ? <Text style={{ color: mine ? colors.primaryForeground : colors.foreground }}>{item.textContent}</Text> : null}
@@ -140,6 +202,10 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
         <Pressable accessibilityRole="button" accessibilityLabel="Anexar foto ou vídeo" disabled={sending} onPress={() => void pickMedia()} style={[styles.toolButton, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={{ color: colors.primary, fontSize: 19 }}>＋</Text>
         </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={recorderState.isRecording ? 'Parar e enviar gravação' : 'Gravar mensagem de voz'} disabled={sending} onPress={() => void toggleRecording()} style={[styles.toolButton, { backgroundColor: recorderState.isRecording ? colors.destructive : colors.card, borderColor: recorderState.isRecording ? colors.destructive : colors.border }]}>
+          <Text style={{ color: recorderState.isRecording ? colors.primaryForeground : colors.primary, fontSize: 17 }}>{recorderState.isRecording ? '■' : '🎙'}</Text>
+        </Pressable>
+        {recorderState.isRecording ? <Text accessibilityLiveRegion="polite" style={{ color: colors.destructive, fontSize: 11 }}>{Math.floor(recorderState.durationMillis / 1000)}s</Text> : null}
         <TextInput
           accessibilityLabel="Mensagem"
           value={draft}
