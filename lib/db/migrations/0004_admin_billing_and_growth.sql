@@ -1,13 +1,15 @@
 BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
 
 ALTER TABLE subscriptions
-  ADD COLUMN stripe_customer_id text,
-  ADD COLUMN stripe_subscription_id text;
+  ADD COLUMN IF NOT EXISTS stripe_customer_id text,
+  ADD COLUMN IF NOT EXISTS stripe_subscription_id text;
 
-CREATE UNIQUE INDEX subscriptions_stripe_subscription_unique
+CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_stripe_subscription_unique
   ON subscriptions (stripe_subscription_id);
 
-CREATE TABLE vouchers (
+CREATE TABLE IF NOT EXISTS vouchers (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   code text NOT NULL,
   discount_type text NOT NULL,
@@ -19,9 +21,9 @@ CREATE TABLE vouchers (
   created_by text NOT NULL REFERENCES users(id),
   created_at timestamp NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX vouchers_code_unique ON vouchers (code);
+CREATE UNIQUE INDEX IF NOT EXISTS vouchers_code_unique ON vouchers (code);
 
-CREATE TABLE ambassadors (
+CREATE TABLE IF NOT EXISTS ambassadors (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   email text NOT NULL,
@@ -32,9 +34,9 @@ CREATE TABLE ambassadors (
   active boolean NOT NULL DEFAULT true,
   created_at timestamp NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX ambassadors_referral_code_unique ON ambassadors (referral_code);
+CREATE UNIQUE INDEX IF NOT EXISTS ambassadors_referral_code_unique ON ambassadors (referral_code);
 
-CREATE TABLE ambassador_commissions (
+CREATE TABLE IF NOT EXISTS ambassador_commissions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   ambassador_id uuid NOT NULL REFERENCES ambassadors(id),
   parent_user_id text REFERENCES users(id) ON DELETE SET NULL,
@@ -43,7 +45,7 @@ CREATE TABLE ambassador_commissions (
   status text NOT NULL DEFAULT 'accrued',
   created_at timestamp NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX ambassador_commissions_invoice_unique
+CREATE UNIQUE INDEX IF NOT EXISTS ambassador_commissions_invoice_unique
   ON ambassador_commissions (stripe_invoice_id);
 
 COMMIT;
