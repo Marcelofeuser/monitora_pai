@@ -35,14 +35,14 @@ O repositório `Marcelofeuser/monitora_pai` é um monorepo pnpm. O código nativ
 
 | Serviço | Responsabilidade | Endereço / estado observado |
 |---|---|---|
-| `api-server` | API HTTP, Clerk, WebSocket/sinalização e integração com serviços externos | Domínio Railway de produção; deploy `SUCCESS` no commit `6f0573b`; `/api/healthz` HTTP 200 |
-| `pwa` | Interface web para Responsável e Criança | `responsavel.amparakids.com` e `crianca.amparakids.com`; deploy `SUCCESS` no commit `6f0573b` |
-| `site-vendas` | Site institucional e proxy para o PWA em `/superadmin` | `amparakids.com`; deploy `SUCCESS` no commit `6f0573b` |
+| `api-server` | API HTTP, Clerk, WebSocket/sinalização e integração com serviços externos | `api-server-production-c955.up.railway.app`; último deploy consultado `SUCCESS` |
+| `pwa` | Interface web para Responsável e Criança | `responsavel.amparakids.com` e `crianca.amparakids.com`; último deploy consultado `SUCCESS` |
+| `site-vendas` | Site institucional e proxy para o PWA em `/superadmin` | `amparakids.com`; último deploy consultado `SUCCESS` |
 | `landing page apps` | Download: QR abre app Criança por padrão; rota `/responsavel` abre o app de responsáveis; detecção de iOS/Android encaminha à loja configurada | `baixar.amparakids.com`; correção do APK antigo está no PR #10 |
 | `postgres` | Banco PostgreSQL persistente | Em produção, volume `postgres-data`; serviço `SUCCESS` |
 | `media-storage` | Arquivos enviados, montados no serviço da API | Volume Railway associado à API |
 
-Staging: `pwa-staging-fe26.up.railway.app`, `api-server-staging-fc25.up.railway.app` e `site-vendas-staging.up.railway.app`. Os três serviços e o Postgres de staging estavam `SUCCESS` no commit `e96438d` quando consultados. `amparakids.com/superadmin` respondeu HTTP 200 após o deploy do site; isso confirma a rota do proxy, mas não substitui a validação de sessão, painel e API.
+Staging: `pwa-staging-fe26.up.railway.app`, `api-server-staging-fc25.up.railway.app` e `site-vendas-staging.up.railway.app`. Os serviços e bancos têm ambientes separados. `amparakids.com/superadmin` respondeu HTTP 200 após o deploy do site; isso confirma a rota do proxy, mas não substitui a validação de sessão, painel e API.
 
 ## 3. Backend — API Express/TypeScript
 
@@ -100,7 +100,7 @@ O serviço de vendas encaminha `/superadmin`, autenticação e assets para a ori
 | Responsáveis | Login Clerk, gestão da família, pareamento e conversa | `com.amparakids.responsavel` |
 | Criança | Entrada pelo código familiar, chat, grupos e compartilhamento explícito de localização | `com.amparakids.crianca` |
 
-O checklist nativo do repositório documenta APKs debug e builds iOS de simulador, além do código de chamada WebRTC. O APK TWA antigo foi removido da landing page; a página espera URLs oficiais das lojas e não distribui APK avulso. Não encontrei `.aab`, `.ipa` nem chaves de assinatura de lançamento. O Gradle agora recusa `release` sem keystore de upload e credenciais próprias, em vez de assinar release com a chave debug. Há um roteiro/scripts em `artifacts/controle-parental/STORE-RELEASE-GUIDE.md` para criar a chave Android e preparar os builds. Isso não equivale a builds assinados/distribuíveis nem a validação em aparelhos reais. O documento `artifacts/controle-parental/NATIVE-RELEASE-CHECKLIST.md` é a referência de publicação e ainda lista trabalho pendente.
+O checklist nativo do repositório documenta APKs debug e builds iOS para simulador, além do código de chamada WebRTC. Os artefatos locais atuais são `dist/ampara-responsavel-debug.apk`, `dist/ampara-crianca-debug.apk`, `dist/Ampara-Responsavel-Audio-iOS151.app` e `dist/Ampara-Crianca-Audio-iOS151.app`. Os APKs são de debug; as pastas `.app` são para simulador. Não há `.aab`, `.ipa` nem assinatura de distribuição. O Gradle recusa `release` sem keystore de upload e credenciais próprias, em vez de assinar release com a chave debug. Há scripts e instruções em `artifacts/controle-parental/STORE-RELEASE-GUIDE.md`. Esses artefatos não equivalem a builds assinados/distribuíveis nem a validação em aparelhos reais.
 
 ## 7. SuperAdmin, vouchers e Stripe
 
@@ -121,28 +121,22 @@ Stripe Checkout usa `kids_solo`, `kids_duo` e `kids_family`, com preço mensal, 
 | Railway volumes | Mídia persistente |
 | Sentry | Captura de erros quando DSN estiver configurada |
 
-## 9. Estado confirmado após o merge do PR #6
+## 9. Estado confirmado após os PRs #14–#19
 
-- GitHub `main`: merge `6f0573bc` do PR #6.
-- Railway produção: `api-server`, `pwa`, `site-vendas`, `landing page apps` e Postgres em `SUCCESS` no commit `6f0573b` após as correções. `/api/healthz`, `responsavel.amparakids.com` e `amparakids.com/superadmin` respondem HTTP 200. `/api/admin/overview` sem sessão retorna HTTP 401, como esperado pelo controle de acesso.
-- Causa do primeiro build PWA: uma variável de produção vazia tinha nome literal de 80 caracteres, com quebras de linha e três nomes `VITE_*`. Foi removida; o novo build concluiu. `VITE_CLERK_PROXY_URL` pode ficar ausente, como em staging.
-- O primeiro deploy da API parava por falta de `PAIRING_RATE_LIMIT_SECRET`. Foi gerado um segredo aleatório de 64 caracteres hexadecimais e configurado diretamente no Railway, sem ir ao Git.
-- Banco de produção: migrations `0001` a `0005` presentes. `0002`, `0004` e `0005` foram aplicadas e verificadas.
-- Ainda falta testar o fluxo de SuperAdmin autenticado, Stripe live e os apps nativos em aparelhos reais.
+- PRs #14–#17 completaram as telas e fluxos nativos de contatos, controle de tempo de uso, anexos de vídeo e mensagens de voz; PR #18 preservou o mínimo iOS 15.1 em novos prebuilds; PR #19 atualizou o checklist de builds.
+- O Mac produziu dois APKs Android debug assinados pela chave de depuração e duas aplicações iOS para simulador no mínimo 15.1. Eles não são binários de loja e ainda não foram instalados/testados em aparelhos físicos.
+- GitHub `main` está no commit `7b97176`. Produção Railway foi consultada após os deploys do merge do PR #19: `api-server`, `pwa`, `site-vendas`, `landing page apps` e Postgres aparecem `SUCCESS`; `pendingWork` está vazio. O histórico ainda mostra falhas anteriores da API e da PWA, mas as versões ativas estão online.
+- A PWA e os apps nativos não fazem rastreamento em segundo plano: a Criança compartilha uma localização atual ao tocar no botão e aceitar permissão em primeiro plano.
+- Ainda falta testar o fluxo SuperAdmin autenticado, configurar Stripe live e validar apps em aparelhos reais.
 
-## 10. Estado confirmado após os PRs #6 e #13
-
-- PR #13 adicionou conversa de grupo nos apps nativos; as verificações de TypeScript passaram antes do merge.
-- A continuação local adicionou ao app Responsáveis cadastro de contatos, convite por QR/link e ações de bloqueio e reativação. Ainda precisa ser incorporada ao `main`, recompilada e validada em aparelhos.
-- Depois do merge do PR #13, Railway produção concluiu com sucesso as implantações de `api-server`, `pwa`, `site-vendas` e `landing page apps`; Postgres permanece online. Não há implantação pendente. O painel mantém duas falhas históricas anteriores (API e PWA), mas as implantações atuais estão `SUCCESS`.
-
-## 11. Estado atual e pendências de lançamento
+## 10. Estado atual e pendências de lançamento
 
 1. Fazer login e testar o portal SuperAdmin autenticado; criar voucher/embaixador de teste e conferir acesso negado para outra conta. `/superadmin` e seus assets passam pelo domínio Ampara; o endpoint administrativo sem sessão devolve 401.
 2. Criar e configurar a chave, webhook e preços Stripe live antes de habilitar cobrança real.
 3. Compilar APKs release assinados e builds iOS para dispositivo/App Store; preencher metadados, privacidade e classificação etária.
-4. Validar login, pareamento, chat, chamadas, notificações e revogação em aparelhos físicos Android e iPhone. Chamadas com o app em segundo plano/fechado e o restante da paridade nativa constam como pendentes no checklist nativo.
+4. Validar login, pareamento, chat, chamadas, notificações, compartilhamento de localização e revogação em aparelhos físicos Android e iPhone. Chamadas com o app em segundo plano/fechado e o restante da paridade nativa constam como pendentes no checklist nativo.
 5. Confirmar situação do D-U-N-S/conta Google Play, equipe/certificados Apple e inserir as quatro URLs oficiais das lojas no serviço `landing page apps` (`CHILD_ANDROID_STORE_URL`, `CHILD_IOS_STORE_URL`, `PARENT_ANDROID_STORE_URL`, `PARENT_IOS_STORE_URL`).
+6. Decidir se o produto deve oferecer localização em segundo plano. O comportamento atual, coerente com a PWA, é compartilhamento pontual iniciado pela Criança; não há coleta passiva.
 
 ### Fora desta versão
 
