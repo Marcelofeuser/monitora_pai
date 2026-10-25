@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { confirmChildPairingCode, fetchChildPrivateMessages, reportChildLocation, revokeChildDevice, sendChildPrivateMessage, type PrivateMessageInput } from './api';
+import { confirmChildPairingCode, fetchChildGroupMessages, fetchChildGroups, fetchChildPrivateMessages, reportChildLocation, revokeChildDevice, sendChildGroupMessage, sendChildPrivateMessage, type GroupProfile, type PrivateMessageInput } from './api';
 import { PrivateChat } from './PrivateChat';
 import { NativeCallOverlay } from './NativeCallOverlay';
 import { useNativeCall } from './useNativeCall';
@@ -21,6 +21,9 @@ export function ChildApp() {
   const [parentName, setParentName] = useState('responsável');
   const [childId, setChildId] = useState('');
   const [parentId, setParentId] = useState('');
+  const [groups, setGroups] = useState<GroupProfile[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<GroupProfile | null>(null);
+  const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [sharingLocation, setSharingLocation] = useState(false);
   const [manualValue, setManualValue] = useState('');
@@ -108,6 +111,24 @@ export function ChildApp() {
     if (!deviceToken) throw new Error('Este aparelho não está conectado.');
     return sendChildPrivateMessage(deviceToken, input);
   }, [deviceToken]);
+  const openGroups = async () => {
+    if (!deviceToken) return;
+    try {
+      setGroups(await fetchChildGroups(deviceToken));
+      setGroupPickerOpen(true);
+    } catch (cause) {
+      Alert.alert('Não foi possível abrir os grupos', cause instanceof Error ? cause.message : 'Tente novamente.');
+    }
+  };
+  const selectedGroupId = selectedGroup?.id;
+  const loadGroupMessages = useCallback(async () => {
+    if (!deviceToken || !selectedGroupId) throw new Error('Selecione um grupo para abrir a conversa.');
+    return fetchChildGroupMessages(selectedGroupId, deviceToken);
+  }, [deviceToken, selectedGroupId]);
+  const sendGroupMessage = useCallback(async (input: PrivateMessageInput) => {
+    if (!deviceToken || !selectedGroupId) throw new Error('Selecione um grupo para enviar a mensagem.');
+    return sendChildGroupMessage(selectedGroupId, input, deviceToken);
+  }, [deviceToken, selectedGroupId]);
 
   const shareLocation = async () => {
     if (!deviceToken || sharingLocation) return;
@@ -137,6 +158,23 @@ export function ChildApp() {
   }
 
   if (state === 'paired') {
+    if (groupPickerOpen && !selectedGroup) {
+      return <><ChildGroupPicker groups={groups} onSelect={(group) => { setSelectedGroup(group); setGroupPickerOpen(false); }} onBack={() => setGroupPickerOpen(false)} /><NativeCallOverlay call={call} /></>;
+    }
+    if (selectedGroup) {
+      return <>
+        <PrivateChat
+          title={selectedGroup.name}
+          subtitle={`Grupo · ${selectedGroup.members.map((member) => member.contactName).join(', ') || 'família'}`}
+          ownUserId={childId}
+          loadMessages={loadGroupMessages}
+          sendMessage={sendGroupMessage}
+          onBack={() => { setSelectedGroup(null); setGroupPickerOpen(true); }}
+          headerAction={<Pressable accessibilityRole="button" onPress={() => { setSelectedGroup(null); void openGroups(); }}><Text style={{ color: colors.primary }}>Grupos</Text></Pressable>}
+        />
+        <NativeCallOverlay call={call} />
+      </>;
+    }
     return (
       <>
       <PrivateChat
@@ -149,6 +187,7 @@ export function ChildApp() {
           <Pressable accessibilityRole="button" disabled={!parentId || call.phase !== 'idle'} onPress={() => void call.startCall(parentId, parentName)}>
             <Text style={{ color: colors.primary }}>Ligar</Text>
           </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => void openGroups()}><Text style={{ color: colors.primary }}>Grupos</Text></Pressable>
           <Pressable accessibilityRole="button" disabled={!deviceToken || sharingLocation} onPress={() => void shareLocation()}>
             {sharingLocation ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={{ color: colors.primary }}>Compartilhar localização</Text>}
           </Pressable>
@@ -179,6 +218,28 @@ export function ChildApp() {
           )}
         </View>
       <Text style={[styles.privacy, { color: colors.mutedForeground }]}>Você verá quando o vínculo estiver ativo. Nenhum dado é compartilhado antes da confirmação.</Text>
+    </ScrollView>
+  );
+}
+
+function ChildGroupPicker({ groups, onSelect, onBack }: {
+  groups: GroupProfile[];
+  onSelect: (group: GroupProfile) => void;
+  onBack: () => void;
+}) {
+  const colors = useColors();
+  return (
+    <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]}>
+      <Pressable accessibilityRole="button" onPress={onBack}><Text style={{ color: colors.primary }}>‹ Voltar à conversa familiar</Text></Pressable>
+      <Text style={[styles.title, { color: colors.foreground }]}>Meus grupos</Text>
+      <Text style={[styles.body, { color: colors.mutedForeground }]}>Converse com as pessoas que seu responsável colocou nos grupos.</Text>
+      {groups.length === 0 ? <Text style={[styles.body, { color: colors.mutedForeground }]}>Você ainda não participa de nenhum grupo.</Text> : groups.map((group) => (
+        <Pressable key={group.id} accessibilityRole="button" onPress={() => onSelect(group)} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTitle, { color: colors.foreground }]}>{group.name}</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>{group.members.map((member) => member.contactName).join(' · ') || 'Grupo da família'}</Text>
+          <Text style={{ color: colors.primary }}>Abrir conversa ›</Text>
+        </Pressable>
+      ))}
     </ScrollView>
   );
 }

@@ -93,12 +93,12 @@ O serviço de vendas encaminha `/superadmin`, autenticação e assets para a ori
 
 ## 6. Apps nativos — React Native + Expo
 
-`artifacts/controle-parental/native` contém telas e integração nativas. `app.config.js` gera duas identidades:
+`artifacts/controle-parental/native` contém telas e integração nativas. O app Responsáveis lista e pareia crianças, abre o espelho, compartilha localização, cria grupos com contatos aprovados e conversa em grupos. O app Criança pareia com código, conversa em privado, abre os grupos da família e compartilha a localização sob demanda. Ambos incluem chat nativo com texto, fotos e figurinhas e chamadas de voz/vídeo em primeiro plano. `app.config.js` gera duas identidades:
 
 | Variante | Papel | Identificador Android/iOS |
 |---|---|---|
 | Responsáveis | Login Clerk, gestão da família, pareamento e conversa | `com.amparakids.responsavel` |
-| Criança | Entrada pelo código familiar, chat e compartilhamento explícito de localização | `com.amparakids.crianca` |
+| Criança | Entrada pelo código familiar, chat, grupos e compartilhamento explícito de localização | `com.amparakids.crianca` |
 
 O checklist nativo do repositório documenta APKs debug e builds iOS de simulador, além do código de chamada WebRTC. O APK TWA antigo foi removido da landing page; a página espera URLs oficiais das lojas e não distribui APK avulso. Não encontrei `.aab`, `.ipa` nem chaves de assinatura de lançamento. O Gradle agora recusa `release` sem keystore de upload e credenciais próprias, em vez de assinar release com a chave debug. Há um roteiro/scripts em `artifacts/controle-parental/STORE-RELEASE-GUIDE.md` para criar a chave Android e preparar os builds. Isso não equivale a builds assinados/distribuíveis nem a validação em aparelhos reais. O documento `artifacts/controle-parental/NATIVE-RELEASE-CHECKLIST.md` é a referência de publicação e ainda lista trabalho pendente.
 

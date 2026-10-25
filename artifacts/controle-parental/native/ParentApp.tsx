@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useColors } from '@/hooks/useColors';
-import { createChildPairing, createChildReconnectPairing, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentMirroredConversation, fetchParentPrivateMessages, sendParentPrivateMessage, type ChildProfile, type MirroredContact, type PairingResult, type PrivateMessageInput } from './api';
+import { createChildPairing, createChildReconnectPairing, createParentGroup, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentGroupMessages, fetchParentGroups, fetchParentMirroredConversation, fetchParentPrivateMessages, sendParentGroupMessage, sendParentPrivateMessage, type ChildProfile, type GroupProfile, type MirroredContact, type PairingResult, type PrivateMessageInput } from './api';
 import { PrivateChat } from './PrivateChat';
 import { ParentLocation } from './ParentLocation';
 import { NativeCallOverlay } from './NativeCallOverlay';
@@ -45,6 +45,8 @@ function ParentSession() {
   const [viewingLocation, setViewingLocation] = useState<ChildProfile | null>(null);
   const [mirrorChild, setMirrorChild] = useState<ChildProfile | null>(null);
   const [mirrorContact, setMirrorContact] = useState<MirroredContact | null>(null);
+  const [groupChild, setGroupChild] = useState<ChildProfile | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<GroupProfile | null>(null);
   const [addingChild, setAddingChild] = useState(false);
 
   const refreshChildren = useCallback(async () => {
@@ -100,6 +102,19 @@ function ParentSession() {
     if (!token) throw new Error('A sessão expirou. Entre novamente.');
     return fetchParentChildLocation(locationChildId, token);
   }, [getToken, locationChildId]);
+  const selectedGroupId = selectedGroup?.id;
+  const loadSelectedGroupMessages = useCallback(async () => {
+    if (!selectedGroupId) throw new Error('Selecione um grupo para abrir a conversa.');
+    const token = await getToken();
+    if (!token) throw new Error('A sessão expirou. Entre novamente.');
+    return fetchParentGroupMessages(selectedGroupId, token);
+  }, [getToken, selectedGroupId]);
+  const sendSelectedGroupMessage = useCallback(async (input: PrivateMessageInput) => {
+    if (!selectedGroupId) throw new Error('Selecione um grupo para enviar a mensagem.');
+    const token = await getToken();
+    if (!token) throw new Error('A sessão expirou. Entre novamente.');
+    return sendParentGroupMessage(selectedGroupId, input, token);
+  }, [getToken, selectedGroupId]);
 
   if (!isLoaded) return <View style={[styles.center, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.primary} /></View>;
   if (!isSignedIn) return <ParentSignIn />;
@@ -113,6 +128,12 @@ function ParentSession() {
   }
   if (mirrorChild && userId) {
     return <><MirroredContacts child={mirrorChild} loadContacts={loadMirroredContacts} onSelect={setMirrorContact} onBack={() => setMirrorChild(null)} /><NativeCallOverlay call={call} /></>;
+  }
+  if (selectedGroup && groupChild && userId) {
+    return <><PrivateChat title={selectedGroup.name} subtitle={`Grupo · ${selectedGroup.members.map((member) => member.contactName).join(', ') || groupChild.name}`} ownUserId={userId} loadMessages={loadSelectedGroupMessages} sendMessage={sendSelectedGroupMessage} onBack={() => setSelectedGroup(null)} headerAction={<Pressable accessibilityRole="button" disabled={call.phase !== 'idle'} onPress={() => void call.startCall(groupChild.id, groupChild.name)}><Text style={{ color: colors.primary, fontWeight: '700' }}>Ligar para {groupChild.name}</Text></Pressable>} /><NativeCallOverlay call={call} /></>;
+  }
+  if (groupChild && userId) {
+    return <><ParentGroups child={groupChild} getToken={getToken} onSelect={setSelectedGroup} onBack={() => setGroupChild(null)} /><NativeCallOverlay call={call} /></>;
   }
   if (selectedChild && userId) {
     return <><PrivateChat title={selectedChild.name} ownUserId={userId} loadMessages={loadSelectedMessages} sendMessage={sendSelectedMessage} onBack={() => setSelectedChild(null)} headerAction={<Pressable accessibilityRole="button" disabled={call.phase !== 'idle'} onPress={() => void call.startCall(selectedChild.id, selectedChild.name)}><Text style={{ color: colors.primary, fontWeight: '700' }}>Ligar</Text></Pressable>} /><NativeCallOverlay call={call} /></>;
@@ -173,6 +194,7 @@ function ParentSession() {
               </Pressable>
               <Pressable accessibilityRole="button" onPress={() => setViewingLocation(child)} style={styles.locationLink}><Text style={{ color: colors.mutedForeground }}>Localização</Text></Pressable>
               <Pressable accessibilityRole="button" onPress={() => setMirrorChild(child)} style={styles.locationLink}><Text style={{ color: colors.primary }}>Espelho</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => setGroupChild(child)} style={styles.locationLink}><Text style={{ color: colors.primary }}>Grupos</Text></Pressable>
             </View>
           ))}
           {children.map((child) => <Pressable key={`reconnect-${child.id}`} disabled={busy} onPress={() => void issueReconnect(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Conectar outro aparelho de {child.name}</Text></Pressable>)}
@@ -198,6 +220,89 @@ function ParentSession() {
     </ScrollView>
     <NativeCallOverlay call={call} />
     </>
+  );
+}
+
+function ParentGroups({ child, getToken, onSelect, onBack }: {
+  child: ChildProfile;
+  getToken: () => Promise<string | null>;
+  onSelect: (group: GroupProfile) => void;
+  onBack: () => void;
+}) {
+  const colors = useColors();
+  const [groups, setGroups] = useState<GroupProfile[]>([]);
+  const [contacts, setContacts] = useState<MirroredContact[]>([]);
+  const [name, setName] = useState('');
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error('A sessão expirou. Entre novamente.');
+    const [nextGroups, nextContacts] = await Promise.all([
+      fetchParentGroups(child.id, token),
+      fetchParentApprovedContacts(child.id, token),
+    ]);
+    setGroups(nextGroups);
+    setContacts(nextContacts.filter((contact) => contact.status === 'approved'));
+  }, [child.id, getToken]);
+
+  useEffect(() => {
+    let active = true;
+    void refresh().catch((cause) => {
+      if (active) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar os grupos.');
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [refresh]);
+
+  const create = async () => {
+    if (busy || name.trim().length < 1 || selectedContactIds.length < 1) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('A sessão expirou. Entre novamente.');
+      await createParentGroup(child.id, name.trim(), selectedContactIds, token);
+      setName('');
+      setSelectedContactIds([]);
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível criar o grupo.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]}>
+      <Pressable accessibilityRole="button" onPress={onBack}><Text style={{ color: colors.primary }}>‹ Voltar à família</Text></Pressable>
+      <Text style={[styles.title, { color: colors.foreground }]}>Grupos · {child.name}</Text>
+      <Text style={[styles.body, { color: colors.mutedForeground }]}>Escolha somente contatos aprovados para criar grupos. A criança poderá conversar com os participantes no app dela.</Text>
+      {loading ? <ActivityIndicator color={colors.primary} /> : groups.length === 0 ? <Text style={[styles.body, { color: colors.mutedForeground }]}>Ainda não há grupos.</Text> : groups.map((group) => (
+        <Pressable key={group.id} accessibilityRole="button" onPress={() => onSelect(group)} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTitle, { color: colors.foreground }]}>{group.name}</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>{group.members.map((member) => member.contactName).join(' · ')}</Text>
+          <Text style={{ color: colors.primary }}>Abrir conversa ›</Text>
+        </Pressable>
+      ))}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.cardTitle, { color: colors.foreground }]}>Criar grupo</Text>
+        <TextInput value={name} onChangeText={setName} maxLength={80} placeholder="Nome do grupo" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+        {contacts.length === 0 ? <Text style={[styles.body, { color: colors.mutedForeground, marginTop: 10 }]}>Adicione contatos aprovados pelo app/site para incluí-los em um grupo.</Text> : contacts.map((contact) => {
+          const checked = selectedContactIds.includes(contact.id);
+          return <Pressable key={contact.id} accessibilityRole="checkbox" accessibilityState={{ checked }} onPress={() => setSelectedContactIds((current) => checked ? current.filter((id) => id !== contact.id) : [...current, contact.id])} style={styles.consentRow}>
+            <View style={[styles.checkbox, { borderColor: colors.primary, backgroundColor: checked ? colors.primary : 'transparent' }]} />
+            <Text style={[styles.consentText, { color: colors.foreground }]}>{contact.contactName}</Text>
+          </Pressable>;
+        })}
+        {error && <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text>}
+        <Pressable accessibilityRole="button" disabled={busy || !name.trim() || !selectedContactIds.length} onPress={() => void create()} style={[styles.primaryButton, { backgroundColor: colors.primary, opacity: busy || !name.trim() || !selectedContactIds.length ? 0.55 : 1 }]}>
+          {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Criar grupo</Text>}
+        </Pressable>
+      </View>
+    </ScrollView>
   );
 }
 

@@ -108,11 +108,13 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
               <View style={[styles.messageRow, mine && styles.messageRowMine]}>
                 {sticker ? (
                   <View style={styles.stickerMessage}>
+                    {!mine && item.senderName ? <Text style={[styles.senderName, { color: colors.mutedForeground }]}>{item.senderName}</Text> : null}
                     <Text accessibilityLabel={`Figurinha ${sticker}`} style={styles.sticker}>{sticker}</Text>
                     <Text style={[styles.time, { color: colors.mutedForeground }]}>{new Date(item.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text>
                   </View>
                 ) : (
                   <View style={[styles.bubble, { backgroundColor: mine ? colors.primary : colors.card, borderColor: colors.border }]}>
+                    {!mine && item.senderName ? <Text style={[styles.senderName, { color: colors.mutedForeground }]}>{item.senderName}</Text> : null}
                     {item.type === 'photo' && mediaUrl ? <Image accessibilityLabel="Foto enviada na conversa" source={{ uri: mediaUrl }} resizeMode="cover" style={styles.photo} /> : null}
                     {(item.type === 'video' || item.type === 'audio') && mediaUrl ? (
                       <Pressable accessibilityRole="button" onPress={() => void Linking.openURL(mediaUrl)} style={styles.mediaLink}>
@@ -190,6 +192,7 @@ const styles = StyleSheet.create({
   empty: { textAlign: 'center', alignSelf: 'center', marginVertical: 24, maxWidth: 260, lineHeight: 20 },
   messageRow: { flexDirection: 'row', justifyContent: 'flex-start' },
   messageRowMine: { justifyContent: 'flex-end' },
+  senderName: { fontSize: 10, fontWeight: '700', marginBottom: 4 },
   bubble: { maxWidth: '82%', minWidth: 70, paddingHorizontal: 13, paddingTop: 10, paddingBottom: 7, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth },
   time: { alignSelf: 'flex-end', fontSize: 10, marginTop: 5 },
   error: { paddingHorizontal: 16, paddingTop: 8, fontSize: 12 },
