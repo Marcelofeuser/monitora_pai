@@ -18,7 +18,7 @@
 - [x] Verificados: TypeScript do workspace completo (incluindo chamadas nativas, API e PWA).
 - [x] APK de debug Android do Responsável gerado e assinatura validada (`com.amparakids.responsavel`).
 - [x] APK de debug Android da Criança gerado e assinatura validada (`com.amparakids.crianca`).
-- [x] Compilação iOS ARM para simulador concluída para ambas as variantes com o código atual (sem assinatura de distribuição): `dist/Ampara-Responsavel-Simulator.app` e `dist/Ampara-Crianca-Simulator.app`.
+- [x] Compilação iOS ARM para simulador concluída para ambas as variantes, com mínimo iOS 15.1 e sem assinatura de distribuição: `dist/Ampara-Responsavel-Audio-iOS151.app` e `dist/Ampara-Crianca-Audio-iOS151.app`.
 
 ## Antes de enviar para as lojas
 
