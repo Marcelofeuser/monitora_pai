@@ -1,7 +1,7 @@
 # Apps nativos Ampara
 
-Este projeto React Native/Expo gera dois aplicativos Android independentes a
-partir da mesma base compartilhada:
+Este projeto React Native/Expo gera dois aplicativos independentes para
+Android e iOS a partir da mesma base compartilhada:
 
 | Variante | Nome instalado | Application ID | Perfil |
 | --- | --- | --- | --- |
@@ -32,13 +32,14 @@ AMPARA_APP=responsavel pnpm exec expo run:ios
 AMPARA_APP=crianca pnpm exec expo run:ios
 ```
 
-## APKs de verificação
+## Artefatos locais de verificação
 
 Os arquivos `dist/ampara-responsavel-debug.apk` e
 `dist/ampara-crianca-debug.apk` foram gerados e tiveram a assinatura e o
 identificador do pacote conferidos. São APKs de depuração para instalação e
-teste; a Google Play exige um build de lançamento assinado com a chave da
-conta da empresa.
+teste; a Google Play exige um build de lançamento assinado com a chave de
+upload da conta. As pastas `.app` em `dist/` são builds de simulador iOS,
+sem assinatura de distribuição, e não podem ser instaladas em iPhones.
 
 ## Assinatura de lançamento Android
 
@@ -74,12 +75,21 @@ de upload Android localmente, gerar AABs e preparar a assinatura/publicação iO
   e o app da criança pode revogar o token deste aparelho ao sair.
 - O convite exige confirmação explícita do vínculo e a API aplica expiração e
   limite de tentativas.
+- O Responsável gerencia contatos e grupos com convites por QR/link, aprovação,
+  bloqueio e reativação; o chat aceita texto, fotos, vídeos, voz e figurinhas.
+- O Responsável consulta o espelho de conversas aprovadas, configura limite e
+  bloqueio do uso do app Ampara e consulta a localização compartilhada.
+- A Criança compartilha a localização atual apenas quando toca no botão e
+  concede permissão em primeiro plano. O app e a PWA não fazem rastreamento
+  contínuo ou em segundo plano.
 - Responsável e criança podem iniciar e atender chamadas de voz/vídeo quando
   os dois apps estão abertos. O servidor autentica a sinalização e fornece
   credenciais ICE/TURN; microfone e câmera só são solicitados ao iniciar ou
   atender uma chamada.
 
-Contatos e grupos, mídias, localização em segundo plano e controle de tempo de
-tela ainda precisam ser portados. Chamadas recebidas com o app fechado ou em
-segundo plano dependem de push nativo e validação em aparelhos reais. O QR de
-download depende dos links oficiais das lojas, ainda não publicados.
+Chamadas recebidas com o app fechado ou em segundo plano dependem de push
+nativo, integração de chamada do sistema e validação em aparelhos reais.
+Notificações nativas, funcionamento em aparelhos físicos, assinaturas das
+lojas e publicação continuam pendentes. O QR de download depende dos links
+oficiais das lojas, ainda não publicados. O checklist e o guia para publicação
+estão em `NATIVE-RELEASE-CHECKLIST.md` e `STORE-RELEASE-GUIDE.md`.

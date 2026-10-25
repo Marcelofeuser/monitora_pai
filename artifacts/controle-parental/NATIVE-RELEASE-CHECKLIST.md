@@ -25,7 +25,8 @@
 
 - [x] Implementar chamadas de voz/vídeo entre Responsável e Criança enquanto ambos os apps estão abertos.
 - [ ] Configurar chamadas recebidas com o app em segundo plano/fechado usando push nativo e validar em aparelhos reais.
-- [ ] Portar e validar a localização em segundo plano que já existe no PWA. O chat nativo grava e reproduz mensagens de voz; uso do microfone e reprodução ainda precisam de validação em aparelhos reais.
+- [x] Localização atual compartilhada sob ação da Criança e com permissão em primeiro plano. Nem a PWA nem os apps nativos fazem rastreamento contínuo ou em segundo plano.
+- [ ] Se a família solicitar rastreamento em segundo plano, definir antes a experiência de consentimento revogável, indicador visível, frequência e retenção; a implementação atual não coleta localização passivamente. Validar o fluxo atual de localização, gravação e reprodução de voz em aparelhos reais.
 - [ ] Configurar notificações push nativas para iOS e Android e testar com aparelhos reais.
 - [ ] Instalar, parear e testar cada app em aparelhos iPhone e Android, incluindo reconexão e revogação.
 - [ ] Validar chamadas de voz/vídeo e permissões de microfone/câmera em aparelhos iPhone e Android.
@@ -46,5 +47,6 @@
 - Os APKs entregues são de debug, assinados com a chave de depuração. Servem para instalação/teste, não para publicação no Google Play.
 - As compilações iOS de simulador validam que as duas variantes compilam, mas não geram arquivos assinados para iPhone/App Store nem substituem o teste em aparelho real.
 - O WebRTC atual toca e conecta enquanto os dois apps estão abertos; não implementa ainda a experiência de chamada recebida com o app suspenso/fechado.
+- A localização atual é compartilhada somente quando a Criança toca no botão e aceita a permissão enquanto usa o app; não existe rastreamento em segundo plano na PWA nem nos apps nativos.
 
 Não considerar os apps prontos para lançamento até concluir todos os itens acima e fazer a validação em aparelhos reais.
