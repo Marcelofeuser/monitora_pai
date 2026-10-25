@@ -29,7 +29,7 @@ describe("limite persistente de pareamento", () => {
     expect((await request(app).post("/api/pairing").send({})).status).toBe(429);
     expect((await request(app).post("/api/pairing/reconnect").send({})).status).toBe(429);
     const dialect = new PgDialect();
-    const hashes = mocks.execute.mock.calls.map(([statement]) => dialect.sqlToQuery(statement).params[0]);
+    const hashes = mocks.execute.mock.calls.map(([statement]) => dialect.sqlToQuery(statement).params[1]);
     expect(hashes[0]).toBe(hashes[1]);
     expect(hashes[0]).toBe(pairingSourceHash("generate", "parent-a"));
   });
@@ -90,7 +90,7 @@ describe("limite persistente de pareamento", () => {
     const dialect = new PgDialect();
     const first = dialect.sqlToQuery(mocks.execute.mock.calls[0][0]);
     const second = dialect.sqlToQuery(mocks.execute.mock.calls[1][0]);
-    expect(first.params[0]).toBe(second.params[0]);
+    expect(first.params[1]).toBe(second.params[1]);
     expect(first.params).not.toContain("1.2.3.4");
   });
 
