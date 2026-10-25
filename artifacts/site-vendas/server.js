@@ -11,6 +11,18 @@ const app = express();
 
 app.disable("x-powered-by");
 
+// Keep the superadmin entry point under the Ampara brand domain while the
+// authenticated portal remains hosted by the responsible app. Staging must
+// stay isolated from production so its link goes to the staging PWA.
+app.get("/superadmin", (_req, res) => {
+  const isStaging = process.env.RAILWAY_ENVIRONMENT_NAME === "staging";
+  const portalUrl = isStaging
+    ? "https://pwa-staging-fe26.up.railway.app/superadmin"
+    : "https://responsavel.amparakids.com/superadmin";
+
+  res.redirect(302, portalUrl);
+});
+
 app.use(
   express.static(path.join(__dirname, "public"), {
     extensions: ["html"],
