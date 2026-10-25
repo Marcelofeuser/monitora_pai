@@ -8,6 +8,7 @@ import {
   guardianInviteTokensTable,
   childGuardiansTable,
   parentRelationshipEnum,
+  subscriptionsTable,
 } from "@workspace/db";
 import { z } from "zod/v4";
 import { ensureParentUser } from "../lib/parentUser";
@@ -157,6 +158,22 @@ router.post("/guardians/invite/:token/accept", async (req, res) => {
   const newParent = await ensureParentUser(auth.userId);
 
   const childIds = await getGuardianChildIds(invite.invitedByParentId);
+  const familyGuardians = new Map<string, { id: string; role: "owner" | "guardian" }>();
+  for (const childId of childIds) {
+    for (const guardian of await getGuardiansOfChild(childId)) familyGuardians.set(guardian.id, guardian);
+  }
+  if (!familyGuardians.has(invite.invitedByParentId)) {
+    familyGuardians.set(invite.invitedByParentId, { id: invite.invitedByParentId, role: "guardian" });
+  }
+  const ownerId = [...familyGuardians.values()].find((guardian) => guardian.role === "owner")?.id ?? invite.invitedByParentId;
+  const subscriptions = ownerId
+    ? await db.select({ guardiansLimit: subscriptionsTable.guardiansLimit, status: subscriptionsTable.status, plan: subscriptionsTable.plan })
+      .from(subscriptionsTable).where(eq(subscriptionsTable.parentUserId, ownerId)).limit(1)
+    : [];
+  const subscription = subscriptions[0];
+  if (subscription?.plan === "paid" && subscription.status === "active" && !familyGuardians.has(newParent.id) && familyGuardians.size >= subscription.guardiansLimit) {
+    return res.status(403).json({ error: "guardians_limit_reached", guardiansLimit: subscription.guardiansLimit });
+  }
   // z.literal(true) já garantiu que só chega aqui se o consentimento foi
   // marcado -- carimba o timestamp de verdade pra cada criança que este
   // Responsável está ganhando acesso agora (mesmo padrão do POST /pairing).

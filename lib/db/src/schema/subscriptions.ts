@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, integer, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, integer, pgEnum, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -24,9 +24,12 @@ export const subscriptionsTable = pgTable("subscriptions", {
   plan: planEnum("plan").notNull().default("free"),
   status: subscriptionStatusEnum("status").notNull().default("active"),
   childrenLimit: integer("children_limit").notNull().default(1),
+  guardiansLimit: integer("guardians_limit").notNull().default(1),
   currentPeriodEnd: timestamp("current_period_end"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [uniqueIndex("subscriptions_stripe_subscription_unique").on(table.stripeSubscriptionId)]);
 
 export const insertSubscriptionSchema = createInsertSchema(subscriptionsTable).omit({
   id: true,

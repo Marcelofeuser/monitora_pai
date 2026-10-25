@@ -4,8 +4,24 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { childDeviceTokensTable, db } from "@workspace/db";
 import { isGuardianOfChild } from "../lib/guardians";
 import { disconnectDeviceSockets } from "../signaling/revocation";
+import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
 
 const router: IRouter = Router();
+
+/** A criança pode revogar o token do próprio aparelho antes de sair dele. */
+router.post("/child/device/revoke", requireChildAuth, async (req: ChildAuthedRequest, res) => {
+  if (!req.childDeviceId) return res.status(401).json({ error: "not_authenticated" });
+  const [device] = await db
+    .update(childDeviceTokensTable)
+    .set({ revokedAt: new Date() })
+    .where(and(
+      eq(childDeviceTokensTable.id, req.childDeviceId),
+      isNull(childDeviceTokensTable.revokedAt),
+    ))
+    .returning({ id: childDeviceTokensTable.id, revokedAt: childDeviceTokensTable.revokedAt });
+  if (device) disconnectDeviceSockets(device.id);
+  return res.json({ ok: true, alreadyRevoked: !device });
+});
 
 /**
  * GET /api/children/:childId/devices

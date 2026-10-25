@@ -52,3 +52,5 @@ Thumbs.db
 
 # Variáveis de ambiente locais
 .env
+.env.railway-staging
+railway-staging-stripe-prices.json

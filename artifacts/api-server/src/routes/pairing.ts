@@ -1,16 +1,17 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "@clerk/express";
-import { randomBytes, randomUUID, createHash } from "crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { randomBytes, randomUUID, createHash, randomInt } from "crypto";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import {
   db,
   pairingTokensTable,
   usersTable,
   childDeviceTokensTable,
   childGuardiansTable,
+  subscriptionsTable,
 } from "@workspace/db";
 import { ensureParentUser } from "../lib/parentUser";
-import { isGuardianOfChild } from "../lib/guardians";
+import { getGuardianChildIds, isGuardianOfChild } from "../lib/guardians";
 import { z } from "zod/v4";
 import { allowPairingAttempt } from "../lib/pairingRateLimit";
 import { disconnectDeviceSockets } from "../signaling/revocation";
@@ -23,6 +24,10 @@ function generateToken(): string {
   // 24 bytes -> 32 char base64url token. Curto o bastante pra caber num QR
   // pequeno, longo o bastante pra não ser adivinhável.
   return randomBytes(24).toString("base64url");
+}
+
+function generatePairingCode(): string {
+  return randomInt(0, 100_000_000).toString().padStart(8, "0");
 }
 
 const createPairingSchema = z.object({
@@ -38,8 +43,8 @@ const createPairingSchema = z.object({
 
 /**
  * POST /api/pairing
- * Responsável autenticado cria um perfil de Criança e recebe um token de
- * pareamento para gerar o QR code no frontend.
+ * Responsável autenticado cria um perfil de Criança e recebe um código
+ * temporário de 8 dígitos para informar no app nativo.
  * Não depende de telefone/SIM — só requer o Responsável autenticado (Clerk).
  */
 router.post("/pairing", async (req, res) => {
@@ -59,14 +64,30 @@ router.post("/pairing", async (req, res) => {
   // lib/parentUser.ts).
   const parentUser = await ensureParentUser(auth.userId);
   const parentId = parentUser.id;
+  const [subscription] = await db.select({ childrenLimit: subscriptionsTable.childrenLimit, status: subscriptionsTable.status, plan: subscriptionsTable.plan })
+    .from(subscriptionsTable).where(eq(subscriptionsTable.parentUserId, parentId)).limit(1);
+  if (subscription?.plan === "paid" && subscription.status === "active") {
+    const children = await getGuardianChildIds(parentId);
+    const pendingPairings = await db.select({ id: pairingTokensTable.id }).from(pairingTokensTable).where(and(
+      eq(pairingTokensTable.parentId, parentId),
+      isNull(pairingTokensTable.usedAt),
+      isNull(pairingTokensTable.reconnectChildId),
+      gt(pairingTokensTable.expiresAt, new Date()),
+    ));
+    if (children.length + pendingPairings.length >= subscription.childrenLimit) {
+      return res.status(403).json({ error: "children_limit_reached", childrenLimit: subscription.childrenLimit });
+    }
+  }
 
   const token = generateToken();
+  const pairingCode = generatePairingCode();
   const expiresAt = new Date(Date.now() + PAIRING_TOKEN_TTL_MINUTES * 60 * 1000);
 
   const [pairing] = await db
     .insert(pairingTokensTable)
     .values({
       token,
+      pairingCode,
       parentId,
       childName: parsed.data.childName,
       childAge: parsed.data.childAge,
@@ -79,6 +100,7 @@ router.post("/pairing", async (req, res) => {
 
   return res.status(201).json({
     token: pairing.token,
+    pairingCode: pairing.pairingCode,
     // URL que vai virar o QR code no frontend do Responsável.
     joinUrl: `${process.env.APP_URL ?? ""}/join?token=${pairing.token}`,
     expiresAt: pairing.expiresAt,
@@ -118,12 +140,14 @@ router.post("/pairing/reconnect", async (req, res) => {
   if (!child) return res.status(403).json({ error: "not_the_parent_of_this_child" });
 
   const token = generateToken();
+  const pairingCode = generatePairingCode();
   const expiresAt = new Date(Date.now() + PAIRING_TOKEN_TTL_MINUTES * 60 * 1000);
 
   const [pairing] = await db
     .insert(pairingTokensTable)
     .values({
       token,
+      pairingCode,
       parentId: auth.userId,
       childName: child.name,
       reconnectChildId: child.id,
@@ -133,6 +157,7 @@ router.post("/pairing/reconnect", async (req, res) => {
 
   return res.status(201).json({
     token: pairing.token,
+    pairingCode: pairing.pairingCode,
     joinUrl: `${process.env.APP_URL ?? ""}/join?token=${pairing.token}`,
     expiresAt: pairing.expiresAt,
     childName: child.name,
@@ -140,19 +165,22 @@ router.post("/pairing/reconnect", async (req, res) => {
 });
 
 const confirmPairingSchema = z.object({
-  token: z.string().min(1).max(256),
-});
+  token: z.string().min(1).max(256).optional(),
+  code: z.string().regex(/^\d{8}$/).optional(),
+}).refine((value) => Boolean(value.token) !== Boolean(value.code));
 
 /**
  * POST /api/pairing/confirm
  *
- * Consome o QR e cria/reconecta o dispositivo dentro de uma transacao.
- * FOR UPDATE serializa confirmacoes simultaneas do mesmo token.
+ * Consome o código de 8 dígitos (apps nativos) ou o token QR legado (PWA),
+ * criando/reconectando o dispositivo dentro de uma transação.
+ * FOR UPDATE serializa confirmações simultâneas da mesma credencial.
  */
 router.post("/pairing/confirm", async (req, res) => {
   // Conta também corpos inválidos; a gravação é independente da transação
   // de pareamento para não desaparecer em um rollback.
-  if (!(await allowPairingAttempt(req, res, "confirm"))) return;
+  const submittedCode = typeof req.body?.code === "string";
+  if (!(await allowPairingAttempt(req, res, submittedCode ? "confirm_code" : "confirm"))) return;
   const parsed = confirmPairingSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -173,7 +201,9 @@ router.post("/pairing/confirm", async (req, res) => {
     const [pairing] = await tx
       .select()
       .from(pairingTokensTable)
-      .where(eq(pairingTokensTable.token, parsed.data.token))
+      .where(parsed.data.code
+        ? eq(pairingTokensTable.pairingCode, parsed.data.code)
+        : eq(pairingTokensTable.token, parsed.data.token!))
       .for("update")
       .limit(1);
 

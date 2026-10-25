@@ -195,6 +195,7 @@ router.get(
       conversation,
       messages,
       parentName: parent?.name ?? null,
+      parentId: parent?.id ?? null,
       parentRelationship: parent?.relationship ?? null,
     });
   },

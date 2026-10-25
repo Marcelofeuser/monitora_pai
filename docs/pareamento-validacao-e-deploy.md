@@ -6,11 +6,17 @@ esta sequência deriva do resumo fornecido e não substitui um documento ausente
 
 ## Contrato desta alteração
 
+- O QR de instalação é independente do pareamento e deverá apontar para uma
+  página que encaminhe à loja correta. Os links oficiais das lojas ainda não
+  foram publicados/configurados; o app nativo não deve apresentar um QR de
+  pareamento como se fosse o QR de download.
 - Mantém QR com token aleatório de 192 bits, validade de 15 minutos e uso único.
-- Código numérico NÃO está implementado. `pairing_code` e `attempt_count` são
-  campos reservados do schema existente; a migration os alinha ao banco.
-  O contador efetivo por origem fica em `pairing_rate_limits`.
-- Confirmar: até 30 tentativas por origem em uma janela fixa de 15 minutos.
+- Os apps nativos usam código numérico aleatório de 8 dígitos, válido por
+  15 minutos e de uso único. O endpoint ainda aceita tokens longos para manter
+  compatibilidade com a PWA já publicada. A coluna `pairing_code` tem índice
+  único. O contador efetivo por origem fica em `pairing_rate_limits`.
+- Confirmar token legado: até 30 tentativas por origem; confirmar código
+  numérico: até 5 tentativas por origem, em janela fixa de 15 minutos.
   Inclui corpos JSON válidos com conteúdo inválido, QRs inválidos e sucessos.
 - Gerar/reconectar: até 20 tentativas somadas por responsável em 15 minutos,
   incluindo erros de validação e de autorização de criança após autenticação.
@@ -38,6 +44,9 @@ esta sequência deriva do resumo fornecido e não substitui um documento ausente
   Os testes criam/removem um schema aleatório e não usam a `DATABASE_URL`
   da aplicação como alternativa. Nunca apontar para produção.
 - [ ] `pnpm --filter @workspace/api-server run build`.
+- [ ] `pnpm --filter @workspace/controle-parental run typecheck`.
+- [ ] Gerar builds nativos de desenvolvimento e testar o fluxo em aparelhos
+  Android e iOS, incluindo expiração, código usado e limite de tentativas.
 - [ ] `pnpm --filter @workspace/controle-parental-pwa run build`.
 - [ ] `git diff --check`.
 

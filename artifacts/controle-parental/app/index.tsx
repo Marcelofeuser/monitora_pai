@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { Feather } from '@expo/vector-icons';
@@ -18,6 +19,8 @@ import {
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
+import { ChildApp } from '@/native/ChildApp';
+import { ParentApp } from '@/native/ParentApp';
 
 type Role = 'parent' | 'child';
 type Section = 'home' | 'conversations' | 'location' | 'settings';
@@ -108,23 +111,26 @@ function EmptyState({
 
 function Onboarding({
   colors,
+  fixedRole,
   onSave,
 }: {
   colors: ReturnType<typeof useColors>;
+  fixedRole?: Role;
   onSave: (profile: Profile) => Promise<void>;
 }) {
-  const [step, setStep] = useState<'role' | 'profile'>('role');
-  const [role, setRole] = useState<Role>('parent');
+  const [step, setStep] = useState<'role' | 'profile'>(fixedRole ? 'profile' : 'role');
+  const [role, setRole] = useState<Role>(fixedRole ?? 'parent');
   const [responsibleName, setResponsibleName] = useState('');
   const [childName, setChildName] = useState('');
   const [saving, setSaving] = useState(false);
-  const isParent = role === 'parent';
+  const activeRole = fixedRole ?? role;
+  const isParent = activeRole === 'parent';
   const canContinue = isParent ? responsibleName.trim().length > 1 && childName.trim().length > 1 : childName.trim().length > 1;
 
   const save = async () => {
     if (!canContinue) return;
     setSaving(true);
-    await onSave({ role, responsibleName: responsibleName.trim(), childName: childName.trim() });
+    await onSave({ role: activeRole, responsibleName: responsibleName.trim(), childName: childName.trim() });
     setSaving(false);
   };
 
@@ -153,7 +159,7 @@ function Onboarding({
           </>
         ) : (
           <>
-            <Pressable onPress={() => setStep('role')} style={styles.backRow}><Feather name="arrow-left" size={17} color={colors.foreground} /><Text style={[styles.backText, { color: colors.foreground }]}>Voltar</Text></Pressable>
+            {!fixedRole && <Pressable onPress={() => setStep('role')} style={styles.backRow}><Feather name="arrow-left" size={17} color={colors.foreground} /><Text style={[styles.backText, { color: colors.foreground }]}>Voltar</Text></Pressable>}
             <Text style={[styles.onboardingTitle, { color: colors.foreground }]}>{isParent ? 'Vamos começar pela família.' : 'Como podemos chamar você?'}</Text>
             <Text style={[styles.onboardingBody, { color: colors.mutedForeground }]}>{isParent ? 'Esses dados ficam somente neste dispositivo até você conectar sua conta.' : 'Digite seu nome para personalizar seu espaço.'}</Text>
             {isParent && <Field label="Seu nome" value={responsibleName} onChangeText={setResponsibleName} placeholder="Digite seu nome" colors={colors} autoFocus />}
@@ -284,9 +290,10 @@ function PrivateLink({ colors, onPress }: { colors: ReturnType<typeof useColors>
   return <Pressable onPress={onPress} style={({ pressed }) => [styles.privateCard, { backgroundColor: colors.accent }, pressed && styles.pressed]}><View style={[styles.privateIcon, { backgroundColor: alpha(colors.primaryForeground, '35') }]}><Feather name="heart" size={18} color={colors.accentForeground} /></View><View style={styles.privateCopy}><Text style={[styles.privateTitle, { color: colors.accentForeground }]}>Canal privado</Text><Text style={[styles.privateText, { color: colors.accentForeground }]}>A conversa da família nunca é espelhada.</Text></View><Feather name="arrow-up-right" size={19} color={colors.accentForeground} /></Pressable>;
 }
 
-export default function HomeScreen() {
+function PrototypeHomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const fixedRole = Constants.expoConfig?.extra?.appRole as Role | undefined;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [contacts, setContacts] = useState<string[]>([]);
   const [section, setSection] = useState<Section>('home');
@@ -320,7 +327,7 @@ export default function HomeScreen() {
   };
 
   if (loading) return <View style={[styles.loading, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.primary} /></View>;
-  if (!profile) return <Onboarding colors={colors} onSave={saveProfile} />;
+  if (!profile) return <Onboarding colors={colors} fixedRole={fixedRole} onSave={saveProfile} />;
 
   const openSection = (nextSection: Section) => {
     setSection(nextSection);
@@ -346,6 +353,13 @@ export default function HomeScreen() {
       </View>
     </View>
   );
+}
+
+export default function HomeScreen() {
+  const role = Constants.expoConfig?.extra?.appRole as Role | undefined;
+  if (role === 'parent') return <ParentApp />;
+  if (role === 'child') return <ChildApp />;
+  return <PrototypeHomeScreen />;
 }
 
 function ChildView({ profile, colors, onOpen }: { profile: Profile; colors: ReturnType<typeof useColors>; onOpen: (section: Section) => void }) {

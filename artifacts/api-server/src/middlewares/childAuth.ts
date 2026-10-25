@@ -5,7 +5,7 @@ import { db, childDeviceTokensTable } from "@workspace/db";
 
 // A Criança autentica com o token emitido no pareamento. Somente tokens
 // registrados e ainda não revogados podem acessar as rotas protegidas.
-export type ChildAuthedRequest = Request<Record<string, string>> & { childId?: string };
+export type ChildAuthedRequest = Request<Record<string, string>> & { childId?: string; childDeviceId?: string };
 
 export const requireChildAuth: RequestHandler = async (
   req: ChildAuthedRequest,
@@ -32,6 +32,7 @@ export const requireChildAuth: RequestHandler = async (
     }
 
     req.childId = row.childId;
+    req.childDeviceId = row.id;
 
     // Best-effort: a falha ao registrar o último uso não invalida a sessão.
     void db
