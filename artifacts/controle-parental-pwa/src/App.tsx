@@ -4059,7 +4059,10 @@ function ClerkApp() {
 
 function App() {
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
+    // The branded sales site reverse-proxies the superadmin routes under
+    // amparakids.com. Do not let the PWA service worker claim that site's root
+    // scope; it could otherwise cache or intercept the public landing page.
+    if ('serviceWorker' in navigator && window.location.hostname !== 'amparakids.com') {
       navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?v=4`, { updateViaCache: 'none' }).catch(() => undefined);
     }
   }, []);
