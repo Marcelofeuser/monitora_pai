@@ -61,17 +61,21 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
     }
   };
 
-  const pickPhoto = async () => {
+  const pickMedia = async () => {
     setError(null);
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      setError('Permita o acesso às fotos para anexar uma imagem.');
+      setError('Permita o acesso às fotos e vídeos para anexar uma mídia.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.85 });
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
-    const type = asset.mimeType ?? 'image/jpeg';
+    if (asset.fileSize && asset.fileSize > 60 * 1024 * 1024) {
+      setError('O arquivo é maior que o limite de 60 MB. Escolha uma mídia menor.');
+      return;
+    }
+    const type = asset.mimeType ?? (asset.type === 'video' ? 'video/mp4' : 'image/jpeg');
     const extension = type.split('/')[1]?.replace(/[^a-z0-9]/gi, '') || 'jpg';
     await submit({
       file: { uri: asset.uri, name: asset.fileName || `ampara-${Date.now()}.${extension}`, type },
@@ -133,7 +137,7 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
       )}
       {!!error && <Text accessibilityRole="alert" style={[styles.error, { color: colors.destructive }]}>{error}</Text>}
       {!readOnly && <View style={[styles.composer, { borderTopColor: colors.border }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Anexar foto" disabled={sending} onPress={() => void pickPhoto()} style={[styles.toolButton, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Anexar foto ou vídeo" disabled={sending} onPress={() => void pickMedia()} style={[styles.toolButton, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={{ color: colors.primary, fontSize: 19 }}>＋</Text>
         </Pressable>
         <TextInput

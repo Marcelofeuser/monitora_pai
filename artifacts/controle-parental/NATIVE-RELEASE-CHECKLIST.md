@@ -7,7 +7,7 @@
 - [x] Lista de crianças da família e geração/reconexão pelo código de 8 dígitos.
 - [x] App Criança aceita o código e guarda o token em armazenamento seguro do sistema.
 - [x] Conversa privada de texto entre responsável e criança, com atualização automática.
-- [x] Envio de fotos e figurinhas no chat privado nativo, usando as rotas de mídia já existentes.
+- [x] Envio de fotos, vídeos e figurinhas no chat privado nativo, usando as rotas de mídia já existentes.
 - [x] Responsável consulta o espelho de conversas da criança com contatos aprovados, em modo somente leitura; o chat privado familiar fica fora do espelho.
 - [x] Apps nativos permitem ao responsável criar grupos com contatos já aprovados, e à criança abrir os grupos; ambos enviam e recebem texto, fotos e figurinhas.
 - [x] App do responsável permite cadastrar contatos, gerar/compartilhar convites por QR e bloquear/reativar acesso.
@@ -24,7 +24,7 @@
 
 - [x] Implementar chamadas de voz/vídeo entre Responsável e Criança enquanto ambos os apps estão abertos.
 - [ ] Configurar chamadas recebidas com o app em segundo plano/fechado usando push nativo e validar em aparelhos reais.
-- [ ] Portar e validar os demais recursos que já existem no PWA (mídias adicionais e localização em segundo plano). Gestão de contatos, grupos e limite de uso do app já está no cliente nativo.
+- [ ] Portar e validar os demais recursos que já existem no PWA (áudio e localização em segundo plano). Gestão de contatos, grupos, fotos/vídeos e limite de uso do app já está no cliente nativo.
 - [ ] Configurar notificações push nativas para iOS e Android e testar com aparelhos reais.
 - [ ] Instalar, parear e testar cada app em aparelhos iPhone e Android, incluindo reconexão e revogação.
 - [ ] Validar chamadas de voz/vídeo e permissões de microfone/câmera em aparelhos iPhone e Android.
