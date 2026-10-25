@@ -54,6 +54,13 @@ export type ChildLocation = {
   accuracyMeters: number | null;
   recordedAt: string;
 };
+export type ScreenTimeStatus = {
+  dailyLimitMinutes: number | null;
+  minutesUsedToday: number;
+  locked: boolean;
+  lockReason: 'manual' | 'limit' | null;
+};
+export type ChildLockStatus = { locked: boolean; lockReason: 'manual' | 'limit' | null };
 
 function apiUrl(path: string): string {
   if (!API_URL) {
@@ -168,6 +175,48 @@ export async function createParentContactInvite(contactId: string, authToken: st
   const response = await fetch(apiUrl(`/api/contacts/${encodeURIComponent(contactId)}/invite`), {
     method: 'POST',
     headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function fetchParentScreenTime(childId: string, authToken: string): Promise<ScreenTimeStatus> {
+  const response = await fetch(apiUrl(`/api/screen-time/${encodeURIComponent(childId)}`), {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function setParentDailyLimit(childId: string, dailyLimitMinutes: number | null, authToken: string): Promise<void> {
+  const response = await fetch(apiUrl(`/api/screen-time/${encodeURIComponent(childId)}/limit`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({ dailyLimitMinutes }),
+  });
+  if (!response.ok) throw await readError(response);
+}
+
+export async function setParentChildLock(childId: string, locked: boolean, authToken: string): Promise<void> {
+  const response = await fetch(apiUrl(`/api/screen-time/${encodeURIComponent(childId)}/${locked ? 'lock' : 'unlock'}`), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+}
+
+export async function fetchChildScreenTimeStatus(deviceToken: string): Promise<ChildLockStatus> {
+  const response = await fetch(apiUrl('/api/child/screen-time/status'), {
+    headers: { 'X-Child-Token': deviceToken },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function sendChildScreenTimeHeartbeat(deviceToken: string): Promise<ChildLockStatus> {
+  const response = await fetch(apiUrl('/api/child/screen-time/heartbeat'), {
+    method: 'POST',
+    headers: { 'X-Child-Token': deviceToken },
   });
   if (!response.ok) throw await readError(response);
   return response.json();
