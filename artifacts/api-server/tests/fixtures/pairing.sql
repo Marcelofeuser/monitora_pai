@@ -5,6 +5,20 @@ CREATE TABLE users (
   relationship text, onboarding_completed text DEFAULT 'false',
   photo_url text, social_links jsonb, created_at timestamp NOT NULL DEFAULT now()
 );
+CREATE TYPE plan AS ENUM ('free', 'paid');
+CREATE TYPE subscription_status AS ENUM ('active', 'past_due', 'canceled');
+CREATE TABLE subscriptions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  parent_user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plan plan NOT NULL DEFAULT 'free',
+  status subscription_status NOT NULL DEFAULT 'active',
+  children_limit integer NOT NULL DEFAULT 1,
+  guardians_limit integer NOT NULL DEFAULT 1,
+  current_period_end timestamp,
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  created_at timestamp NOT NULL DEFAULT now()
+);
 CREATE TABLE pairing_tokens (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), token text NOT NULL UNIQUE,
   parent_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
