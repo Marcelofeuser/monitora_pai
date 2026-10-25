@@ -28,6 +28,7 @@
 - [ ] Recompilar os APKs Android de debug com o espelho nativo recém-adicionado; os APKs já existentes foram compilados antes desta mudança.
 - [ ] Configurar os projetos nativos no Clerk com os dois bundle/application IDs.
 - [ ] Criar builds assinados com as contas de publicação Apple e Google.
+- [ ] Criar/confirmar uma chave de upload Android e configurar seus quatro valores secretos no ambiente de build. O Gradle agora bloqueia builds `release` sem uma assinatura de lançamento; a chave de depuração não é aceita para publicação.
 - [ ] Instalar e testar os APKs Android em aparelhos reais; não havia aparelho/emulador conectado neste Mac.
 - [ ] Preencher as fichas das lojas, política de privacidade, termos, classificação etária e declarações de dados/permissões.
 - [ ] Publicar os quatro apps e configurar no serviço `landing page apps` as URLs `CHILD_ANDROID_STORE_URL`, `CHILD_IOS_STORE_URL`, `PARENT_ANDROID_STORE_URL` e `PARENT_IOS_STORE_URL`.

@@ -40,6 +40,16 @@ identificador do pacote conferidos. São APKs de depuração para instalação e
 teste; a Google Play exige um build de lançamento assinado com a chave da
 conta da empresa.
 
+## Assinatura de lançamento Android
+
+O build `release` não usa a chave de depuração. Para gerar um APK/AAB de
+lançamento, configure no ambiente de build `ANDROID_KEYSTORE_FILE`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` e `ANDROID_KEY_PASSWORD`.
+O projeto falha explicitamente se alguém tentar gerar um artefato `release`
+sem as quatro configurações. Guarde o arquivo keystore e as senhas em local
+seguro e fora do repositório; a chave de upload deve ser preservada para as
+próximas atualizações do app.
+
 Antes de iniciar, copie `.env.example` para `.env` e configure a URL pública
 do `api-server` e a publishable key do Clerk do ambiente de staging. A chave
 publishable é própria do cliente; não use a secret key do Clerk no app.
