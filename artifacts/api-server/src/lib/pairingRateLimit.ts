@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import type { Request, Response } from "express";
@@ -27,7 +27,7 @@ export async function consumePairingAttempt(sourceHash: string, limit: number) {
   const result = await db.execute<{ attempt_count: number; retry_after: number }>(sql`
     INSERT INTO pairing_rate_limits AS bucket
       (id, source_hash, window_started_at, attempt_count, created_at, updated_at)
-    VALUES (${sourceHash}, ${sourceHash}, statement_timestamp() AT TIME ZONE 'UTC', 1,
+    VALUES (${randomUUID()}, ${sourceHash}, statement_timestamp() AT TIME ZONE 'UTC', 1,
       statement_timestamp() AT TIME ZONE 'UTC', statement_timestamp() AT TIME ZONE 'UTC')
     ON CONFLICT (source_hash) DO UPDATE SET
       window_started_at = CASE
