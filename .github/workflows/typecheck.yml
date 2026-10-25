@@ -2,13 +2,27 @@ name: Typecheck
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging, fix/pareamento-seguro]
   pull_request:
     branches: [main]
 
 jobs:
   typecheck:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-ci-only
+          POSTGRES_DB: pairing_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -24,3 +38,18 @@ jobs:
 
       - name: Typecheck (libs + api-server + pwa + scripts)
         run: pnpm run typecheck
+
+      - name: API tests (including isolated PostgreSQL concurrency tests)
+        env:
+          PAIRING_TEST_DATABASE_URL: postgres://postgres:local-ci-only@localhost:5432/pairing_test
+          PAIRING_RATE_LIMIT_SECRET: ci-test-secret-with-at-least-32-characters
+        run: pnpm --filter @workspace/api-server test
+
+      - name: Build API and PWA
+        env:
+          # Chave fictícia somente para impedir tree-shaking do app autenticado.
+          # O deploy usa a chave pública real configurada no ambiente.
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
+        run: |
+          pnpm --filter @workspace/api-server run build
+          pnpm --filter @workspace/controle-parental-pwa run build

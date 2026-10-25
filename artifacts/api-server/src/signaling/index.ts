@@ -6,6 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { childDeviceTokensTable, contactDeviceTokensTable, db, usersTable } from "@workspace/db";
 import { authorizeCall } from "../lib/calls";
 import { logger } from "../lib/logger";
+import { getClerkAuthorizedParties } from "../lib/clerkConfig";
 import {
   callRegistry,
   finishCall,
@@ -14,6 +15,7 @@ import {
   type ActiveCall,
 } from "./callState";
 import { sendIncomingCallPush } from "./push";
+import { registerDeviceSocketDisconnector } from "./revocation";
 
 // LIMITE CONHECIDO: usa o adapter em memória padrão do Socket.IO -- funciona
 // hoje porque o api-server roda em 1 réplica só (confirmado no Railway,
@@ -26,7 +28,11 @@ import { sendIncomingCallPush } from "./push";
 const RING_TIMEOUT_MS = 40_000;
 const DISCONNECT_GRACE_MS = 15_000;
 
-type Identity = { userId: string; role: "parent" | "child" | "contact" };
+type Identity = {
+  userId: string;
+  role: "parent" | "child" | "contact";
+  deviceId?: string;
+};
 
 type HandshakeAuth = {
   clerkToken?: string;
@@ -94,14 +100,7 @@ async function resolveIdentity(auth: HandshakeAuth): Promise<Identity | null> {
           headers: { Authorization: `Bearer ${auth.clerkToken}` },
         }),
         {
-          // Mesma lista de app.ts (clerkMiddleware) -- ver comentário lá.
-          authorizedParties: [
-            "https://pwa-production-336a.up.railway.app",
-            "https://api-server-production-c955.up.railway.app",
-            "https://responsavel.amparakids.com",
-            "https://crianca.amparakids.com",
-            "https://amparakids.com",
-          ],
+          authorizedParties: getClerkAuthorizedParties(),
         },
       );
       const authObj = requestState.toAuth();
@@ -126,7 +125,9 @@ async function resolveIdentity(auth: HandshakeAuth): Promise<Identity | null> {
         .from(childDeviceTokensTable)
         .where(eq(childDeviceTokensTable.tokenHash, tokenHash))
         .limit(1);
-      if (row) return { userId: row.childId, role: "child" };
+      if (row && row.revokedAt == null) {
+        return { userId: row.childId, role: "child", deviceId: row.id };
+      }
       return null;
     } catch (err) {
       logger.warn({ err }, "signaling_child_token_lookup_failed");
@@ -177,11 +178,22 @@ export function attachSignaling(httpServer: HttpServer): SocketIOServer {
     cors: { origin: true, credentials: true },
   });
 
+  registerDeviceSocketDisconnector((deviceId) => {
+    for (const socket of io.sockets.sockets.values()) {
+      if (socket.data.childDeviceId === deviceId) {
+        socket.disconnect(true);
+      }
+    }
+  });
+
   io.use(async (socket, next) => {
     const identity = await resolveIdentity((socket.handshake.auth ?? {}) as HandshakeAuth);
     if (!identity) return next(new Error("not_authenticated"));
     socket.data.userId = identity.userId;
     socket.data.role = identity.role;
+    if (identity.role === "child" && identity.deviceId) {
+      socket.data.childDeviceId = identity.deviceId;
+    }
     next();
   });
 

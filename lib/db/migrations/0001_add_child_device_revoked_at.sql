@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE child_device_tokens
+ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMP;
+
+COMMIT;

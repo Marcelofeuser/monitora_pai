@@ -22,7 +22,7 @@ async function resolveChildIdFromHeader(req: Request): Promise<string | null> {
     .from(childDeviceTokensTable)
     .where(eq(childDeviceTokensTable.tokenHash, tokenHash))
     .limit(1);
-  return row?.childId ?? null;
+  return row && row.revokedAt == null ? row.childId : null;
 }
 
 async function resolveContactUserIdFromHeader(req: Request): Promise<string | null> {

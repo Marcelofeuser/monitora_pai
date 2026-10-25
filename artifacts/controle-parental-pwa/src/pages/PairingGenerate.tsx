@@ -134,7 +134,10 @@ export function PairingGenerate() {
       setStatus('idle');
     } catch (err) {
       setStatus('error');
-      setErrorMessage(err instanceof Error ? err.message : 'Erro desconhecido ao gerar o pareamento.');
+      const message = err instanceof Error ? err.message : 'Erro desconhecido ao gerar o pareamento.';
+      setErrorMessage(message.includes('children_limit_reached')
+        ? 'Este plano já atingiu o limite de crianças. O titular da assinatura pode revisar o plano para incluir mais perfis.'
+        : message);
     }
   }
 

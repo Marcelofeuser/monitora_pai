@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import healthRouter from "./health";
 import pairingRouter from "./pairing";
 import contactsRouter from "./contacts";
 import messagesRouter from "./messages";
@@ -12,10 +11,12 @@ import groupsRouter from "./groups";
 import meRouter from "./me";
 import guardiansRouter from "./guardians";
 import callsRouter from "./calls";
+import devicesRouter from "./devices";
+import adminRouter from "./admin";
+import billingRouter from "./billing";
 
 const router: IRouter = Router();
 
-router.use(healthRouter);
 router.use(pairingRouter);
 router.use(contactsRouter);
 router.use(messagesRouter);
@@ -28,5 +29,8 @@ router.use(groupsRouter);
 router.use(meRouter);
 router.use(guardiansRouter);
 router.use(callsRouter);
+router.use(devicesRouter);
+router.use("/admin", adminRouter);
+router.use("/billing", billingRouter);
 
 export default router;

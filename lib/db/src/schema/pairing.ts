@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, integer, uniqueIndex, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -9,6 +10,9 @@ import { usersTable } from "./users";
 export const pairingTokensTable = pgTable("pairing_tokens", {
   id: uuid("id").primaryKey().defaultRandom(),
   token: text("token").notNull().unique(),
+  // Código numérico temporário. NULL para registros antigos e pareamentos legados.
+  pairingCode: text("pairing_code"),
+  attemptCount: integer("attempt_count").notNull().default(0),
   // TEXT: referencia usersTable.id, que agora é text (Clerk userId pro
   // Responsável). Ver comentário em schema/users.ts.
   parentId: text("parent_id")
@@ -37,7 +41,10 @@ export const pairingTokensTable = pgTable("pairing_tokens", {
   // childId). Nulo = pareamento normal, cria Criança nova (fluxo de sempre).
   reconnectChildId: text("reconnect_child_id").references(() => usersTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("pairing_tokens_pairing_code_unique").on(table.pairingCode),
+  check("pairing_tokens_attempt_count_nonnegative", sql`${table.attemptCount} >= 0`),
+]);
 
 export const insertPairingTokenSchema = createInsertSchema(pairingTokensTable).omit({
   id: true,
