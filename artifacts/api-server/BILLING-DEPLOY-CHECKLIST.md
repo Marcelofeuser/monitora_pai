@@ -1,6 +1,6 @@
-# Checklist de publicação de cobrança no staging
+# Configuração de cobrança — staging e produção
 
-Não executar em produção. O ambiente Stripe usado nesta primeira publicação é o modo de teste.
+Este documento separa Stripe de teste de Stripe live. Nunca use IDs ou segredos de teste para cobrar clientes reais.
 
 ## Variáveis do `api-server` de staging
 
@@ -14,7 +14,7 @@ Não executar em produção. O ambiente Stripe usado nesta primeira publicação
 
 Não registrar valores secretos em Git, logs ou mensagens.
 
-**Estado conferido em 25/10/2026:** `STRIPE_SECRET_KEY` de teste, `STRIPE_WEBHOOK_SECRET` e os nove IDs de preço estão ativos no `api-server` de staging. A consulta pela CLI não mostra alterações ainda pendentes no painel; a captura do Railway confirma que `SUPERADMIN_CLERK_USER_IDS`, `CLOUDFLARE_TURN_KEY_ID` e `CLOUDFLARE_TURN_API_TOKEN` estão adicionadas como três alterações pendentes no `api-server` de staging. Elas só entram em vigor quando forem aplicadas e o serviço for implantado. A configuração ativa do PWA de staging tem `VITE_CLERK_PUBLISHABLE_KEY` e `VITE_API_URL` apontando para a API de staging.
+**Estado conferido em 25/10/2026:** `STRIPE_SECRET_KEY` de teste, `STRIPE_WEBHOOK_SECRET`, os nove IDs de preço, `SUPERADMIN_CLERK_USER_IDS`, `CLOUDFLARE_TURN_KEY_ID` e `CLOUDFLARE_TURN_API_TOKEN` estão ativos no `api-server` de staging. O PWA de staging tem `VITE_CLERK_PUBLISHABLE_KEY` e `VITE_API_URL` apontando para a API de staging.
 
 ## Variáveis do `pwa` de staging
 
@@ -26,30 +26,16 @@ Confirme no serviço `pwa` (e não no `api-server`) as variáveis Vite usadas no
 
 O Railway indicou `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` como ausente no serviço API. Este repositório usa Vite e lê `VITE_CLERK_PUBLISHABLE_KEY` no PWA; não copie a variável `NEXT_PUBLIC_*` para a API como substituto. Verifique o nome e o serviço de destino antes do deploy.
 
-## Banco de dados de staging
+## Banco de dados
 
-**Estado em 25/10/2026:** as migrations `0004` e `0005` foram aplicadas ao Postgres de `staging` e verificadas por consulta. Não reaplicar nesse ambiente.
+**Estado verificado em 25/10/2026:** as migrations `0001` a `0005` estão presentes no Postgres de produção. `0002`, `0004` e `0005` foram aplicadas após uma inspeção somente de leitura confirmar que estavam ausentes; tabelas e colunas foram conferidas depois. `0004` e `0005` também já estavam aplicadas em staging.
 
-As migrations não são executadas automaticamente no deploy. Antes de publicar a API:
+As migrations não rodam automaticamente no deploy. Em futuras alterações, confirme o ambiente e o schema antes de executar SQL. Não apague colunas/tabelas como rollback. A migration 0005 preserva valores existentes, usa limite 1 por padrão para novas assinaturas, e o webhook grava o limite comprado no Stripe.
 
-1. Confirme que está conectado ao banco do ambiente `staging`.
-2. Confirme que `subscriptions.stripe_subscription_id`, a tabela `vouchers`, a tabela `ambassadors` e a tabela `ambassador_commissions` ainda não existem. As migrations não são idempotentes; não as reaplique se o schema já estiver presente.
-3. Aplique `lib/db/migrations/0004_admin_billing_and_growth.sql` uma vez.
-4. Aplique `lib/db/migrations/0005_subscription_guardians_limit.sql` uma vez.
-5. Confirme que ambas terminaram com `COMMIT` e que `subscriptions.guardians_limit` existe.
+## Estado de produção e próximos passos
 
-Se não houver conexão de banco disponível pela Railway CLI, aplique os dois arquivos por um cliente SQL conectado explicitamente ao banco PostgreSQL de `staging`. Não cole `DATABASE_URL` ou credenciais aqui. Pare se o ambiente ou o schema existente não puderem ser confirmados.
+O PR #6 foi mesclado em `main` no commit `6f0573b` em 25/10/2026. `site-vendas` e `landing page apps` publicaram com sucesso. O primeiro deploy da API falhou por falta de `PAIRING_RATE_LIMIT_SECRET`; um segredo aleatório foi adicionado sem expor seu valor e um novo deploy começou. O primeiro build do PWA falhou por uma variável vazia com nome inválido; a entrada foi removida e um novo build foi solicitado. Confira os estados finais no Railway antes de considerar a release operacional.
 
-As migrations usam transações. A migration 0005 mantém limite 4 para as linhas existentes e deixa limite 1 como padrão para novas assinaturas; o webhook grava o limite comprado no Stripe.
+Stripe de produção ainda não pode cobrar. Faltam configurar no `api-server` de produção uma `STRIPE_SECRET_KEY` live, o `STRIPE_WEBHOOK_SECRET` do endpoint live e os nove `STRIPE_PRICE_KIDS_*` live (três planos × três períodos). Não reutilize os valores de teste.
 
-## Publicação e verificação
-
-Depois de a branch conectada ao Railway conter as alterações e o banco de staging estar atualizado, publique `api-server`, `pwa` e `site-vendas` no ambiente `staging`. Não publique produção nesta etapa.
-
-Valide em staging:
-
-1. `/billing` abre depois do login e mostra os três planos e períodos corretos.
-2. O checkout de teste cria uma sessão Stripe e retorna ao app após cancelar ou concluir.
-3. O webhook Stripe entrega os quatro eventos configurados e a assinatura/limites aparecem atualizados no banco.
-4. `/superadmin` permite acesso apenas ao ID listado em `SUPERADMIN_CLERK_USER_IDS`; crie um voucher e um embaixador de teste.
-5. Confirme que os limites de crianças e responsáveis não removem acessos existentes.
+Depois que API e PWA estiverem estáveis, validar login, `/billing`, Checkout e webhook de teste no staging; em produção, usar apenas chaves e preços live. Validar também `/superadmin`, vouchers e embaixadores com o usuário autorizado.

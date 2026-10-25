@@ -19,6 +19,8 @@ No `api-server` de produção:
 
 O domínio raiz `amparakids.com` precisa continuar associado ao `site-vendas`. As rotas `/assets`, `/sign-in`, `/sign-up` e as rotas internas do app também passam pelo proxy, para os recursos, autenticação e links do painel funcionarem no mesmo domínio.
 
-## Publicação
+## Estado depois do merge do PR #6
 
-Antes de liberar a funcionalidade em produção, conferir a publicação de `site-vendas` e `pwa`, a allowlist Clerk, o usuário superadmin e as migrations/variáveis do `api-server`. O código do portal e as migrations de cobrança ainda precisam ser incluídos na release de produção; não basta publicar somente o redirecionamento da landing page.
+O portal e o proxy estão no `main` desde o PR #6. O deploy de `site-vendas` está ativo e `https://amparakids.com/superadmin` respondeu HTTP 200. As migrations `0001` a `0005` foram verificadas no Postgres de produção, e `SUPERADMIN_CLERK_USER_IDS` está configurada. A release ainda depende de a API e o PWA terminarem seus deployments e da validação autenticada do portal.
+
+O estado completo dos serviços e dos apps está em [AMPARA-KIDS-MAPA-ESTRUTURAL.md](./AMPARA-KIDS-MAPA-ESTRUTURAL.md).
