@@ -75,6 +75,7 @@ module.exports = ({ config }) => {
     },
   ]);
   plugins.push('./plugins/with-android-packaging');
+  plugins.push('./plugins/with-ios-deployment-target');
   if (variant.role === 'child') {
     plugins.push('./plugins/with-child-ios-pods');
   }
@@ -99,7 +100,11 @@ module.exports = ({ config }) => {
           : []),
       ],
     },
-    ios: { ...config.ios, bundleIdentifier: variant.package },
+    ios: {
+      ...config.ios,
+      bundleIdentifier: variant.package,
+      deploymentTarget: '15.1',
+    },
     web: { ...config.web, favicon: variant.icon },
     plugins,
     extra: { ...config.extra, appRole: variant.role },
