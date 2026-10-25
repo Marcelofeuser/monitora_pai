@@ -10,6 +10,7 @@
 - [x] Envio de fotos e figurinhas no chat privado nativo, usando as rotas de mídia já existentes.
 - [x] Responsável consulta o espelho de conversas da criança com contatos aprovados, em modo somente leitura; o chat privado familiar fica fora do espelho.
 - [x] Apps nativos permitem ao responsável criar grupos com contatos já aprovados, e à criança abrir os grupos; ambos enviam e recebem texto, fotos e figurinhas.
+- [x] App do responsável permite cadastrar contatos, gerar/compartilhar convites por QR e bloquear/reativar acesso.
 - [x] Saída da Criança revoga no servidor o token do aparelho atual.
 - [x] Criança pode compartilhar a localização atual sob demanda, após conceder permissão em primeiro plano; o responsável vê horário/precisão e abre o ponto no mapa.
 - [x] Landing page `baixar.amparakids.com` encaminha por sistema operacional quando as lojas estiverem configuradas; o QR nativo usa a rota da Criança por padrão. A correção do APK antigo está no PR #10.
@@ -22,11 +23,11 @@
 
 - [x] Implementar chamadas de voz/vídeo entre Responsável e Criança enquanto ambos os apps estão abertos.
 - [ ] Configurar chamadas recebidas com o app em segundo plano/fechado usando push nativo e validar em aparelhos reais.
-- [ ] Portar e validar os demais recursos que já existem no PWA (gestão de contatos, mídias adicionais, localização em segundo plano e tempo de tela). A conversa básica dos grupos já está disponível nos apps nativos.
+- [ ] Portar e validar os demais recursos que já existem no PWA (mídias adicionais, localização em segundo plano e tempo de tela). Gestão básica de contatos e grupos já está disponível nos apps nativos.
 - [ ] Configurar notificações push nativas para iOS e Android e testar com aparelhos reais.
 - [ ] Instalar, parear e testar cada app em aparelhos iPhone e Android, incluindo reconexão e revogação.
 - [ ] Validar chamadas de voz/vídeo e permissões de microfone/câmera em aparelhos iPhone e Android.
-- [ ] Recompilar os APKs Android de debug com o espelho nativo recém-adicionado; os APKs já existentes foram compilados antes desta mudança.
+- [ ] Recompilar APKs Android de debug com os grupos e a gestão nativa de contatos; os APKs existentes foram compilados antes dessas mudanças.
 - [ ] Configurar os projetos nativos no Clerk com os dois bundle/application IDs.
 - [ ] Criar builds assinados com as contas de publicação Apple e Google.
 - [ ] Criar/confirmar uma chave de upload Android e usá-la com `scripts/build-android-release.sh`. O script solicita os quatro valores localmente sem gravá-los no Railway ou GitHub. O Gradle bloqueia builds `release` sem assinatura de lançamento; a chave de depuração não é aceita para publicação.

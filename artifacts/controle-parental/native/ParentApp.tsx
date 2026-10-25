@@ -1,10 +1,10 @@
 import { ClerkProvider, useAuth, useSignIn, useUser } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useColors } from '@/hooks/useColors';
-import { createChildPairing, createChildReconnectPairing, createParentGroup, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentGroupMessages, fetchParentGroups, fetchParentMirroredConversation, fetchParentPrivateMessages, sendParentGroupMessage, sendParentPrivateMessage, type ChildProfile, type GroupProfile, type MirroredContact, type PairingResult, type PrivateMessageInput } from './api';
+import { createChildPairing, createChildReconnectPairing, createParentContact, createParentContactInvite, createParentGroup, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentContacts, fetchParentGroupMessages, fetchParentGroups, fetchParentMirroredConversation, fetchParentPrivateMessages, sendParentGroupMessage, sendParentPrivateMessage, setParentContactStatus, type ChildProfile, type GroupProfile, type MirroredContact, type PairingResult, type PrivateMessageInput } from './api';
 import { PrivateChat } from './PrivateChat';
 import { ParentLocation } from './ParentLocation';
 import { NativeCallOverlay } from './NativeCallOverlay';
@@ -42,6 +42,7 @@ function ParentSession() {
   const [busy, setBusy] = useState(false);
   const [children, setChildren] = useState<ChildProfile[]>([]);
   const [selectedChild, setSelectedChild] = useState<ChildProfile | null>(null);
+  const [contactChild, setContactChild] = useState<ChildProfile | null>(null);
   const [viewingLocation, setViewingLocation] = useState<ChildProfile | null>(null);
   const [mirrorChild, setMirrorChild] = useState<ChildProfile | null>(null);
   const [mirrorContact, setMirrorContact] = useState<MirroredContact | null>(null);
@@ -121,6 +122,9 @@ function ParentSession() {
   if (viewingLocation) {
     return <><ParentLocation childName={viewingLocation.name} loadLocation={loadChildLocation} onBack={() => setViewingLocation(null)} /><NativeCallOverlay call={call} /></>;
   }
+  if (contactChild) {
+    return <><ParentContacts child={contactChild} getToken={getToken} onBack={() => setContactChild(null)} /><NativeCallOverlay call={call} /></>;
+  }
   if (mirrorContact && userId) {
     const contactUserId = mirrorContact.contactUserId;
     const loadMirror = () => contactUserId ? loadMirroredMessages(contactUserId) : Promise.resolve([]);
@@ -198,6 +202,7 @@ function ParentSession() {
             </View>
           ))}
           {children.map((child) => <Pressable key={`reconnect-${child.id}`} disabled={busy} onPress={() => void issueReconnect(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Conectar outro aparelho de {child.name}</Text></Pressable>)}
+          {children.map((child) => <Pressable key={`contacts-${child.id}`} accessibilityRole="button" onPress={() => setContactChild(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Gerenciar contatos de {child.name}</Text></Pressable>)}
           <Pressable onPress={() => { setAddingChild(true); setPairing(null); }} style={[styles.primaryButton, { backgroundColor: colors.primary }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Adicionar criança</Text></Pressable>
         </View>
       )}
@@ -220,6 +225,139 @@ function ParentSession() {
     </ScrollView>
     <NativeCallOverlay call={call} />
     </>
+  );
+}
+
+function ParentContacts({ child, getToken, onBack }: {
+  child: ChildProfile;
+  getToken: () => Promise<string | null>;
+  onBack: () => void;
+}) {
+  const colors = useColors();
+  const [contacts, setContacts] = useState<MirroredContact[]>([]);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [relation, setRelation] = useState('');
+  const [invite, setInvite] = useState<{ contactId: string; contactName: string; joinUrl: string; expiresAt: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error('A sessão expirou. Entre novamente.');
+    setContacts(await fetchParentContacts(child.id, token));
+  }, [child.id, getToken]);
+
+  useEffect(() => {
+    let active = true;
+    void refresh().catch((cause) => {
+      if (active) setError(cause instanceof Error ? cause.message : 'Não foi possível carregar os contatos.');
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [refresh]);
+
+  const add = async () => {
+    if (busy || name.trim().length < 2) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('A sessão expirou. Entre novamente.');
+      await createParentContact({
+        childId: child.id,
+        contactName: name.trim(),
+        ...(phone.trim() ? { contactPhone: phone.trim() } : {}),
+        ...(relation.trim() ? { relation: relation.trim() } : {}),
+      }, token);
+      setName('');
+      setPhone('');
+      setRelation('');
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível adicionar o contato.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changeStatus = (contact: MirroredContact, status: 'approved' | 'revoked') => {
+    const action = status === 'revoked' ? 'bloquear' : 'reativar';
+    Alert.alert(`${action.charAt(0).toUpperCase()}${action.slice(1)} contato?`, `${contact.contactName} ${status === 'revoked' ? 'perderá o acesso às conversas e grupos desta criança.' : 'voltará a poder conversar com esta criança.'}`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: action.charAt(0).toUpperCase() + action.slice(1), style: status === 'revoked' ? 'destructive' : 'default', onPress: () => {
+        void (async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            const token = await getToken();
+            if (!token) throw new Error('A sessão expirou. Entre novamente.');
+            await setParentContactStatus(contact.id, status, token);
+            setInvite(null);
+            await refresh();
+          } catch (cause) {
+            setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar o contato.');
+          } finally {
+            setBusy(false);
+          }
+        })();
+      } },
+    ]);
+  };
+
+  const makeInvite = async (contact: MirroredContact) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('A sessão expirou. Entre novamente.');
+      const created = await createParentContactInvite(contact.id, token);
+      setInvite({ contactId: contact.id, contactName: created.contactName, joinUrl: created.joinUrl, expiresAt: created.expiresAt });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível gerar o convite.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const statusText: Record<string, string> = { approved: 'Aprovado', pending: 'Pendente', denied: 'Recusado', revoked: 'Bloqueado' };
+  return (
+    <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]} keyboardShouldPersistTaps="handled">
+      <Pressable accessibilityRole="button" onPress={onBack}><Text style={{ color: colors.primary }}>‹ Voltar à família</Text></Pressable>
+      <Text style={[styles.title, { color: colors.foreground }]}>Contatos · {child.name}</Text>
+      <Text style={[styles.body, { color: colors.mutedForeground }]}>Cadastre pessoas autorizadas. Cada contato poderá entrar pelo link de convite para conversar no app.</Text>
+      {loading ? <ActivityIndicator color={colors.primary} /> : contacts.length === 0 ? <Text style={[styles.body, { color: colors.mutedForeground }]}>Ainda não há contatos cadastrados.</Text> : contacts.map((contact) => (
+        <View key={contact.id} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTitle, { color: colors.foreground }]}>{contact.contactName}</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>Status: {statusText[contact.status] ?? contact.status}</Text>
+          {contact.status === 'approved' && !contact.contactUserId && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void makeInvite(contact)} style={[styles.secondaryButton, { borderColor: colors.border }]}><Text style={{ color: colors.primary }}>Gerar convite por QR</Text></Pressable>}
+          {(contact.status === 'approved' || contact.status === 'pending') && <Pressable accessibilityRole="button" disabled={busy} onPress={() => changeStatus(contact, 'revoked')} style={styles.reconnectButton}><Text style={{ color: colors.destructive }}>Bloquear</Text></Pressable>}
+          {(contact.status === 'revoked' || contact.status === 'denied') && <Pressable accessibilityRole="button" disabled={busy} onPress={() => changeStatus(contact, 'approved')} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Reativar acesso</Text></Pressable>}
+        </View>
+      ))}
+      {invite && (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTitle, { color: colors.foreground }]}>Convite para {invite.contactName}</Text>
+          <View style={styles.qr}><QRCode value={invite.joinUrl} size={190} /></View>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>Este link é válido até {new Date(invite.expiresAt).toLocaleDateString('pt-BR')}.</Text>
+          <Pressable accessibilityRole="button" onPress={() => void Share.share({ message: `Entre no Ampara Kids pelo convite de ${child.name}: ${invite.joinUrl}` })} style={[styles.primaryButton, { backgroundColor: colors.primary }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Compartilhar convite</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => setInvite(null)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Fechar convite</Text></Pressable>
+        </View>
+      )}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.cardTitle, { color: colors.foreground }]}>Adicionar contato</Text>
+        <Text style={[styles.label, { color: colors.foreground }]}>Nome</Text>
+        <TextInput value={name} onChangeText={setName} maxLength={120} placeholder="Nome da pessoa" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+        <Text style={[styles.label, { color: colors.foreground }]}>Telefone (opcional)</Text>
+        <TextInput value={phone} onChangeText={setPhone} maxLength={30} keyboardType="phone-pad" placeholder="(00) 00000-0000" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+        <Text style={[styles.label, { color: colors.foreground }]}>Relação (opcional)</Text>
+        <TextInput value={relation} onChangeText={setRelation} maxLength={60} placeholder="Ex.: avó, tio, amigo" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+        {error && <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text>}
+        <Pressable accessibilityRole="button" disabled={busy || name.trim().length < 2} onPress={() => void add()} style={[styles.primaryButton, { backgroundColor: colors.primary, opacity: busy || name.trim().length < 2 ? 0.55 : 1 }]}>
+          {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Adicionar e autorizar</Text>}
+        </Pressable>
+      </View>
+    </ScrollView>
   );
 }
 

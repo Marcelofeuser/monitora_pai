@@ -93,7 +93,7 @@ O serviço de vendas encaminha `/superadmin`, autenticação e assets para a ori
 
 ## 6. Apps nativos — React Native + Expo
 
-`artifacts/controle-parental/native` contém telas e integração nativas. O app Responsáveis lista e pareia crianças, abre o espelho, compartilha localização, cria grupos com contatos aprovados e conversa em grupos. O app Criança pareia com código, conversa em privado, abre os grupos da família e compartilha a localização sob demanda. Ambos incluem chat nativo com texto, fotos e figurinhas e chamadas de voz/vídeo em primeiro plano. `app.config.js` gera duas identidades:
+`artifacts/controle-parental/native` contém telas e integração nativas. O app Responsáveis lista e pareia crianças, abre o espelho, compartilha localização, cria grupos com contatos aprovados e conversa em grupos. Agora também permite cadastrar contatos, gerar/compartilhar convites por QR e bloquear/reativar o acesso. O app Criança pareia com código, conversa em privado, abre os grupos da família e compartilha a localização sob demanda. Ambos incluem chat nativo com texto, fotos e figurinhas e chamadas de voz/vídeo em primeiro plano. `app.config.js` gera duas identidades:
 
 | Variante | Papel | Identificador Android/iOS |
 |---|---|---|
@@ -130,7 +130,13 @@ Stripe Checkout usa `kids_solo`, `kids_duo` e `kids_family`, com preço mensal, 
 - Banco de produção: migrations `0001` a `0005` presentes. `0002`, `0004` e `0005` foram aplicadas e verificadas.
 - Ainda falta testar o fluxo de SuperAdmin autenticado, Stripe live e os apps nativos em aparelhos reais.
 
-## 10. Estado atual e pendências de lançamento
+## 10. Estado confirmado após os PRs #6 e #13
+
+- PR #13 adicionou conversa de grupo nos apps nativos; as verificações de TypeScript passaram antes do merge.
+- A continuação local adicionou ao app Responsáveis cadastro de contatos, convite por QR/link e ações de bloqueio e reativação. Ainda precisa ser incorporada ao `main`, recompilada e validada em aparelhos.
+- Depois do merge do PR #13, Railway produção concluiu com sucesso as implantações de `api-server`, `pwa`, `site-vendas` e `landing page apps`; Postgres permanece online. Não há implantação pendente. O painel mantém duas falhas históricas anteriores (API e PWA), mas as implantações atuais estão `SUCCESS`.
+
+## 11. Estado atual e pendências de lançamento
 
 1. Fazer login e testar o portal SuperAdmin autenticado; criar voucher/embaixador de teste e conferir acesso negado para outra conta. `/superadmin` e seus assets passam pelo domínio Ampara; o endpoint administrativo sem sessão devolve 401.
 2. Criar e configurar a chave, webhook e preços Stripe live antes de habilitar cobrança real.
