@@ -18,6 +18,7 @@
 - [x] Verificados: TypeScript do workspace completo (incluindo chamadas nativas, API e PWA).
 - [x] APK de debug Android do Responsável gerado e assinatura validada (`com.amparakids.responsavel`).
 - [x] APK de debug Android da Criança gerado e assinatura validada (`com.amparakids.crianca`).
+- [x] APKs Android recompilados com os grupos, gravação de voz e gestão de contatos atuais: `dist/ampara-responsavel-debug.apk` e `dist/ampara-crianca-debug.apk`.
 - [x] Compilação iOS ARM para simulador concluída para ambas as variantes, com mínimo iOS 15.1 e sem assinatura de distribuição: `dist/Ampara-Responsavel-Audio-iOS151.app` e `dist/Ampara-Crianca-Audio-iOS151.app`.
 
 ## Antes de enviar para as lojas
@@ -29,7 +30,7 @@
 - [ ] Instalar, parear e testar cada app em aparelhos iPhone e Android, incluindo reconexão e revogação.
 - [ ] Validar chamadas de voz/vídeo e permissões de microfone/câmera em aparelhos iPhone e Android.
 - [ ] Validar o contador e o bloqueio de tempo de uso em aparelhos reais; a contagem nativa ocorre enquanto o app está em primeiro plano e não impõe limites ao sistema operacional inteiro.
-- [ ] Recompilar APKs Android de debug com os grupos e a gestão nativa de contatos; os APKs existentes foram compilados antes dessas mudanças.
+- [x] Recompilar APKs Android de debug com os grupos e a gestão nativa de contatos; ambos foram compilados e tiveram assinatura e identificador verificados.
 - [ ] Configurar os projetos nativos no Clerk com os dois bundle/application IDs.
 - [ ] Criar builds assinados com as contas de publicação Apple e Google.
 - [ ] Criar/confirmar uma chave de upload Android e usá-la com `scripts/build-android-release.sh`. O script solicita os quatro valores localmente sem gravá-los no Railway ou GitHub. O Gradle bloqueia builds `release` sem assinatura de lançamento; a chave de depuração não é aceita para publicação.
