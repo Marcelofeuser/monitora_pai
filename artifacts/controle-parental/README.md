@@ -60,6 +60,9 @@ O Expo usa `AMPARA_APP` para selecionar nome, ícone, esquema de links,
 identificador Android/iOS e perfil fixo. Os dois apps podem ser instalados no
 mesmo aparelho porque têm identificadores diferentes.
 
+Consulte [`STORE-RELEASE-GUIDE.md`](STORE-RELEASE-GUIDE.md) para criar a chave
+de upload Android localmente, gerar AABs e preparar a assinatura/publicação iOS.
+
 ## Fluxos implementados
 
 - O app Responsáveis autentica pelo Clerk, lista os perfis da família e gera

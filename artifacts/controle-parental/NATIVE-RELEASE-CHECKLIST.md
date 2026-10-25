@@ -37,6 +37,7 @@
 
 - O acesso/publicação Google Play e a situação do D-U-N-S ainda dependem da verificação da empresa e da conta do responsável.
 - Marcelo informou que tem uma conta pessoal Apple Developer. Os builds iOS atuais são de simulador e ainda não foram assinados; é preciso configurar/confirmar o acesso à equipe, certificados e perfis antes de distribuir ou publicar.
+- Instruções e scripts para criar a chave Android com prompt seguro e gerar AABs separados estão em `STORE-RELEASE-GUIDE.md` e `scripts/`.
 - Os APKs entregues são de debug, assinados com a chave de depuração. Servem para instalação/teste, não para publicação no Google Play.
 - As compilações iOS de simulador validam que as duas variantes compilam, mas não geram arquivos assinados para iPhone/App Store nem substituem o teste em aparelho real.
 - O WebRTC atual toca e conecta enquanto os dois apps estão abertos; não implementa ainda a experiência de chamada recebida com o app suspenso/fechado.
