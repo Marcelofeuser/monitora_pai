@@ -100,7 +100,7 @@ O serviço de vendas encaminha `/superadmin`, autenticação e assets para a ori
 | Responsáveis | Login Clerk, gestão da família, pareamento e conversa | `com.amparakids.responsavel` |
 | Criança | Entrada pelo código familiar, chat e compartilhamento explícito de localização | `com.amparakids.crianca` |
 
-O checklist nativo do repositório documenta APKs debug e builds iOS de simulador, além do código de chamada WebRTC. O APK TWA antigo foi removido da landing page; a página espera URLs oficiais das lojas e não distribui APK avulso. Não encontrei `.aab`, `.ipa` nem chaves de assinatura. Isso não equivale a builds assinados/distribuíveis nem a validação em aparelhos reais. O documento `artifacts/controle-parental/NATIVE-RELEASE-CHECKLIST.md` é a referência de publicação e ainda lista trabalho pendente.
+O checklist nativo do repositório documenta APKs debug e builds iOS de simulador, além do código de chamada WebRTC. O APK TWA antigo foi removido da landing page; a página espera URLs oficiais das lojas e não distribui APK avulso. Não encontrei `.aab`, `.ipa` nem chaves de assinatura de lançamento. O Gradle agora recusa `release` sem keystore de upload e credenciais próprias, em vez de assinar release com a chave debug. Isso não equivale a builds assinados/distribuíveis nem a validação em aparelhos reais. O documento `artifacts/controle-parental/NATIVE-RELEASE-CHECKLIST.md` é a referência de publicação e ainda lista trabalho pendente.
 
 ## 7. SuperAdmin, vouchers e Stripe
 
