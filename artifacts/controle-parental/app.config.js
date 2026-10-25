@@ -51,6 +51,15 @@ module.exports = ({ config }) => {
   }
   plugins.push('expo-secure-store');
   plugins.push([
+    'expo-audio',
+    {
+      microphonePermission: 'Permita que o Ampara grave mensagens de voz durante uma conversa.',
+      recordAudioAndroid: true,
+      enableBackgroundPlayback: false,
+      enableBackgroundRecording: false,
+    },
+  ]);
+  plugins.push([
     '@config-plugins/react-native-webrtc',
     {
       cameraPermission: 'O Ampara usa a câmera durante chamadas iniciadas por você ou pelo seu responsável.',
