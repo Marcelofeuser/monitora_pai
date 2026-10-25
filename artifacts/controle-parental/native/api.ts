@@ -19,6 +19,7 @@ export type PrivateMessage = {
   id: string;
   conversationId: string;
   senderId: string;
+  senderName?: string;
   type: string;
   textContent: string | null;
   contentUrl: string | null;
@@ -32,6 +33,17 @@ export type PrivateMessageInput =
   | { stickerEmoji: string };
 
 export type ChildProfile = { id: string; name: string };
+export type GroupProfile = {
+  id: string;
+  childId: string;
+  name: string;
+  photoUrl: string | null;
+  members: Array<{ id: string; contactName: string }>;
+};
+export type GroupConversation = {
+  messages: PrivateMessage[];
+  participantNames: Record<string, string>;
+};
 export type MirroredContact = { id: string; contactName: string; contactUserId: string | null; status: string };
 export type MirroredConversation = { messages: PrivateMessage[]; contactName: string; childName: string };
 export type ChildLocation = {
@@ -122,6 +134,54 @@ export async function fetchParentApprovedContacts(childId: string, authToken: st
   return response.json();
 }
 
+export async function fetchParentGroups(childId: string, authToken: string): Promise<GroupProfile[]> {
+  const response = await fetch(`${apiUrl('/api/groups')}?childId=${encodeURIComponent(childId)}`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function createParentGroup(
+  childId: string,
+  name: string,
+  contactIds: string[],
+  authToken: string,
+): Promise<GroupProfile> {
+  const response = await fetch(apiUrl('/api/groups'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({ childId, name, contactIds }),
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+function withGroupSenderNames(result: GroupConversation): GroupConversation {
+  return {
+    ...result,
+    messages: result.messages.map((message) => ({
+      ...message,
+      senderName: result.participantNames[message.senderId] ?? 'Participante',
+    })),
+  };
+}
+
+export async function fetchParentGroupMessages(groupId: string, authToken: string): Promise<PrivateMessage[]> {
+  const response = await fetch(apiUrl(`/api/groups/${encodeURIComponent(groupId)}/messages`), {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  const result = await response.json() as GroupConversation;
+  return withGroupSenderNames(result).messages;
+}
+
+export async function sendParentGroupMessage(groupId: string, input: PrivateMessageInput, authToken: string): Promise<PrivateMessage> {
+  const response = await postMessage(apiUrl(`/api/groups/${encodeURIComponent(groupId)}/messages`), input, { Authorization: `Bearer ${authToken}` });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
 export async function fetchParentMirroredConversation(contactUserId: string, authToken: string): Promise<MirroredConversation> {
   const response = await fetch(`${apiUrl(`/api/parent/contacts/${encodeURIComponent(contactUserId)}/messages`)}`, {
     headers: { Authorization: `Bearer ${authToken}` },
@@ -177,6 +237,45 @@ export async function fetchChildPrivateMessages(deviceToken: string): Promise<{
   });
   if (!response.ok) throw await readError(response);
   return response.json();
+}
+
+export async function fetchChildGroups(deviceToken: string): Promise<GroupProfile[]> {
+  const response = await fetch(apiUrl('/api/child/groups'), { headers: { 'X-Child-Token': deviceToken } });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function fetchChildGroupMessages(groupId: string, deviceToken: string): Promise<PrivateMessage[]> {
+  const response = await fetch(apiUrl(`/api/child/groups/${encodeURIComponent(groupId)}/messages`), {
+    headers: { 'X-Child-Token': deviceToken },
+  });
+  if (!response.ok) throw await readError(response);
+  const result = await response.json() as GroupConversation;
+  return withGroupSenderNames(result).messages;
+}
+
+export async function sendChildGroupMessage(groupId: string, input: PrivateMessageInput, deviceToken: string): Promise<PrivateMessage> {
+  const response = await postMessage(apiUrl(`/api/child/groups/${encodeURIComponent(groupId)}/messages`), input, { 'X-Child-Token': deviceToken });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+async function postMessage(url: string, input: PrivateMessageInput, authHeaders: Record<string, string>): Promise<Response> {
+  if ('file' in input || 'stickerEmoji' in input) {
+    const form = new FormData();
+    if ('file' in input) {
+      form.append('file', input.file as unknown as Blob);
+      if (input.caption) form.append('textContent', input.caption);
+    } else {
+      form.append('stickerEmoji', input.stickerEmoji);
+    }
+    return fetch(url, { method: 'POST', headers: authHeaders, body: form });
+  }
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
+    body: JSON.stringify({ textContent: input.textContent }),
+  });
 }
 
 export async function sendChildPrivateMessage(deviceToken: string, input: PrivateMessageInput): Promise<PrivateMessage> {

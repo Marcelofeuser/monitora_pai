@@ -2,6 +2,8 @@
 
 ## Android: chave de upload e AAB
 
+Antes de começar, instale um JDK 17 ou compatível com o Gradle 8.14.3 e confirme que `java -version` funciona no Terminal.
+
 1. No Terminal, entre em `artifacts/controle-parental`.
 2. Crie a chave localmente: `bash scripts/create-android-upload-key.sh`.
 3. Guarde o arquivo `~/.amparakids/credentials/android-upload.jks` e as senhas em um cofre seguro. Faça uma cópia de backup fora deste Mac. **Não envie a chave nem as senhas por chat, e-mail ou GitHub.**
