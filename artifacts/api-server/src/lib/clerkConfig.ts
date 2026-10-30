@@ -6,6 +6,10 @@ const defaultAuthorizedParties = [
   "https://responsavel.amparakids.com",
   "https://crianca.amparakids.com",
   "https://amparakids.com",
+  // Tokens das aplicações nativas usam o Frontend API de produção do Clerk
+  // como `azp`. Manter essa origem explícita preserva a validação contra
+  // vazamento de sessão entre subdomínios sem bloquear iOS/Android.
+  "https://clerk.amparakids.com",
 ];
 
 export function getClerkAuthorizedParties(): string[] {

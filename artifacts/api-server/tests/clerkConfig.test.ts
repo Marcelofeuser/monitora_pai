@@ -7,6 +7,7 @@ describe("origens autorizadas do Clerk", () => {
   it("preserva os domínios atuais quando não há configuração explícita", () => {
     vi.stubEnv("CLERK_AUTHORIZED_PARTIES", undefined);
     expect(getClerkAuthorizedParties()).toContain("https://responsavel.amparakids.com");
+    expect(getClerkAuthorizedParties()).toContain("https://clerk.amparakids.com");
   });
 
   it("isola staging, normaliza origens e remove duplicatas", () => {
