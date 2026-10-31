@@ -1,10 +1,11 @@
 import { ClerkProvider, useAuth, useSignIn, useUser } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import { useColors } from '@/hooks/useColors';
-import { createChildPairing, createChildReconnectPairing, createParentContact, createParentContactInvite, createParentGroup, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentContacts, fetchParentGroupMessages, fetchParentGroups, fetchParentMirroredConversation, fetchParentPrivateMessages, fetchParentScreenTime, sendParentGroupMessage, sendParentPrivateMessage, setParentChildLock, setParentContactStatus, setParentDailyLimit, type ChildProfile, type GroupProfile, type MirroredContact, type PairingResult, type PrivateMessageInput, type ScreenTimeStatus } from './api';
+import { createChildPairing, createChildReconnectPairing, createParentContact, createParentContactInvite, createParentGroup, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentContacts, fetchParentGroupMessages, fetchParentGroups, fetchParentMirroredConversation, fetchParentPrivateMessages, fetchParentScreenTime, sendParentGroupMessage, sendParentPrivateMessage, setParentChildLock, setParentContactStatus, setParentDailyLimit, type ChildProfile, type GroupProfile, type MirroredContact, type PairingResult, type PrivateMessageInput, type ScreenTimeStatus, setParentUnauthorizedHandler } from './api';
 import { PrivateChat } from './PrivateChat';
 import { ParentLocation } from './ParentLocation';
 import { NativeCallOverlay } from './NativeCallOverlay';
@@ -50,12 +51,18 @@ function ParentSession() {
   const [groupChild, setGroupChild] = useState<ChildProfile | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<GroupProfile | null>(null);
   const [addingChild, setAddingChild] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [utilityPage, setUtilityPage] = useState<'account' | 'help' | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const handlingUnauthorized = useRef(false);
 
   const refreshChildren = useCallback(async () => {
     if (!isSignedIn) return;
     try {
       const token = await getToken();
-      if (token) setChildren(await fetchParentChildren(token));
+      if (token) {
+        setChildren(await fetchParentChildren(token));
+      }
     } catch {
       // Falha transitória não apaga a lista já mostrada.
     }
@@ -66,6 +73,55 @@ function ParentSession() {
     const timer = setInterval(() => void refreshChildren(), 5000);
     return () => clearInterval(timer);
   }, [refreshChildren]);
+
+  useEffect(() => {
+    setParentUnauthorizedHandler(() => {
+      if (handlingUnauthorized.current) return;
+      handlingUnauthorized.current = true;
+      setSessionExpired(true);
+      setPairing(null);
+      setAddingChild(false);
+      setUtilityPage(null);
+      setSelectedChild(null);
+      setContactChild(null);
+      setScreenTimeChild(null);
+      setViewingLocation(null);
+      setMirrorChild(null);
+      setMirrorContact(null);
+      setGroupChild(null);
+      setSelectedGroup(null);
+      void signOut().finally(() => { handlingUnauthorized.current = false; });
+    });
+    return () => setParentUnauthorizedHandler(null);
+  }, [signOut]);
+
+  const chooseMenu = (item: string) => {
+    setMenuVisible(false);
+    setError(null);
+    setUtilityPage(null);
+    const resetRoutes = () => {
+      setSelectedChild(null); setContactChild(null); setScreenTimeChild(null);
+      setViewingLocation(null); setMirrorChild(null); setMirrorContact(null);
+      setGroupChild(null); setSelectedGroup(null); setPairing(null); setAddingChild(false);
+    };
+    resetRoutes();
+    if (item === 'Início/Família') return;
+    if (item === 'Conectar criança') { setAddingChild(true); return; }
+    if (item === 'Minha conta') { setUtilityPage('account'); return; }
+    if (item === 'Ajuda/Suporte') { setUtilityPage('help'); return; }
+    if (item === 'Sair') { setSessionExpired(false); void signOut(); return; }
+    const child = children[0];
+    if (!child) {
+      setError('Conecte uma criança primeiro para acessar esta funcionalidade.');
+      return;
+    }
+    if (item === 'Conversas') setSelectedChild(child);
+    else if (item === 'Localização') setViewingLocation(child);
+    else if (item === 'Contatos') setContactChild(child);
+    else if (item === 'Grupos') setGroupChild(child);
+    else if (item === 'Espelho do chat') setMirrorChild(child);
+    else if (item === 'Tempo de uso e bloqueio') setScreenTimeChild(child);
+  };
 
   const loadMessages = useCallback(async (childId: string) => {
     const token = await getToken();
@@ -119,32 +175,32 @@ function ParentSession() {
   }, [getToken, selectedGroupId]);
 
   if (!isLoaded) return <View style={[styles.center, { backgroundColor: colors.background }]}><ActivityIndicator color={colors.primary} /></View>;
-  if (!isSignedIn) return <ParentSignIn />;
+  if (!isSignedIn) return <ParentSignIn sessionExpired={sessionExpired} />;
   if (viewingLocation) {
-    return <><ParentLocation childName={viewingLocation.name} loadLocation={loadChildLocation} onBack={() => setViewingLocation(null)} /><NativeCallOverlay call={call} /></>;
+    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><ParentLocation childName={viewingLocation.name} loadLocation={loadChildLocation} onBack={() => setViewingLocation(null)} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
   if (contactChild) {
-    return <><ParentContacts child={contactChild} getToken={getToken} onBack={() => setContactChild(null)} /><NativeCallOverlay call={call} /></>;
+    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><ParentContacts child={contactChild} getToken={getToken} onBack={() => setContactChild(null)} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
   if (screenTimeChild) {
-    return <><ParentScreenTime child={screenTimeChild} getToken={getToken} onBack={() => setScreenTimeChild(null)} /><NativeCallOverlay call={call} /></>;
+    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><ParentScreenTime child={screenTimeChild} getToken={getToken} onBack={() => setScreenTimeChild(null)} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
   if (mirrorContact && userId) {
     const contactUserId = mirrorContact.contactUserId;
     const loadMirror = () => contactUserId ? loadMirroredMessages(contactUserId) : Promise.resolve([]);
-    return <><PrivateChat title={mirrorContact.contactName} subtitle="Espelho somente leitura · Criança e contato" ownUserId={userId} loadMessages={loadMirror} sendMessage={async () => { throw new Error('Este espelho é somente para leitura.'); }} readOnly onBack={() => setMirrorContact(null)} /><NativeCallOverlay call={call} /></>;
+    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><PrivateChat title={mirrorContact.contactName} subtitle="Espelho somente leitura · Criança e contato" ownUserId={userId} loadMessages={loadMirror} sendMessage={async () => { throw new Error('Este espelho é somente para leitura.'); }} readOnly onBack={() => setMirrorContact(null)} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
   if (mirrorChild && userId) {
-    return <><MirroredContacts child={mirrorChild} loadContacts={loadMirroredContacts} onSelect={setMirrorContact} onBack={() => setMirrorChild(null)} /><NativeCallOverlay call={call} /></>;
+    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><MirroredContacts child={mirrorChild} loadContacts={loadMirroredContacts} onSelect={setMirrorContact} onBack={() => setMirrorChild(null)} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
   if (selectedGroup && groupChild && userId) {
-    return <><PrivateChat title={selectedGroup.name} subtitle={`Grupo · ${selectedGroup.members.map((member) => member.contactName).join(', ') || groupChild.name}`} ownUserId={userId} loadMessages={loadSelectedGroupMessages} sendMessage={sendSelectedGroupMessage} onBack={() => setSelectedGroup(null)} headerAction={<Pressable accessibilityRole="button" disabled={call.phase !== 'idle'} onPress={() => void call.startCall(groupChild.id, groupChild.name)}><Text style={{ color: colors.primary, fontWeight: '700' }}>Ligar para {groupChild.name}</Text></Pressable>} /><NativeCallOverlay call={call} /></>;
+    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><PrivateChat title={selectedGroup.name} subtitle={`Grupo · ${selectedGroup.members.map((member) => member.contactName).join(', ') || groupChild.name}`} ownUserId={userId} loadMessages={loadSelectedGroupMessages} sendMessage={sendSelectedGroupMessage} onBack={() => setSelectedGroup(null)} headerAction={<Pressable accessibilityRole="button" disabled={call.phase !== 'idle'} onPress={() => void call.startCall(groupChild.id, groupChild.name)}><Text style={{ color: colors.primary, fontWeight: '700' }}>Ligar para {groupChild.name}</Text></Pressable>} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
   if (groupChild && userId) {
-    return <><ParentGroups child={groupChild} getToken={getToken} onSelect={setSelectedGroup} onBack={() => setGroupChild(null)} /><NativeCallOverlay call={call} /></>;
+    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><ParentGroups child={groupChild} getToken={getToken} onSelect={setSelectedGroup} onBack={() => setGroupChild(null)} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
   if (selectedChild && userId) {
-    return <><PrivateChat title={selectedChild.name} ownUserId={userId} loadMessages={loadSelectedMessages} sendMessage={sendSelectedMessage} onBack={() => setSelectedChild(null)} headerAction={<Pressable accessibilityRole="button" disabled={call.phase !== 'idle'} onPress={() => void call.startCall(selectedChild.id, selectedChild.name)}><Text style={{ color: colors.primary, fontWeight: '700' }}>Ligar</Text></Pressable>} /><NativeCallOverlay call={call} /></>;
+    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><PrivateChat title={selectedChild.name} ownUserId={userId} loadMessages={loadSelectedMessages} sendMessage={sendSelectedMessage} onBack={() => setSelectedChild(null)} headerAction={<Pressable accessibilityRole="button" disabled={call.phase !== 'idle'} onPress={() => void call.startCall(selectedChild.id, selectedChild.name)}><Text style={{ color: colors.primary, fontWeight: '700' }}>Ligar</Text></Pressable>} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
 
   const issuePairing = async (childName: string, childAge: string, consent: boolean) => {
@@ -184,10 +240,28 @@ function ParentSession() {
     }
   };
 
+  if (utilityPage) {
+    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}>
+      <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]}>
+        <Text style={[styles.title, { color: colors.foreground }]}>{utilityPage === 'account' ? 'Minha conta' : 'Ajuda e suporte'}</Text>
+        {utilityPage === 'account' ? <>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>{user?.fullName || user?.firstName || 'Responsável'}</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>{user?.primaryEmailAddress?.emailAddress || ''}</Text>
+          <Pressable accessibilityRole="button" onPress={() => chooseMenu('Sair')} style={[styles.primaryButton, { backgroundColor: colors.primary }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Sair da conta</Text></Pressable>
+        </> : <>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>Para vincular, gere um código de 8 dígitos em “Conectar criança” e digite-o no app infantil. O QR Code serve somente para baixar o app.</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>O contato de suporte ainda não está configurado neste app.</Text>
+        </>}
+      </ScrollView>
+      <NativeCallOverlay call={call} />
+    </ParentMenuShell>;
+  }
+
   return (
+    <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}>
     <>
     <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]}>
-      <Text style={[styles.eyebrow, { color: colors.primary }]}>AMPARA · RESPONSÁVEIS</Text>
+      <Text style={[styles.eyebrow, { color: colors.primary }]}>AMPARA</Text>
       <Text style={[styles.title, { color: colors.foreground }]}>Olá, {user?.firstName || 'responsável'}</Text>
       <Text style={[styles.body, { color: colors.mutedForeground }]}>Converse em privado e vincule os aparelhos da família.</Text>
       {!addingChild && !pairing && (
@@ -208,19 +282,15 @@ function ParentSession() {
           {children.map((child) => <Pressable key={`reconnect-${child.id}`} disabled={busy} onPress={() => void issueReconnect(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Conectar outro aparelho de {child.name}</Text></Pressable>)}
           {children.map((child) => <Pressable key={`contacts-${child.id}`} accessibilityRole="button" onPress={() => setContactChild(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Gerenciar contatos de {child.name}</Text></Pressable>)}
           {children.map((child) => <Pressable key={`time-${child.id}`} accessibilityRole="button" onPress={() => setScreenTimeChild(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Tempo de uso e bloqueio de {child.name}</Text></Pressable>)}
-          <Pressable onPress={() => { setAddingChild(true); setPairing(null); }} style={[styles.primaryButton, { backgroundColor: colors.primary }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Adicionar criança</Text></Pressable>
+          <Pressable onPress={() => { setAddingChild(true); setPairing(null); }} style={[styles.primaryButton, { backgroundColor: colors.primary }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Conectar criança</Text></Pressable>
         </View>
       )}
       {pairing ? (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.foreground }]}>{pairing.childName ? `Novo aparelho · ${pairing.childName}` : 'Código de pareamento'}</Text>
+          <Text style={[styles.cardTitle, { color: colors.foreground }]}>{pairing.childName ? `Conectar ${pairing.childName}` : 'Código de pareamento'}</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>No app Ampara Kids, escolha conectar aparelho e digite este código.</Text>
           <Text accessibilityLabel={`Código ${pairing.pairingCode}`} style={[styles.pairingCode, { color: colors.primary }]}>{pairing.pairingCode.replace(/(\d{4})(\d{4})/, '$1 $2')}</Text>
-          <Text style={[styles.body, { color: colors.mutedForeground }]}>Digite este código no app Ampara Criança. Ele vale até {new Date(pairing.expiresAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} e só pode ser usado uma vez.</Text>
-          <View style={[styles.downloadBox, { borderTopColor: colors.border }]}>
-            <Text style={[styles.cardTitle, { color: colors.foreground }]}>1. Baixe o app da criança</Text>
-            {childDownloadUrl ? <><View style={styles.qr}><QRCode value={childDownloadUrl} size={176} /></View><Text style={[styles.body, { color: colors.mutedForeground }]}>Este QR abre a página de download do Ampara Criança para o aparelho.</Text></> : <Text style={[styles.body, { color: colors.mutedForeground }]}>O QR de download será exibido depois que a página do Ampara estiver configurada.</Text>}
-            <Text style={[styles.cardTitle, { color: colors.foreground, marginTop: 8 }]}>2. Digite o código no app</Text>
-          </View>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>Válido até {new Date(pairing.expiresAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. O código só pode ser usado uma vez.</Text>
           <Pressable onPress={() => { setPairing(null); setAddingChild(false); void refreshChildren(); }} style={[styles.secondaryButton, { borderColor: colors.border }]}><Text style={{ color: colors.foreground }}>Voltar para a família</Text></Pressable>
         </View>
       ) : addingChild ? (
@@ -230,7 +300,38 @@ function ParentSession() {
     </ScrollView>
     <NativeCallOverlay call={call} />
     </>
+    </ParentMenuShell>
   );
+}
+
+function ParentMenuShell({ colors, menuVisible, setMenuVisible, onSelect, children }: {
+  colors: ReturnType<typeof useColors>;
+  menuVisible: boolean;
+  setMenuVisible: (visible: boolean) => void;
+  onSelect: (item: string) => void;
+  children: React.ReactNode;
+}) {
+  const insets = useSafeAreaInsets();
+  const items = ['Início/Família', 'Conversas', 'Localização', 'Contatos', 'Grupos', 'Espelho do chat', 'Tempo de uso e bloqueio', 'Conectar criança', 'Minha conta', 'Ajuda/Suporte', 'Sair'];
+  return <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={[styles.menuHeader, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Abrir menu" onPress={() => setMenuVisible(true)} style={styles.menuButton}>
+        <Text style={[styles.menuGlyph, { color: colors.foreground }]}>☰</Text>
+      </Pressable>
+      <Text style={[styles.menuBrand, { color: colors.foreground }]}>AMPARA</Text>
+    </View>
+    <View style={{ flex: 1 }}>{children}</View>
+    <Modal animationType="fade" transparent visible={menuVisible} onRequestClose={() => setMenuVisible(false)}>
+      <View style={[styles.menuBackdrop, { paddingTop: Math.max(insets.top, 12) + 54 }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Fechar menu" onPress={() => setMenuVisible(false)} style={StyleSheet.absoluteFill} />
+        <ScrollView style={[styles.menuPanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {items.map((item) => <Pressable key={item} accessibilityRole="button" onPress={() => onSelect(item)} style={[styles.menuItem, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.menuItemText, { color: item === 'Sair' ? colors.destructive : colors.foreground }]}>{item}</Text>
+          </Pressable>)}
+        </ScrollView>
+      </View>
+    </Modal>
+  </SafeAreaView>;
 }
 
 function ParentContacts({ child, getToken, onBack }: {
@@ -589,12 +690,17 @@ function MirroredContacts({ child, loadContacts, onSelect, onBack }: {
   );
 }
 
-function ParentSignIn() {
+function ParentSignIn({ sessionExpired = false }: { sessionExpired?: boolean }) {
   const colors = useColors();
   const { signIn, errors, fetchStatus } = useSignIn();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetStep, setResetStep] = useState<'sign-in' | 'code' | 'new-password'>('sign-in');
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(sessionExpired ? 'Sua sessão expirou. Entre novamente.' : null);
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
@@ -619,20 +725,129 @@ function ParentSignIn() {
     }
   };
 
+  const sendResetCode = async () => {
+    if (!signIn || !email.trim()) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const created = await signIn.create({ identifier: email.trim() });
+      if (created.error) throw new Error(created.error.message);
+      const sent = await signIn.resetPasswordEmailCode.sendCode();
+      if (sent.error) throw new Error(sent.error.message);
+      setResetStep('code');
+      setNotice('Enviamos um código de recuperação para o e-mail da conta.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível enviar o código.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyResetCode = async () => {
+    if (!signIn || !resetCode.trim()) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await signIn.resetPasswordEmailCode.verifyCode({ code: resetCode.trim() });
+      if (result.error) throw new Error(result.error.message);
+      if (signIn.status !== 'needs_new_password') {
+        throw new Error('Não foi possível confirmar o código. Solicite um novo código e tente novamente.');
+      }
+      setResetStep('new-password');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível confirmar o código.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveNewPassword = async () => {
+    if (!signIn || newPassword.length < 8) {
+      setError('A nova senha precisa ter pelo menos 8 caracteres.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('As senhas não coincidem.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await signIn.resetPasswordEmailCode.submitPassword({
+        password: newPassword,
+        signOutOfOtherSessions: true,
+      });
+      if (result.error) throw new Error(result.error.message);
+      if (signIn.status !== 'complete') {
+        throw new Error('A senha foi processada, mas a autenticação ainda exige outra etapa.');
+      }
+      const completed = await signIn.finalize();
+      if (completed.error) throw new Error(completed.error.message);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível alterar a senha.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const returnToSignIn = () => {
+    setResetStep('sign-in');
+    setResetCode('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setError(null);
+    setNotice(null);
+  };
+
   return (
     <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]} keyboardShouldPersistTaps="handled">
-      <Text style={[styles.eyebrow, { color: colors.primary }]}>AMPARA · RESPONSÁVEIS</Text>
-      <Text style={[styles.title, { color: colors.foreground }]}>Entre na sua conta</Text>
-      <Text style={[styles.body, { color: colors.mutedForeground }]}>Use a mesma conta do Ampara. O app da criança entra por pareamento, sem conta de adulto.</Text>
+      <Image accessibilityLabel="Logo Ampara" resizeMode="contain" source={require('../assets/images/logo-ampara.png')} style={styles.brandLogo} />
+      <Text style={[styles.title, { color: colors.foreground }]}>{resetStep === 'sign-in' ? 'Entre na sua conta' : 'Recuperar senha'}</Text>
+      <Text style={[styles.body, { color: colors.mutedForeground }]}>
+        {resetStep === 'sign-in'
+          ? 'Use a mesma conta do Ampara. O app da criança entra por pareamento, sem conta de adulto.'
+          : resetStep === 'code'
+            ? 'Digite o código enviado ao e-mail associado à sua conta.'
+            : 'Escolha uma nova senha com pelo menos 8 caracteres.'}
+      </Text>
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.label, { color: colors.foreground }]}>E-mail</Text>
-        <TextInput autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} placeholder="voce@email.com" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
-        <Text style={[styles.label, { color: colors.foreground }]}>Senha</Text>
-        <TextInput secureTextEntry autoComplete="current-password" value={password} onChangeText={setPassword} placeholder="Sua senha" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
-        {(error || errors.fields.identifier?.message || fetchStatus === 'fetching') && <Text style={[styles.error, { color: colors.destructive }]}>{error || errors.fields.identifier?.message || 'Conectando…'}</Text>}
-        <Pressable disabled={busy || !email.trim() || !password} onPress={() => void submit()} style={[styles.primaryButton, { backgroundColor: colors.primary, opacity: busy ? 0.65 : 1 }]}>
-          {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Entrar</Text>}
+        <TextInput autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} editable={resetStep === 'sign-in' || resetStep === 'code'} placeholder="voce@email.com" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+        {resetStep === 'sign-in' && <>
+          <Text style={[styles.label, { color: colors.foreground }]}>Senha</Text>
+          <TextInput secureTextEntry autoComplete="current-password" value={password} onChangeText={setPassword} placeholder="Sua senha" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+        </>}
+        {resetStep === 'code' && <>
+          <Text style={[styles.label, { color: colors.foreground }]}>Código de recuperação</Text>
+          <TextInput autoCapitalize="none" autoComplete="one-time-code" keyboardType="number-pad" value={resetCode} onChangeText={setResetCode} placeholder="Código recebido por e-mail" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+        </>}
+        {resetStep === 'new-password' && <>
+          <Text style={[styles.label, { color: colors.foreground }]}>Nova senha</Text>
+          <TextInput secureTextEntry autoComplete="new-password" value={newPassword} onChangeText={setNewPassword} placeholder="Mínimo de 8 caracteres" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+          <Text style={[styles.label, { color: colors.foreground }]}>Confirme a nova senha</Text>
+          <TextInput secureTextEntry autoComplete="new-password" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Digite novamente" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+        </>}
+        {notice && <Text style={[styles.body, { color: colors.primary, marginTop: 12 }]}>{notice}</Text>}
+        {(error || (resetStep === 'sign-in' && errors.fields.identifier?.message) || fetchStatus === 'fetching') && <Text style={[styles.error, { color: colors.destructive }]}>{error || errors.fields.identifier?.message || 'Conectando…'}</Text>}
+        <Pressable
+          disabled={busy || (resetStep === 'sign-in' ? !email.trim() || !password : resetStep === 'code' ? !email.trim() || !resetCode.trim() : !newPassword || !confirmPassword)}
+          onPress={() => void (resetStep === 'sign-in' ? submit() : resetStep === 'code' ? verifyResetCode() : saveNewPassword())}
+          style={[styles.primaryButton, { backgroundColor: colors.primary, opacity: busy ? 0.65 : 1 }]}
+        >
+          {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>{resetStep === 'sign-in' ? 'Entrar' : resetStep === 'code' ? 'Confirmar código' : 'Salvar nova senha'}</Text>}
         </Pressable>
+        {resetStep === 'sign-in' ? (
+          <Pressable disabled={busy || !email.trim()} onPress={() => void sendResetCode()} style={styles.linkButton}>
+            <Text style={[styles.body, { color: colors.primary, textAlign: 'center', marginBottom: 0 }]}>Esqueci minha senha</Text>
+          </Pressable>
+        ) : (
+          <Pressable disabled={busy} onPress={returnToSignIn} style={styles.linkButton}>
+            <Text style={[styles.body, { color: colors.primary, textAlign: 'center', marginBottom: 0 }]}>Voltar ao login</Text>
+          </Pressable>
+        )}
       </View>
     </ScrollView>
   );
@@ -649,7 +864,9 @@ function PairingForm({ colors, busy, error, onSubmit }: {
   const [consent, setConsent] = useState(false);
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={[styles.cardTitle, { color: colors.foreground }]}>Dados para o vínculo</Text>
+      <Text style={[styles.cardTitle, { color: colors.foreground }]}>1. Baixe o app da criança</Text>
+      {childDownloadUrl ? <><View style={styles.qr}><QRCode value={childDownloadUrl} size={176} /></View><Text style={[styles.body, { color: colors.mutedForeground }]}>Escaneie com o aparelho da criança. O QR abre a página de download do Ampara Kids.</Text></> : <Text style={[styles.body, { color: colors.mutedForeground }]}>O QR de download aparecerá quando a página do Ampara estiver configurada.</Text>}
+      <Text style={[styles.cardTitle, { color: colors.foreground, marginTop: 18 }]}>2. Informe os dados da criança</Text>
       <Text style={[styles.label, { color: colors.foreground }]}>Nome da criança</Text>
       <TextInput value={name} onChangeText={setName} placeholder="Nome" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
       <Text style={[styles.label, { color: colors.foreground }]}>Idade (opcional)</Text>
@@ -660,14 +877,23 @@ function PairingForm({ colors, busy, error, onSubmit }: {
       </Pressable>
       {error && <Text style={[styles.error, { color: colors.destructive }]}>{error}</Text>}
       <Pressable disabled={busy || name.trim().length < 2} onPress={() => void onSubmit(name, age, consent)} style={[styles.primaryButton, { backgroundColor: colors.primary, opacity: busy ? 0.65 : 1 }]}>
-        {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Gerar código de 8 dígitos</Text>}
+        {busy ? <ActivityIndicator color={colors.primaryForeground} /> : <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Gerar código para conectar o app</Text>}
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 72, paddingBottom: 36, gap: 12 },
+  page: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 32, paddingBottom: 36, gap: 12 },
+  menuHeader: { height: 54, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, gap: 14 },
+  menuButton: { width: 42, height: 42, justifyContent: 'center', alignItems: 'flex-start' },
+  menuGlyph: { fontSize: 25, fontWeight: '600' },
+  menuBrand: { fontSize: 14, fontWeight: '800', letterSpacing: 1.2 },
+  menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 14 },
+  menuPanel: { width: 300, maxHeight: '88%', borderWidth: 1, borderRadius: 18, paddingHorizontal: 16 },
+  menuItem: { minHeight: 48, justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
+  menuItemText: { fontSize: 15, fontWeight: '600' },
+  brandLogo: { width: '100%', height: 96, marginBottom: 6 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
   eyebrow: { fontSize: 11, letterSpacing: 1.1, fontWeight: '700', marginBottom: 5 },
   title: { fontSize: 29, lineHeight: 36, fontWeight: '700' },
@@ -684,7 +910,6 @@ const styles = StyleSheet.create({
   checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5 },
   consentText: { flex: 1, fontSize: 12, lineHeight: 18 },
   pairingCode: { fontSize: 36, lineHeight: 48, fontWeight: '800', letterSpacing: 5, textAlign: 'center', paddingVertical: 14 },
-  downloadBox: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: 12, paddingTop: 18 },
   qr: { alignItems: 'center', padding: 14 },
   childRow: { minHeight: 64, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 10 },
   childMain: { minHeight: 60, flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
