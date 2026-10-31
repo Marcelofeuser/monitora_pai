@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getClerkAuthorizedParties } from "../src/lib/clerkConfig";
+import {
+  clerkTokenHasAuthorizedParty,
+  getClerkAuthorizedParties,
+  getClerkAuthorizedPartiesForAuthorization,
+  getClerkAuthorizedPartiesForToken,
+} from "../src/lib/clerkConfig";
+
+function unsignedToken(claims: Record<string, unknown>): string {
+  return `header.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
+}
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -37,5 +46,41 @@ describe("origens autorizadas do Clerk", () => {
     expect(getClerkAuthorizedParties()).toEqual(["http://localhost:5173"]);
     vi.stubEnv("NODE_ENV", "production");
     expect(() => getClerkAuthorizedParties()).toThrow(/CLERK_AUTHORIZED_PARTIES/);
+  });
+});
+
+describe("política de authorized parties para tokens nativos", () => {
+  it("mantém a allowlist para tokens web que possuem azp", () => {
+    vi.stubEnv("CLERK_AUTHORIZED_PARTIES", "https://responsavel.amparakids.com");
+    const token = unsignedToken({ azp: "https://responsavel.amparakids.com" });
+    expect(clerkTokenHasAuthorizedParty(token)).toBe(true);
+    expect(getClerkAuthorizedPartiesForToken(token)).toEqual([
+      "https://responsavel.amparakids.com",
+    ]);
+    expect(getClerkAuthorizedPartiesForAuthorization(`Bearer ${token}`)).toEqual([
+      "https://responsavel.amparakids.com",
+    ]);
+  });
+
+  it("omite somente a checagem de azp para token nativo sem essa claim", () => {
+    const token = unsignedToken({ sub: "user_native" });
+    expect(clerkTokenHasAuthorizedParty(token)).toBe(false);
+    expect(getClerkAuthorizedPartiesForToken(token)).toBeUndefined();
+    expect(getClerkAuthorizedPartiesForAuthorization(`Bearer ${token}`)).toBeUndefined();
+  });
+
+  it("não afrouxa requisições sem Bearer nem esquemas diferentes", () => {
+    vi.stubEnv("CLERK_AUTHORIZED_PARTIES", "https://responsavel.amparakids.com");
+    expect(getClerkAuthorizedPartiesForAuthorization(undefined)).toEqual([
+      "https://responsavel.amparakids.com",
+    ]);
+    expect(getClerkAuthorizedPartiesForAuthorization("Basic credentials")).toEqual([
+      "https://responsavel.amparakids.com",
+    ]);
+  });
+
+  it("deixa tokens malformados para a validação criptográfica do Clerk rejeitar", () => {
+    expect(clerkTokenHasAuthorizedParty("not-a-jwt")).toBe(false);
+    expect(getClerkAuthorizedPartiesForAuthorization("Bearer not-a-jwt")).toBeUndefined();
   });
 });

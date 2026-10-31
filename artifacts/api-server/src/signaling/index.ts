@@ -6,7 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { childDeviceTokensTable, contactDeviceTokensTable, db, usersTable } from "@workspace/db";
 import { authorizeCall } from "../lib/calls";
 import { logger } from "../lib/logger";
-import { getClerkAuthorizedParties } from "../lib/clerkConfig";
+import { getClerkAuthorizedPartiesForToken } from "../lib/clerkConfig";
 import {
   callRegistry,
   finishCall,
@@ -100,7 +100,7 @@ async function resolveIdentity(auth: HandshakeAuth): Promise<Identity | null> {
           headers: { Authorization: `Bearer ${auth.clerkToken}` },
         }),
         {
-          authorizedParties: getClerkAuthorizedParties(),
+          authorizedParties: getClerkAuthorizedPartiesForToken(auth.clerkToken),
         },
       );
       const authObj = requestState.toAuth();

@@ -6,7 +6,7 @@ import { clerkMiddleware } from "@clerk/express";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { pairingRateLimitSecret } from "./lib/pairingRateLimit";
-import { getClerkAuthorizedParties } from "./lib/clerkConfig";
+import { getClerkAuthorizedPartiesForAuthorization } from "./lib/clerkConfig";
 import healthRouter from "./routes/health";
 import {
   CLERK_PROXY_PATH,
@@ -52,11 +52,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(
-  clerkMiddleware({
+  clerkMiddleware((req) => ({
     publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
     secretKey: process.env.CLERK_SECRET_KEY,
-    authorizedParties: getClerkAuthorizedParties(),
-  }),
+    authorizedParties: getClerkAuthorizedPartiesForAuthorization(req.get("authorization")),
+  })),
 );
 
 app.use("/api", router);
