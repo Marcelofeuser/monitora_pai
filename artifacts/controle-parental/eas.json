@@ -5,7 +5,6 @@
   },
   "build": {
     "production-responsavel": {
-      "channel": "production",
       "autoIncrement": true,
       "env": { "AMPARA_APP": "responsavel" },
       "ios": {
@@ -13,7 +12,6 @@
       }
     },
     "production-crianca": {
-      "channel": "production",
       "autoIncrement": true,
       "env": { "AMPARA_APP": "crianca" },
       "ios": {
