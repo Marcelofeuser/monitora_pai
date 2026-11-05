@@ -6,14 +6,24 @@
   "build": {
     "production-responsavel": {
       "autoIncrement": true,
-      "env": { "AMPARA_APP": "responsavel" },
+      "env": {
+        "AMPARA_APP": "responsavel",
+        "EXPO_PUBLIC_API_URL": "https://api-server-production-c955.up.railway.app",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuYW1wYXJha2lkcy5jb20k",
+        "EXPO_PUBLIC_CHILD_DOWNLOAD_URL": "https://responsavel.amparakids.com/baixar/crianca"
+      },
       "ios": {
         "resourceClass": "m-medium"
       }
     },
     "production-crianca": {
       "autoIncrement": true,
-      "env": { "AMPARA_APP": "crianca" },
+      "env": {
+        "AMPARA_APP": "crianca",
+        "EXPO_PUBLIC_API_URL": "https://api-server-production-c955.up.railway.app",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuYW1wYXJha2lkcy5jb20k",
+        "EXPO_PUBLIC_CHILD_DOWNLOAD_URL": "https://responsavel.amparakids.com/baixar/crianca"
+      },
       "ios": {
         "resourceClass": "m-medium"
       }
