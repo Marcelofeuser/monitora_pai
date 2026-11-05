@@ -21,7 +21,9 @@
   },
   "submit": {
     "production-responsavel": {
-      "ios": {}
+      "ios": {
+        "ascAppId": "6813153851"
+      }
     },
     "production-crianca": {
       "ios": {}
