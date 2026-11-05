@@ -6,6 +6,7 @@ const variants = {
     package: 'com.amparakids.responsavel',
     role: 'parent',
     icon: './assets/images/icon.png',
+    easProjectId: '5bb229e5-4e5b-4914-84b2-25c5127f0f69',
   },
   crianca: {
     name: 'Ampara Criança',
@@ -14,6 +15,7 @@ const variants = {
     package: 'com.amparakids.crianca',
     role: 'child',
     icon: './assets/images/icon-child.png',
+    easProjectId: '07623103-09b4-40f6-a4a7-3331baf05697',
   },
 };
 
@@ -107,6 +109,10 @@ module.exports = ({ config }) => {
     },
     web: { ...config.web, favicon: variant.icon },
     plugins,
-    extra: { ...config.extra, appRole: variant.role },
+    extra: {
+      ...config.extra,
+      appRole: variant.role,
+      eas: { projectId: variant.easProjectId },
+    },
   };
 };
