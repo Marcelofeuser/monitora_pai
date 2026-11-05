@@ -13,7 +13,11 @@
     "serve": "node server/serve.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "build:ios:responsavel": "eas build --platform ios --profile production-responsavel",
+    "build:ios:crianca": "eas build --platform ios --profile production-crianca",
+    "submit:ios:responsavel": "eas submit --platform ios --profile production-responsavel",
+    "submit:ios:crianca": "eas submit --platform ios --profile production-crianca"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

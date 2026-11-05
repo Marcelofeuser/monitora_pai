@@ -1,0 +1,32 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "production-responsavel": {
+      "channel": "production",
+      "autoIncrement": true,
+      "env": { "AMPARA_APP": "responsavel" },
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
+    "production-crianca": {
+      "channel": "production",
+      "autoIncrement": true,
+      "env": { "AMPARA_APP": "crianca" },
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    }
+  },
+  "submit": {
+    "production-responsavel": {
+      "ios": {}
+    },
+    "production-crianca": {
+      "ios": {}
+    }
+  }
+}
