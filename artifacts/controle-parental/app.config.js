@@ -105,7 +105,6 @@ module.exports = ({ config }) => {
     ios: {
       ...config.ios,
       bundleIdentifier: variant.package,
-      deploymentTarget: '15.1',
     },
     web: { ...config.web, favicon: variant.icon },
     plugins,

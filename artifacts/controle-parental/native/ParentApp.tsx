@@ -804,7 +804,7 @@ function ParentSignIn({ sessionExpired = false }: { sessionExpired?: boolean }) 
 
   return (
     <ScrollView contentContainerStyle={[styles.page, { backgroundColor: colors.background }]} keyboardShouldPersistTaps="handled">
-      <Image accessibilityLabel="Logo Ampara" resizeMode="contain" source={require('../assets/images/logo-ampara.png')} style={styles.brandLogo} />
+      <Image accessibilityLabel="Logo Ampara" resizeMode="contain" source={require('../assets/images/icon.png')} style={styles.brandLogo} />
       <Text style={[styles.title, { color: colors.foreground }]}>{resetStep === 'sign-in' ? 'Entre na sua conta' : 'Recuperar senha'}</Text>
       <Text style={[styles.body, { color: colors.mutedForeground }]}>
         {resetStep === 'sign-in'
