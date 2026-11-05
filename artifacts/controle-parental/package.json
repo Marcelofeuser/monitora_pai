@@ -14,10 +14,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "build:ios:responsavel": "npx eas-cli build --platform ios --profile production-responsavel",
-    "build:ios:crianca": "npx eas-cli build --platform ios --profile production-crianca",
-    "submit:ios:responsavel": "npx eas-cli submit --platform ios --profile production-responsavel",
-    "submit:ios:crianca": "npx eas-cli submit --platform ios --profile production-crianca"
+    "build:ios:responsavel": "AMPARA_APP=responsavel npx eas-cli build --platform ios --profile production-responsavel",
+    "build:ios:crianca": "AMPARA_APP=crianca npx eas-cli build --platform ios --profile production-crianca",
+    "submit:ios:responsavel": "AMPARA_APP=responsavel npx eas-cli submit --platform ios --profile production-responsavel",
+    "submit:ios:crianca": "AMPARA_APP=crianca npx eas-cli submit --platform ios --profile production-crianca"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
