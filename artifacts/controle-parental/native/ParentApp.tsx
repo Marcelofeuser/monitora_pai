@@ -274,9 +274,10 @@ function ParentSession() {
                 <Text style={[styles.childName, { color: colors.foreground }]}>{child.name}</Text>
                 <Text style={{ color: colors.primary }}>Conversa ›</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" onPress={() => setViewingLocation(child)} style={styles.locationLink}><Text style={{ color: colors.mutedForeground }}>Localização</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => setMirrorChild(child)} style={styles.locationLink}><Text style={{ color: colors.primary }}>Espelho</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => setGroupChild(child)} style={styles.locationLink}><Text style={{ color: colors.primary }}>Grupos</Text></Pressable>
+              <View style={styles.childShortcuts}>
+                <Pressable accessibilityRole="button" onPress={() => setViewingLocation(child)} style={styles.locationLink}><Text style={{ color: colors.mutedForeground }}>Localização</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={() => setMirrorChild(child)} style={styles.locationLink}><Text style={{ color: colors.primary }}>Espelho</Text></Pressable>
+              </View>
             </View>
           ))}
           {children.map((child) => <Pressable key={`reconnect-${child.id}`} disabled={busy} onPress={() => void issueReconnect(child)} style={styles.reconnectButton}><Text style={{ color: colors.primary }}>Conectar outro aparelho de {child.name}</Text></Pressable>)}
@@ -321,7 +322,7 @@ function ParentMenuShell({ colors, menuVisible, setMenuVisible, onSelect, childr
       <Text style={[styles.menuBrand, { color: colors.foreground }]}>AMPARA</Text>
     </View>
     <View style={{ flex: 1 }}>{children}</View>
-    <Modal animationType="fade" transparent visible={menuVisible} onRequestClose={() => setMenuVisible(false)}>
+    <Modal animationType="none" transparent visible={menuVisible} onRequestClose={() => setMenuVisible(false)}>
       <View style={[styles.menuBackdrop, { paddingTop: Math.max(insets.top, 12) + 54 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Fechar menu" onPress={() => setMenuVisible(false)} style={StyleSheet.absoluteFill} />
         <ScrollView style={[styles.menuPanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -911,9 +912,10 @@ const styles = StyleSheet.create({
   consentText: { flex: 1, fontSize: 12, lineHeight: 18 },
   pairingCode: { fontSize: 36, lineHeight: 48, fontWeight: '800', letterSpacing: 5, textAlign: 'center', paddingVertical: 14 },
   qr: { alignItems: 'center', padding: 14 },
-  childRow: { minHeight: 64, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  childMain: { minHeight: 60, flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  locationLink: { paddingHorizontal: 8, paddingVertical: 12 },
+  childRow: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, gap: 4 },
+  childMain: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  childShortcuts: { flexDirection: 'row', gap: 20, paddingLeft: 46 },
+  locationLink: { paddingVertical: 6 },
   childAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   childName: { flex: 1, fontSize: 15, fontWeight: '600' },
   reconnectButton: { paddingVertical: 9 },
