@@ -16,6 +16,7 @@ const variants = {
     role: 'child',
     icon: './assets/images/icon-child.png',
     easProjectId: '07623103-09b4-40f6-a4a7-3331baf05697',
+    buildNumber: '6',
   },
 };
 
@@ -105,6 +106,7 @@ module.exports = ({ config }) => {
     ios: {
       ...config.ios,
       bundleIdentifier: variant.package,
+      ...(variant.buildNumber ? { buildNumber: variant.buildNumber } : {}),
     },
     web: { ...config.web, favicon: variant.icon },
     plugins,
