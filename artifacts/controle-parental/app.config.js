@@ -78,10 +78,7 @@ module.exports = ({ config }) => {
     },
   ]);
   plugins.push('./plugins/with-android-packaging');
-  plugins.push([
-    'expo-build-properties',
-    { ios: { deploymentTarget: '15.1' } },
-  ]);
+  plugins.push('./plugins/with-ios-deployment-target');
   if (variant.role === 'child') {
     plugins.push('./plugins/with-child-ios-pods');
   }
