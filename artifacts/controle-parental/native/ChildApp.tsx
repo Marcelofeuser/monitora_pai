@@ -33,6 +33,16 @@ export function ChildApp() {
   const scanLock = useRef(false);
   const call = useNativeCall(deviceToken ? { kind: 'child', token: deviceToken } : null);
 
+  const clearStoredPairing = useCallback(async () => {
+    await SecureStore.deleteItemAsync(DEVICE_TOKEN_KEY);
+    await AsyncStorage.multiRemove([CHILD_NAME_KEY, CHILD_ID_KEY, PARENT_ID_KEY]);
+    setDeviceToken(null);
+    setChildName('');
+    setChildId('');
+    setParentId('');
+    setState('unpaired');
+  }, []);
+
   const refreshChildLockStatus = useCallback(async () => {
     if (!deviceToken) return;
     const status = await fetchChildScreenTimeStatus(deviceToken);
@@ -48,10 +58,13 @@ export function ChildApp() {
     }
     let active = true;
     const refresh = () => void refreshChildLockStatus().catch((cause) => {
-      if (active) {
-        setChildLockStatus(null);
-        setScreenTimeError(cause instanceof Error ? cause.message : 'Não foi possível verificar o acesso.');
+      if (!active) return;
+      if (cause instanceof Error && cause.message === 'not_authenticated') {
+        void clearStoredPairing();
+        return;
       }
+      setChildLockStatus(null);
+      setScreenTimeError(cause instanceof Error ? cause.message : 'Não foi possível verificar o acesso.');
     });
     refresh();
     const timer = setInterval(() => {
@@ -62,10 +75,13 @@ export function ChildApp() {
           setScreenTimeError(null);
         }
       }).catch((cause) => {
-        if (active) {
-          setChildLockStatus(null);
-          setScreenTimeError(cause instanceof Error ? cause.message : 'Não foi possível atualizar o tempo de uso.');
+        if (!active) return;
+        if (cause instanceof Error && cause.message === 'not_authenticated') {
+          void clearStoredPairing();
+          return;
         }
+        setChildLockStatus(null);
+        setScreenTimeError(cause instanceof Error ? cause.message : 'Não foi possível atualizar o tempo de uso.');
       });
     }, 60_000);
     const appStateSubscription = AppState.addEventListener('change', (state) => {
@@ -131,14 +147,8 @@ export function ChildApp() {
     if (!deviceToken) return;
     try {
       await revokeChildDevice(deviceToken);
-      await SecureStore.deleteItemAsync(DEVICE_TOKEN_KEY);
-      await AsyncStorage.multiRemove([CHILD_NAME_KEY, CHILD_ID_KEY, PARENT_ID_KEY]);
-      setDeviceToken(null);
-      setChildName('');
-      setChildId('');
-      setParentId('');
+      await clearStoredPairing();
       setError(null);
-      setState('unpaired');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível sair deste aparelho. Tente novamente com internet.');
     }
