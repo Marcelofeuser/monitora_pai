@@ -69,8 +69,18 @@ function apiUrl(path: string): string {
   return `${API_URL}${path}`;
 }
 
+type UnauthorizedHandler = () => void;
+let parentUnauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function setParentUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  parentUnauthorizedHandler = handler;
+}
+
 async function readError(response: Response): Promise<Error> {
   const body = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    parentUnauthorizedHandler?.();
+  }
   if (response.status === 429) {
     const retryAfter = Number(response.headers.get('Retry-After'));
     const minutes = Number.isFinite(retryAfter) && retryAfter > 0
