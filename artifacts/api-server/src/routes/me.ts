@@ -3,6 +3,8 @@ import { getAuth } from "@clerk/express";
 import { eq } from "drizzle-orm";
 import { db, usersTable, parentRelationshipEnum } from "@workspace/db";
 import { ensureParentUser } from "../lib/parentUser";
+import { AccountDeletionBlockedError, deleteParentAccount } from "../lib/accountDeletion";
+import { logger } from "../lib/logger";
 import { isGuardianOfChild } from "../lib/guardians";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
 import { requireContactAuth, type ContactAuthedRequest } from "../middlewares/contactAuth";
@@ -297,6 +299,28 @@ router.post("/contact/me/photo", requireContactAuth, uploadSingleMediaFile, asyn
   if (!updated) return res.status(404).json({ error: "not_found" });
 
   return res.json({ photoUrl: updated.photoUrl });
+});
+
+/**
+ * DELETE /api/me
+ * Exclusão definitiva da conta do Responsável (App Store 5.1.1(v) /
+ * Google Play). Exige { confirm: "EXCLUIR" } no corpo para evitar chamada
+ * acidental. Ver lib/accountDeletion.ts para o que é apagado.
+ */
+router.delete("/me", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+  if ((req.body as { confirm?: string } | undefined)?.confirm !== "EXCLUIR") {
+    return res.status(400).json({ error: "confirmation_required" });
+  }
+  try {
+    const result = await deleteParentAccount(auth.userId);
+    return res.json({ ok: true, deletedChildren: result.deletedChildIds.length, keptChildren: result.keptChildIds.length });
+  } catch (err) {
+    if (err instanceof AccountDeletionBlockedError) return res.status(409).json({ error: err.message });
+    logger.error({ err, userId: auth.userId }, "account deletion failed");
+    return res.status(500).json({ error: "account_deletion_failed" });
+  }
 });
 
 export default router;

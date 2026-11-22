@@ -1,12 +1,14 @@
-import { ClerkProvider, useAuth, useSignIn, useUser } from '@clerk/expo';
+import { ClerkProvider, useAuth, useSSO, useSignIn, useUser } from '@clerk/expo';
+import { useSignInWithApple } from '@clerk/expo/apple';
+import * as WebBrowser from 'expo-web-browser';
 import { tokenCache } from '@clerk/expo/token-cache';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, Image, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { ActivityIndicator, Alert, Animated, Dimensions, Image, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Feather, FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import { Avatar, ParentThemeProvider, useParentColors as useColors, useParentTheme } from './theme';
-import { createChildPairing, createChildReconnectPairing, createParentContact, createParentContactInvite, createParentGroup, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentContacts, fetchParentGroupMessages, fetchParentGroups, fetchParentMirroredConversation, fetchParentPrivateMessages, fetchParentScreenTime, fetchParentBio, updateParentBio, fetchParentChildBio, updateParentChildBio, fetchParentGuardians, uploadParentPhoto, sendParentGroupMessage, sendParentPrivateMessage, setParentChildLock, setParentContactStatus, setParentDailyLimit, type BioProfile, type ChildProfile, type NativeUploadFile, type GuardianProfile, type GroupProfile, type MirroredContact, type PairingResult, type PrivateMessageInput, type ScreenTimeStatus, setParentUnauthorizedHandler } from './api';
+import { createChildPairing, createChildReconnectPairing, createParentContact, createParentContactInvite, createParentGroup, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentContacts, fetchParentGroupMessages, fetchParentGroups, fetchParentMirroredConversation, fetchParentPrivateMessages, fetchParentScreenTime, fetchParentBio, updateParentBio, deleteParentAccount, fetchParentChildBio, updateParentChildBio, fetchParentGuardians, uploadParentPhoto, sendParentGroupMessage, sendParentPrivateMessage, setParentChildLock, setParentContactStatus, setParentDailyLimit, type BioProfile, type ChildProfile, type NativeUploadFile, type GuardianProfile, type GroupProfile, type MirroredContact, type PairingResult, type PrivateMessageInput, type ScreenTimeStatus, setParentUnauthorizedHandler } from './api';
 import { ChatChip, PrivateChat } from './PrivateChat';
 import { ProfilePhoto } from './ProfilePhoto';
 import { ParentLocation } from './ParentLocation';
@@ -14,6 +16,12 @@ import { NativeCallOverlay } from './NativeCallOverlay';
 import { useNativeCall } from './useNativeCall';
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+WebBrowser.maybeCompleteAuthSession();
+
+// O botão nativo da Apple só existe no iOS; no Android o login com Apple usa o navegador.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const AppleAuthentication: typeof import('expo-apple-authentication') | null = Platform.OS === 'ios' ? require('expo-apple-authentication') : null;
 const childDownloadUrl = process.env.EXPO_PUBLIC_CHILD_DOWNLOAD_URL?.trim()
   || 'https://baixar.amparakids.com/crianca';
 
@@ -105,6 +113,38 @@ function ParentSession() {
   const refreshingChildren = useRef(false);
   const [childrenError, setChildrenError] = useState<string | null>(null);
   const [childrenLoaded, setChildrenLoaded] = useState(false);
+
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const runAccountDeletion = useCallback(async () => {
+    setDeletingAccount(true);
+    setDeleteError(null);
+    try {
+      const token = await getTokenRef.current();
+      if (!token) throw new Error('Sessão expirada. Entre novamente e tente de novo.');
+      await deleteParentAccount(token);
+      await signOutRef.current().catch(() => undefined);
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : 'Não foi possível excluir a conta.');
+    } finally {
+      setDeletingAccount(false);
+    }
+  }, []);
+  const confirmAccountDeletion = useCallback(() => {
+    Alert.alert(
+      'Excluir conta?',
+      'Sua conta e seus dados serão apagados de forma definitiva. Crianças conectadas só a você também serão desconectadas e apagadas, junto com conversas e localizações. A assinatura será cancelada. Isso não pode ser desfeito.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Excluir definitivamente', style: 'destructive', onPress: () => {
+          Alert.alert('Tem certeza?', 'Esta é a última confirmação.', [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Sim, excluir', style: 'destructive', onPress: () => { void runAccountDeletion(); } },
+          ]);
+        } },
+      ],
+    );
+  }, [runAccountDeletion]);
 
   const refreshChildren = useCallback(async () => {
     if (!isSignedIn || refreshingChildren.current) return;
@@ -348,9 +388,13 @@ function ParentSession() {
               <Text style={[styles.body, { color: colors.mutedForeground }]}>{user?.fullName || user?.firstName || 'Responsável'}</Text>
               <Text style={[styles.body, { color: colors.mutedForeground }]}>{user?.primaryEmailAddress?.emailAddress || ''}</Text>
               <Pressable accessibilityRole="button" onPress={() => chooseMenu('Sair')} style={[styles.primaryButton, { backgroundColor: colors.primary }]}><Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Sair da conta</Text></Pressable>
+              <Pressable accessibilityRole="button" disabled={deletingAccount} onPress={confirmAccountDeletion} style={[styles.primaryButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.destructive, opacity: deletingAccount ? 0.65 : 1 }]}>
+                {deletingAccount ? <ActivityIndicator color={colors.destructive} /> : <Text style={[styles.buttonText, { color: colors.destructive }]}>Excluir conta</Text>}
+              </Pressable>
+              {!!deleteError && <Text style={[styles.error, { color: colors.destructive }]}>{deleteError}</Text>}
             </> : <>
               <Text style={[styles.body, { color: colors.mutedForeground }]}>Para vincular, gere um código de 8 dígitos em “Conectar criança” e digite-o no app infantil. O QR Code serve somente para baixar o app.</Text>
-              <Text style={[styles.body, { color: colors.mutedForeground }]}>O contato de suporte ainda não está configurado neste app.</Text>
+              <Text style={[styles.body, { color: colors.mutedForeground }]}>Dúvidas ou problemas: suporte@amparakids.com</Text>
             </>}
           </ScrollView>}
       <NativeCallOverlay call={call} />
@@ -1150,6 +1194,53 @@ function ParentSignIn({ sessionExpired = false }: { sessionExpired?: boolean }) 
   const [notice, setNotice] = useState<string | null>(sessionExpired ? 'Sua sessão expirou. Entre novamente.' : null);
   const [busy, setBusy] = useState(false);
 
+  const { startSSOFlow } = useSSO();
+  const { startAppleAuthenticationFlow } = useSignInWithApple();
+
+  const socialErrorMessage = (cause: unknown, provider: string) => {
+    const clerkError = cause as { errors?: { code?: string; longMessage?: string; message?: string }[] } | null;
+    const first = clerkError?.errors?.[0];
+    if (first?.code === 'external_account_exists' || first?.code === 'form_identifier_exists') {
+      return `Este e-mail já tem conta no Ampara. Entre com e-mail e senha, ou pelo mesmo método usado no cadastro.`;
+    }
+    if (first?.longMessage || first?.message) return first.longMessage || first.message || '';
+    return cause instanceof Error ? cause.message : `Não foi possível entrar com ${provider}.`;
+  };
+
+  const signInWithApple = async () => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = Platform.OS === 'ios'
+        ? await startAppleAuthenticationFlow()
+        : await startSSOFlow({ strategy: 'oauth_apple' });
+      if (result.createdSessionId && result.setActive) {
+        await result.setActive({ session: result.createdSessionId });
+      }
+    } catch (cause) {
+      setError(socialErrorMessage(cause, 'Apple'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await startSSOFlow({ strategy: 'oauth_google' });
+      if (result.createdSessionId && result.setActive) {
+        await result.setActive({ session: result.createdSessionId });
+      }
+    } catch (cause) {
+      setError(socialErrorMessage(cause, 'Google'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submit = async () => {
     if (!signIn || !email.trim() || !password) return;
     setBusy(true);
@@ -1260,6 +1351,33 @@ function ParentSignIn({ sessionExpired = false }: { sessionExpired?: boolean }) 
             ? 'Digite o código enviado ao e-mail associado à sua conta.'
             : 'Escolha uma nova senha com pelo menos 8 caracteres.'}
       </Text>
+      {resetStep === 'sign-in' && (
+        <View style={styles.socialGroup}>
+          {AppleAuthentication ? (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+              cornerRadius={14}
+              style={[styles.socialButtonNative, { opacity: busy ? 0.65 : 1 }]}
+              onPress={() => { if (!busy) void signInWithApple(); }}
+            />
+          ) : (
+            <Pressable accessibilityRole="button" disabled={busy} onPress={() => void signInWithApple()} style={[styles.socialButton, { backgroundColor: '#FFFFFF', opacity: busy ? 0.65 : 1 }]}>
+              <FontAwesome name="apple" size={20} color="#111111" />
+              <Text style={[styles.buttonText, { color: '#111111' }]}>Entrar com Apple</Text>
+            </Pressable>
+          )}
+          <Pressable accessibilityRole="button" disabled={busy} onPress={() => void signInWithGoogle()} style={[styles.socialButton, { backgroundColor: '#FFFFFF', opacity: busy ? 0.65 : 1 }]}>
+            <FontAwesome name="google" size={18} color="#4285F4" />
+            <Text style={[styles.buttonText, { color: '#1F1F1F' }]}>Entrar com Google</Text>
+          </Pressable>
+          <View style={styles.dividerRow}>
+            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+            <Text style={[styles.body, { color: colors.mutedForeground, marginBottom: 0, marginHorizontal: 10 }]}>ou com e-mail</Text>
+            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+          </View>
+        </View>
+      )}
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.label, { color: colors.foreground }]}>E-mail</Text>
         <TextInput autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} editable={resetStep === 'sign-in' || resetStep === 'code'} placeholder="voce@email.com" placeholderTextColor={colors.mutedForeground} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
@@ -1386,6 +1504,11 @@ const styles = StyleSheet.create({
   buttonText: { fontSize: 15, fontWeight: '700' },
   error: { fontSize: 13, lineHeight: 19, marginTop: 12 },
   linkButton: { alignSelf: 'center', padding: 15, marginTop: 6 },
+  socialGroup: { marginTop: 18, gap: 12 },
+  socialButtonNative: { width: '100%', height: 50 },
+  socialButton: { minHeight: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  dividerLine: { flex: 1, height: 1 },
   consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 16 },
   checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5 },
   consentText: { flex: 1, fontSize: 12, lineHeight: 18 },

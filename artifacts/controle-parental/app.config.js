@@ -35,9 +35,9 @@ module.exports = ({ config }) => {
       && name !== 'expo-secure-store';
   });
   if (variant.role === 'parent') {
-    // The parent app currently uses email/password in its UI; do not advertise
-    // an Apple sign-in entitlement until that flow is implemented and tested.
-    plugins.push(['@clerk/expo', { appleSignIn: false }]);
+    // Parent app offers native Sign in with Apple (iOS) next to Google and email.
+    plugins.push(['@clerk/expo', { appleSignIn: true }]);
+    plugins.push('expo-apple-authentication');
   } else {
     plugins.push([
       'expo-location',
@@ -106,7 +106,7 @@ module.exports = ({ config }) => {
     ios: {
       ...config.ios,
       bundleIdentifier: variant.package,
-      ...(variant.role === 'parent' ? { buildNumber: '17' } : {}),
+      ...(variant.role === 'parent' ? { buildNumber: '17', usesAppleSignIn: true } : {}),
       // Clerk's native iOS SDK requires iOS 17; keep the child app on its
       // existing lower deployment target because it does not include Clerk.
       deploymentTarget: variant.role === 'parent' ? '17.0' : '15.1',

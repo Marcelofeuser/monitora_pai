@@ -190,6 +190,16 @@ export async function fetchParentBio(authToken: string): Promise<BioProfile> {
   return response.json();
 }
 
+export async function deleteParentAccount(authToken: string): Promise<{ ok: true; deletedChildren: number; keptChildren: number }> {
+  const response = await apiFetch(apiUrl('/api/me'), {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify({ confirm: 'EXCLUIR' }),
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
 export async function updateParentBio(input: {
   relationship?: string;
   phone?: string | null;
