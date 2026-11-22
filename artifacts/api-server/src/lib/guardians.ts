@@ -83,7 +83,7 @@ export async function getGuardianChildIds(parentId: string): Promise<string[]> {
   return [...ids];
 }
 
-export type GuardianInfo = { id: string; name: string; role: "owner" | "guardian" };
+export type GuardianInfo = { id: string; name: string; role: "owner" | "guardian"; relationship: string | null };
 
 /**
  * Todos os Responsaveis (dono + guardians) de uma Crianca -- usado na tela
@@ -101,9 +101,15 @@ export async function getGuardiansOfChild(childId: string): Promise<GuardianInfo
   if (rows.length === 0) return [];
 
   const parents = await db
-    .select({ id: usersTable.id, name: usersTable.name })
+    .select({ id: usersTable.id, name: usersTable.name, relationship: usersTable.relationship })
     .from(usersTable)
     .where(inArray(usersTable.id, rows.map((r) => r.parentId)));
   const nameById = new Map(parents.map((p) => [p.id, p.name]));
-  return rows.map((r) => ({ id: r.parentId, name: nameById.get(r.parentId) ?? "Responsável", role: r.role }));
+  const relationshipById = new Map(parents.map((p) => [p.id, p.relationship ?? null]));
+  return rows.map((r) => ({
+    id: r.parentId,
+    name: nameById.get(r.parentId) ?? "Responsável",
+    role: r.role,
+    relationship: relationshipById.get(r.parentId) ?? null,
+  }));
 }

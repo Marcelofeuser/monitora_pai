@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, pgEnum, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, pgEnum, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -59,6 +59,9 @@ export const usersTable = pgTable("users", {
     whatsapp?: string;
     other?: string;
   }>(),
+  // O Responsável pode bloquear a edição da bio da Criança. O bloqueio é
+  // aplicado no backend, portanto não depende de esconder um botão no app.
+  childBioLocked: boolean("child_bio_locked").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

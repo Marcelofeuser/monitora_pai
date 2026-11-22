@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import { eq } from "drizzle-orm";
 import { db, usersTable, parentRelationshipEnum } from "@workspace/db";
 import { ensureParentUser } from "../lib/parentUser";
+import { isGuardianOfChild } from "../lib/guardians";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
 import { requireContactAuth, type ContactAuthedRequest } from "../middlewares/contactAuth";
 import { uploadSingleMediaFile } from "../middlewares/mediaUpload";
@@ -123,6 +124,61 @@ const updateChildMeSchema = z.object({
   socialLinks: socialLinksSchema.nullable().optional(),
 });
 
+const childBioUpdateSchema = updateChildMeSchema.extend({
+  bioLocked: z.boolean().optional(),
+});
+
+function childBioResponse(child: typeof usersTable.$inferSelect) {
+  return {
+    id: child.id,
+    name: child.name,
+    photoUrl: child.photoUrl,
+    phone: child.phone,
+    email: child.email,
+    socialLinks: child.socialLinks,
+    bioLocked: Boolean(child.childBioLocked),
+  };
+}
+
+/**
+ * GET/PATCH /api/children/:childId/bio
+ * Bio da Criança para o Responsável autenticado. O Responsável pode editar
+ * os campos e bloquear/desbloquear a edição no app infantil.
+ */
+router.get("/children/:childId/bio", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+  if (!(await isGuardianOfChild(auth.userId, req.params.childId))) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  const [child] = await db.select().from(usersTable).where(eq(usersTable.id, req.params.childId)).limit(1);
+  if (!child || child.role !== "child") return res.status(404).json({ error: "not_found" });
+  return res.json(childBioResponse(child));
+});
+
+router.patch("/children/:childId/bio", async (req, res) => {
+  const auth = getAuth(req);
+  if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
+  if (!(await isGuardianOfChild(auth.userId, req.params.childId))) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  const parsed = childBioUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+  }
+  const { bioLocked, ...childFields } = parsed.data;
+  const [updated] = await db
+    .update(usersTable)
+    .set({
+      ...childFields,
+      ...(bioLocked === undefined ? {} : { childBioLocked: bioLocked }),
+    })
+    .where(eq(usersTable.id, req.params.childId))
+    .returning();
+  if (!updated || updated.role !== "child") return res.status(404).json({ error: "not_found" });
+  return res.json(childBioResponse(updated));
+});
+
 /**
  * GET /api/child/me
  * PATCH /api/child/me
@@ -133,17 +189,13 @@ const updateChildMeSchema = z.object({
 router.get("/child/me", requireChildAuth, async (req: ChildAuthedRequest, res) => {
   const [child] = await db.select().from(usersTable).where(eq(usersTable.id, req.childId!)).limit(1);
   if (!child) return res.status(404).json({ error: "not_found" });
-  return res.json({
-    id: child.id,
-    name: child.name,
-    photoUrl: child.photoUrl,
-    phone: child.phone,
-    email: child.email,
-    socialLinks: child.socialLinks,
-  });
+  return res.json(childBioResponse(child));
 });
 
 router.patch("/child/me", requireChildAuth, async (req: ChildAuthedRequest, res) => {
+  const [current] = await db.select({ childBioLocked: usersTable.childBioLocked }).from(usersTable).where(eq(usersTable.id, req.childId!)).limit(1);
+  if (!current) return res.status(404).json({ error: "not_found" });
+  if (current.childBioLocked) return res.status(403).json({ error: "bio_locked_by_parent" });
   const parsed = updateChildMeSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
@@ -156,14 +208,7 @@ router.patch("/child/me", requireChildAuth, async (req: ChildAuthedRequest, res)
     .returning();
   if (!updated) return res.status(404).json({ error: "not_found" });
 
-  return res.json({
-    id: updated.id,
-    name: updated.name,
-    photoUrl: updated.photoUrl,
-    phone: updated.phone,
-    email: updated.email,
-    socialLinks: updated.socialLinks,
-  });
+  return res.json(childBioResponse(updated));
 });
 
 router.post("/child/me/photo", requireChildAuth, uploadSingleMediaFile, async (req: ChildAuthedRequest, res) => {
