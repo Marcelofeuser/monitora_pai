@@ -39,3 +39,8 @@ yarn-error.*
 .vercel
 
 .env
+
+# gerados / backups locais
+ios-responsavel/
+.backup-redesign-*/
+.old-v1/
