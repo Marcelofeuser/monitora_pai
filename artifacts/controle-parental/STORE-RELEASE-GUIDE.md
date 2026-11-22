@@ -9,20 +9,24 @@ O Android permite distribuir um APK de lançamento assinado pelo próprio site.
 Ao instalar, cada pessoa precisa autorizar a instalação de apps daquela origem
 nas configurações do Android.
 
-1. Instale um JDK compatível com o Gradle do projeto e confirme `java -version`.
+1. Instale um JDK 17 compatível com o Gradle. O script encontra o JDK 17 do
+   Homebrew quando o comando `java` do macOS aponta apenas para o instalador.
 2. Se ainda não houver uma chave de assinatura preservada, crie-a localmente:
    `bash scripts/create-android-upload-key.sh`.
-3. Guarde `~/.amparakids/credentials/android-upload.jks` e as senhas em um
+3. Guarde `~/.amparakids/credentials/android-upload.jks` e a senha em um
    cofre seguro e faça cópia de backup. Não envie esses dados por chat, e-mail
    ou GitHub. A mesma chave deve assinar todas as atualizações dos dois apps.
 4. Gere os APKs de lançamento:
 
    ```sh
-   bash scripts/build-android-release.sh responsavel
-   bash scripts/build-android-release.sh crianca
+   bash scripts/build-android-release.sh ambos
    ```
 
-   O script solicita as senhas sem mostrá-las e grava
+   O script solicita a senha do keystore e, em seguida, a senha da chave.
+   Pressione Enter na segunda pergunta se você criou ambas com a mesma senha.
+   Antes de compilar, ele verifica a senha do arquivo e a da chave, indicando
+   qual delas está incorreta. Ao final, confere a assinatura e o identificador
+   de cada APK e grava
    `dist/releases/ampara-responsavel.apk` e
    `dist/releases/ampara-crianca.apk`.
 5. Teste os APKs assinados em aparelhos Android reais antes de disponibilizá-los.
@@ -33,8 +37,11 @@ nas configurações do Android.
    O Android exibirá a confirmação e poderá pedir autorização para instalar
    apps baixados pelo navegador.
 
-Não gere outra chave caso o arquivo atual já exista. Sem a chave original, uma
-atualização instalada não poderá ser assinada como continuação da mesma linha.
+Não gere outra chave caso o arquivo atual já exista e você conheça as senhas.
+Se a senha da chave atual foi perdida, preserve o arquivo existente como backup
+antes de criar uma nova chave. Faça isso somente se nenhum APK assinado com a
+chave antiga tiver sido distribuído: uma instalação existente não aceita uma
+atualização assinada por outra chave.
 
 ## iPhone e iPad no Brasil
 

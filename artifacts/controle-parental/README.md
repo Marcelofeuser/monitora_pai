@@ -5,8 +5,8 @@ Android e iOS a partir da mesma base compartilhada:
 
 | Variante | Nome instalado | Application ID | Perfil |
 | --- | --- | --- | --- |
-| `responsavel` | Ampara Responsáveis | `com.amparakids.responsavel` | Responsável |
-| `crianca` | Ampara Criança | `com.amparakids.crianca` | Criança |
+| `responsavel` | Ampara | `com.amparakids.responsavel` | Responsável |
+| `crianca` | Ampara Kids | `com.amparakids.crianca` | Criança |
 
 ## Android
 

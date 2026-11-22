@@ -33,6 +33,22 @@ export type PrivateMessageInput =
   | { stickerEmoji: string };
 
 export type ChildProfile = { id: string; name: string };
+export type BioProfile = {
+  id: string;
+  name: string;
+  photoUrl?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  socialLinks?: { instagram?: string; whatsapp?: string; other?: string } | null;
+  relationship?: string | null;
+  bioLocked?: boolean;
+};
+export type GuardianProfile = {
+  id: string;
+  name: string;
+  role: 'owner' | 'guardian';
+  relationship: string | null;
+};
 export type GroupProfile = {
   id: string;
   childId: string;
@@ -69,6 +85,39 @@ function apiUrl(path: string): string {
   return `${API_URL}${path}`;
 }
 
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+const API_REQUEST_TIMEOUT_MS = 15_000;
+
+export function setParentUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler;
+}
+
+async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(input, { ...init, signal: controller.signal });
+    const authorization = new Headers(init?.headers).get('Authorization');
+    const isParentAuthenticatedRequest = authorization?.startsWith('Bearer ') === true;
+
+    if (response.status === 401 && isParentAuthenticatedRequest) {
+      const body = await response.clone().json().catch(() => null) as { error?: string; code?: string } | null;
+      if (body?.error === 'not_authenticated' || body?.code === 'not_authenticated') {
+        unauthorizedHandler?.();
+      }
+    }
+    return response;
+  } catch (cause) {
+    if (cause instanceof Error && cause.name === 'AbortError') {
+      throw new Error('A API demorou mais de 15 segundos para responder. Verifique a conexão e tente novamente.');
+    }
+    throw cause;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function readError(response: Response): Promise<Error> {
   const body = await response.json().catch(() => ({}));
   if (response.status === 429) {
@@ -85,7 +134,7 @@ export async function createChildPairing(
   input: { childName: string; childAge?: string; consent: true },
   authToken: string,
 ): Promise<PairingResult> {
-  const response = await fetch(apiUrl('/api/pairing'), {
+  const response = await apiFetch(apiUrl('/api/pairing'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -98,7 +147,7 @@ export async function createChildPairing(
 }
 
 export async function createChildReconnectPairing(childId: string, authToken: string): Promise<PairingResult> {
-  const response = await fetch(apiUrl('/api/pairing/reconnect'), {
+  const response = await apiFetch(apiUrl('/api/pairing/reconnect'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
     body: JSON.stringify({ childId }),
@@ -108,7 +157,7 @@ export async function createChildReconnectPairing(childId: string, authToken: st
 }
 
 export async function confirmChildPairing(token: string): Promise<ConfirmPairingResult> {
-  const response = await fetch(apiUrl('/api/pairing/confirm'), {
+  const response = await apiFetch(apiUrl('/api/pairing/confirm'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
@@ -118,7 +167,7 @@ export async function confirmChildPairing(token: string): Promise<ConfirmPairing
 }
 
 export async function confirmChildPairingCode(code: string): Promise<ConfirmPairingResult> {
-  const response = await fetch(apiUrl('/api/pairing/confirm'), {
+  const response = await apiFetch(apiUrl('/api/pairing/confirm'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
@@ -128,15 +177,66 @@ export async function confirmChildPairingCode(code: string): Promise<ConfirmPair
 }
 
 export async function fetchParentChildren(authToken: string): Promise<ChildProfile[]> {
-  const response = await fetch(apiUrl('/api/children'), {
+  const response = await apiFetch(apiUrl('/api/children'), {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!response.ok) throw await readError(response);
   return response.json();
 }
 
+export async function fetchParentBio(authToken: string): Promise<BioProfile> {
+  const response = await apiFetch(apiUrl('/api/me'), { headers: { Authorization: `Bearer ${authToken}` } });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function updateParentBio(input: {
+  relationship?: string;
+  phone?: string | null;
+  email?: string | null;
+  socialLinks?: BioProfile['socialLinks'];
+}, authToken: string): Promise<BioProfile> {
+  const response = await apiFetch(apiUrl('/api/me'), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function fetchParentChildBio(childId: string, authToken: string): Promise<BioProfile> {
+  const response = await apiFetch(apiUrl(`/api/children/${encodeURIComponent(childId)}/bio`), {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function updateParentChildBio(childId: string, input: {
+  name?: string;
+  phone?: string | null;
+  email?: string | null;
+  socialLinks?: BioProfile['socialLinks'];
+  bioLocked?: boolean;
+}, authToken: string): Promise<BioProfile> {
+  const response = await apiFetch(apiUrl(`/api/children/${encodeURIComponent(childId)}/bio`), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function fetchParentGuardians(authToken: string): Promise<GuardianProfile[]> {
+  const response = await apiFetch(apiUrl('/api/guardians'), { headers: { Authorization: `Bearer ${authToken}` } });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
 export async function fetchParentApprovedContacts(childId: string, authToken: string): Promise<MirroredContact[]> {
-  const response = await fetch(`${apiUrl('/api/contacts')}?childId=${encodeURIComponent(childId)}&status=approved`, {
+  const response = await apiFetch(`${apiUrl('/api/contacts')}?childId=${encodeURIComponent(childId)}&status=approved`, {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!response.ok) throw await readError(response);
@@ -144,7 +244,7 @@ export async function fetchParentApprovedContacts(childId: string, authToken: st
 }
 
 export async function fetchParentContacts(childId: string, authToken: string): Promise<ParentContact[]> {
-  const response = await fetch(`${apiUrl('/api/contacts')}?childId=${encodeURIComponent(childId)}`, {
+  const response = await apiFetch(`${apiUrl('/api/contacts')}?childId=${encodeURIComponent(childId)}`, {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!response.ok) throw await readError(response);
@@ -152,7 +252,7 @@ export async function fetchParentContacts(childId: string, authToken: string): P
 }
 
 export async function createParentContact(input: { childId: string; contactName: string; contactPhone?: string; relation?: string }, authToken: string): Promise<ParentContact> {
-  const response = await fetch(apiUrl('/api/contacts'), {
+  const response = await apiFetch(apiUrl('/api/contacts'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
     body: JSON.stringify(input),
@@ -162,7 +262,7 @@ export async function createParentContact(input: { childId: string; contactName:
 }
 
 export async function setParentContactStatus(contactId: string, decision: 'approved' | 'denied' | 'revoked', authToken: string): Promise<ParentContact> {
-  const response = await fetch(apiUrl(`/api/contacts/${encodeURIComponent(contactId)}/decision`), {
+  const response = await apiFetch(apiUrl(`/api/contacts/${encodeURIComponent(contactId)}/decision`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
     body: JSON.stringify({ decision }),
@@ -172,7 +272,7 @@ export async function setParentContactStatus(contactId: string, decision: 'appro
 }
 
 export async function createParentContactInvite(contactId: string, authToken: string): Promise<ContactInvite> {
-  const response = await fetch(apiUrl(`/api/contacts/${encodeURIComponent(contactId)}/invite`), {
+  const response = await apiFetch(apiUrl(`/api/contacts/${encodeURIComponent(contactId)}/invite`), {
     method: 'POST',
     headers: { Authorization: `Bearer ${authToken}` },
   });
@@ -181,7 +281,7 @@ export async function createParentContactInvite(contactId: string, authToken: st
 }
 
 export async function fetchParentScreenTime(childId: string, authToken: string): Promise<ScreenTimeStatus> {
-  const response = await fetch(apiUrl(`/api/screen-time/${encodeURIComponent(childId)}`), {
+  const response = await apiFetch(apiUrl(`/api/screen-time/${encodeURIComponent(childId)}`), {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!response.ok) throw await readError(response);
@@ -189,7 +289,7 @@ export async function fetchParentScreenTime(childId: string, authToken: string):
 }
 
 export async function setParentDailyLimit(childId: string, dailyLimitMinutes: number | null, authToken: string): Promise<void> {
-  const response = await fetch(apiUrl(`/api/screen-time/${encodeURIComponent(childId)}/limit`), {
+  const response = await apiFetch(apiUrl(`/api/screen-time/${encodeURIComponent(childId)}/limit`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
     body: JSON.stringify({ dailyLimitMinutes }),
@@ -198,7 +298,7 @@ export async function setParentDailyLimit(childId: string, dailyLimitMinutes: nu
 }
 
 export async function setParentChildLock(childId: string, locked: boolean, authToken: string): Promise<void> {
-  const response = await fetch(apiUrl(`/api/screen-time/${encodeURIComponent(childId)}/${locked ? 'lock' : 'unlock'}`), {
+  const response = await apiFetch(apiUrl(`/api/screen-time/${encodeURIComponent(childId)}/${locked ? 'lock' : 'unlock'}`), {
     method: 'POST',
     headers: { Authorization: `Bearer ${authToken}` },
   });
@@ -206,15 +306,38 @@ export async function setParentChildLock(childId: string, locked: boolean, authT
 }
 
 export async function fetchChildScreenTimeStatus(deviceToken: string): Promise<ChildLockStatus> {
-  const response = await fetch(apiUrl('/api/child/screen-time/status'), {
+  const response = await apiFetch(apiUrl('/api/child/screen-time/status'), {
     headers: { 'X-Child-Token': deviceToken },
   });
   if (!response.ok) throw await readError(response);
   return response.json();
 }
 
+export async function fetchChildBio(deviceToken: string): Promise<BioProfile> {
+  const response = await apiFetch(apiUrl('/api/child/me'), {
+    headers: { 'X-Child-Token': deviceToken },
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function updateChildBio(input: {
+  name?: string;
+  phone?: string | null;
+  email?: string | null;
+  socialLinks?: BioProfile['socialLinks'];
+}, deviceToken: string): Promise<BioProfile> {
+  const response = await apiFetch(apiUrl('/api/child/me'), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Child-Token': deviceToken },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
 export async function sendChildScreenTimeHeartbeat(deviceToken: string): Promise<ChildLockStatus> {
-  const response = await fetch(apiUrl('/api/child/screen-time/heartbeat'), {
+  const response = await apiFetch(apiUrl('/api/child/screen-time/heartbeat'), {
     method: 'POST',
     headers: { 'X-Child-Token': deviceToken },
   });
@@ -223,7 +346,7 @@ export async function sendChildScreenTimeHeartbeat(deviceToken: string): Promise
 }
 
 export async function fetchParentGroups(childId: string, authToken: string): Promise<GroupProfile[]> {
-  const response = await fetch(`${apiUrl('/api/groups')}?childId=${encodeURIComponent(childId)}`, {
+  const response = await apiFetch(`${apiUrl('/api/groups')}?childId=${encodeURIComponent(childId)}`, {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!response.ok) throw await readError(response);
@@ -236,7 +359,7 @@ export async function createParentGroup(
   contactIds: string[],
   authToken: string,
 ): Promise<GroupProfile> {
-  const response = await fetch(apiUrl('/api/groups'), {
+  const response = await apiFetch(apiUrl('/api/groups'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
     body: JSON.stringify({ childId, name, contactIds }),
@@ -256,7 +379,7 @@ function withGroupSenderNames(result: GroupConversation): GroupConversation {
 }
 
 export async function fetchParentGroupMessages(groupId: string, authToken: string): Promise<PrivateMessage[]> {
-  const response = await fetch(apiUrl(`/api/groups/${encodeURIComponent(groupId)}/messages`), {
+  const response = await apiFetch(apiUrl(`/api/groups/${encodeURIComponent(groupId)}/messages`), {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!response.ok) throw await readError(response);
@@ -271,7 +394,7 @@ export async function sendParentGroupMessage(groupId: string, input: PrivateMess
 }
 
 export async function fetchParentMirroredConversation(contactUserId: string, authToken: string): Promise<MirroredConversation> {
-  const response = await fetch(`${apiUrl(`/api/parent/contacts/${encodeURIComponent(contactUserId)}/messages`)}`, {
+  const response = await apiFetch(`${apiUrl(`/api/parent/contacts/${encodeURIComponent(contactUserId)}/messages`)}`, {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!response.ok) throw await readError(response);
@@ -279,7 +402,7 @@ export async function fetchParentMirroredConversation(contactUserId: string, aut
 }
 
 export async function fetchParentPrivateMessages(childId: string, authToken: string): Promise<PrivateMessage[]> {
-  const response = await fetch(`${apiUrl('/api/conversations/private')}?childId=${encodeURIComponent(childId)}`, {
+  const response = await apiFetch(`${apiUrl('/api/conversations/private')}?childId=${encodeURIComponent(childId)}`, {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!response.ok) throw await readError(response);
@@ -297,7 +420,7 @@ export async function sendParentPrivateMessage(childId: string, input: PrivateMe
     } else {
       form.append('stickerEmoji', input.stickerEmoji);
     }
-    const response = await fetch(apiUrl('/api/conversations/private/messages'), {
+    const response = await apiFetch(apiUrl('/api/conversations/private/messages'), {
       method: 'POST',
       headers: { Authorization: `Bearer ${authToken}` },
       body: form,
@@ -306,7 +429,7 @@ export async function sendParentPrivateMessage(childId: string, input: PrivateMe
     return response.json();
   }
 
-  const response = await fetch(apiUrl('/api/conversations/private/messages'), {
+  const response = await apiFetch(apiUrl('/api/conversations/private/messages'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
     body: JSON.stringify({ childId, textContent: input.textContent }),
@@ -320,7 +443,7 @@ export async function fetchChildPrivateMessages(deviceToken: string): Promise<{
   parentName: string | null;
   parentId: string | null;
 }> {
-  const response = await fetch(apiUrl('/api/child/conversations/private'), {
+  const response = await apiFetch(apiUrl('/api/child/conversations/private'), {
     headers: { 'X-Child-Token': deviceToken },
   });
   if (!response.ok) throw await readError(response);
@@ -328,13 +451,13 @@ export async function fetchChildPrivateMessages(deviceToken: string): Promise<{
 }
 
 export async function fetchChildGroups(deviceToken: string): Promise<GroupProfile[]> {
-  const response = await fetch(apiUrl('/api/child/groups'), { headers: { 'X-Child-Token': deviceToken } });
+  const response = await apiFetch(apiUrl('/api/child/groups'), { headers: { 'X-Child-Token': deviceToken } });
   if (!response.ok) throw await readError(response);
   return response.json();
 }
 
 export async function fetchChildGroupMessages(groupId: string, deviceToken: string): Promise<PrivateMessage[]> {
-  const response = await fetch(apiUrl(`/api/child/groups/${encodeURIComponent(groupId)}/messages`), {
+  const response = await apiFetch(apiUrl(`/api/child/groups/${encodeURIComponent(groupId)}/messages`), {
     headers: { 'X-Child-Token': deviceToken },
   });
   if (!response.ok) throw await readError(response);
@@ -375,7 +498,7 @@ export async function sendChildPrivateMessage(deviceToken: string, input: Privat
     } else {
       form.append('stickerEmoji', input.stickerEmoji);
     }
-    const response = await fetch(apiUrl('/api/child/conversations/private/messages'), {
+    const response = await apiFetch(apiUrl('/api/child/conversations/private/messages'), {
       method: 'POST',
       headers: { 'X-Child-Token': deviceToken },
       body: form,
@@ -384,7 +507,7 @@ export async function sendChildPrivateMessage(deviceToken: string, input: Privat
     return response.json();
   }
 
-  const response = await fetch(apiUrl('/api/child/conversations/private/messages'), {
+  const response = await apiFetch(apiUrl('/api/child/conversations/private/messages'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Child-Token': deviceToken },
     body: JSON.stringify({ textContent: input.textContent }),
@@ -394,7 +517,7 @@ export async function sendChildPrivateMessage(deviceToken: string, input: Privat
 }
 
 export async function revokeChildDevice(deviceToken: string): Promise<void> {
-  const response = await fetch(apiUrl('/api/child/device/revoke'), {
+  const response = await apiFetch(apiUrl('/api/child/device/revoke'), {
     method: 'POST',
     headers: { 'X-Child-Token': deviceToken },
   });
@@ -405,7 +528,7 @@ export async function reportChildLocation(
   deviceToken: string,
   location: { latitude: number; longitude: number; accuracyMeters?: number },
 ): Promise<void> {
-  const response = await fetch(apiUrl('/api/location'), {
+  const response = await apiFetch(apiUrl('/api/location'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Child-Token': deviceToken },
     body: JSON.stringify(location),
@@ -417,7 +540,7 @@ export async function fetchParentChildLocation(
   childId: string,
   authToken: string,
 ): Promise<ChildLocation | null> {
-  const response = await fetch(apiUrl(`/api/location/${encodeURIComponent(childId)}`), {
+  const response = await apiFetch(apiUrl(`/api/location/${encodeURIComponent(childId)}`), {
     headers: { Authorization: `Bearer ${authToken}` },
   });
   if (!response.ok) throw await readError(response);
@@ -434,4 +557,35 @@ export function pairingTokenFromQr(data: string): string | null {
     const token = data.trim();
     return /^[A-Za-z0-9_-]{24,256}$/.test(token) ? token : null;
   }
+}
+
+/** Foto de perfil (POST multipart, campo "file"). Devolve o caminho relativo da mídia. */
+export async function uploadParentPhoto(file: NativeUploadFile, authToken: string): Promise<{ photoUrl: string }> {
+  const form = new FormData();
+  form.append('file', file as unknown as Blob);
+  const response = await apiFetch(apiUrl('/api/me/photo'), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authToken}` },
+    body: form,
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+export async function uploadChildPhoto(file: NativeUploadFile, deviceToken: string): Promise<{ photoUrl: string }> {
+  const form = new FormData();
+  form.append('file', file as unknown as Blob);
+  const response = await apiFetch(apiUrl('/api/child/me/photo'), {
+    method: 'POST',
+    headers: { 'X-Child-Token': deviceToken },
+    body: form,
+  });
+  if (!response.ok) throw await readError(response);
+  return response.json();
+}
+
+/** A mídia é privada: o <Image> precisa mandar o mesmo cabeçalho de autenticação. */
+export function mediaSource(photoUrl: string, headers: Record<string, string>): { uri: string; headers: Record<string, string> } {
+  const uri = photoUrl.startsWith('http') ? photoUrl : apiUrl(photoUrl);
+  return { uri, headers };
 }
