@@ -120,7 +120,7 @@ for AMPARA_APP in "${SELECTED_VARIANTS[@]}"; do
   # exhausting the Mac's disk/RAM while compiling Hermes and Expo modules.
   (cd android && ./gradlew --no-daemon --max-workers=2 \
     -PreactNativeArchitectures="$RELEASE_ABIS" \
-    :app:clean assembleRelease)
+    :app:clean assembleRelease bundleRelease)
 
   OUTPUT_FILE="$NATIVE_DIR/android/app/build/outputs/apk/release/app-release.apk"
   "$APKSIGNER_BIN" verify "$OUTPUT_FILE"
@@ -138,4 +138,14 @@ for AMPARA_APP in "${SELECTED_VARIANTS[@]}"; do
   DELIVERY_FILE="$DELIVERY_DIR/ampara-${AMPARA_APP}.apk"
   cp "$OUTPUT_FILE" "$DELIVERY_FILE"
   echo "APK assinado para distribuição pelo site: $DELIVERY_FILE"
+
+  # AAB para a Google Play (o Google re-assina com a chave de app do Play App Signing).
+  AAB_FILE="$NATIVE_DIR/android/app/build/outputs/bundle/release/app-release.aab"
+  if [[ -f "$AAB_FILE" ]]; then
+    cp "$AAB_FILE" "$DELIVERY_DIR/ampara-${AMPARA_APP}.aab"
+    echo "AAB para a Google Play: $DELIVERY_DIR/ampara-${AMPARA_APP}.aab"
+  else
+    echo "AAB não encontrado em $AAB_FILE" >&2
+    exit 1
+  fi
 done
