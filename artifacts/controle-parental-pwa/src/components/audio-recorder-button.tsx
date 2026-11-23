@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Mic, Square } from 'lucide-react';
+import { tx } from '@/lib/i18n';
 
 // Botão de "mensagem de voz" — clique pra começar a gravar, clique de novo
 // pra parar e mandar na hora (igual figurinha: não passa pelo composer de
@@ -23,7 +24,7 @@ export function AudioRecorderButton({
   async function startRecording() {
     if (recording || disabled) return;
     if (!navigator.mediaDevices?.getUserMedia) {
-      onError('Este navegador não suporta gravação de áudio.');
+      onError(tx('Este navegador não suporta gravação de áudio.'));
       return;
     }
     try {
@@ -50,7 +51,7 @@ export function AudioRecorderButton({
       recorder.start();
       setRecording(true);
     } catch {
-      onError('Não foi possível acessar o microfone — verifique a permissão do navegador.');
+      onError(tx('Não foi possível acessar o microfone — verifique a permissão do navegador.'));
     }
   }
 
@@ -68,7 +69,7 @@ export function AudioRecorderButton({
         else void startRecording();
       }}
       disabled={disabled}
-      aria-label={recording ? 'Parar gravação e enviar áudio' : 'Gravar mensagem de áudio'}
+      aria-label={recording ? tx('Parar gravação e enviar áudio') : tx('Gravar mensagem de áudio')}
       data-testid="button-audio-recorder"
       className={`grid size-11 shrink-0 place-items-center rounded-md border transition-colors ${
         recording

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { tx } from '@/lib/i18n';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -44,7 +45,7 @@ export function useAuthedMediaUrl(
         setUrl(objectUrl);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Erro ao carregar mídia.');
+        if (!cancelled) setError(err instanceof Error ? err.message : tx('Erro ao carregar mídia.'));
       });
     return () => {
       cancelled = true;

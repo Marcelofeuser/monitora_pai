@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { connectSignaling, type SignalingAuth } from "@/lib/socket";
+import { tx } from '@/lib/i18n';
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 
@@ -276,7 +277,7 @@ export function useCall(identity: CallIdentity | null): UseCallResult {
     const socket = socketRef.current;
     const auth = currentAuthRef.current;
     if (!socket || !auth) {
-      setError("Sem conexão -- tente de novo em alguns segundos.");
+      setError(tx("Sem conexão -- tente de novo em alguns segundos."));
       return;
     }
     setError(null);
@@ -294,10 +295,10 @@ export function useCall(identity: CallIdentity | null): UseCallResult {
       if (res.error || !res.callId) {
         setError(
           res.error === "busy"
-            ? "A pessoa já está em outra chamada."
+            ? tx("A pessoa já está em outra chamada.")
             : res.error === "video_not_allowed"
-              ? "Chamada não permitida pelas restrições configuradas."
-              : "Não foi possível iniciar a chamada.",
+              ? tx("Chamada não permitida pelas restrições configuradas.")
+              : tx("Não foi possível iniciar a chamada."),
         );
         cleanup("idle", null);
         return;

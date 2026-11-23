@@ -4,6 +4,7 @@ import { useLocation } from 'wouter';
 import { getContactInviteInfo, confirmContactInvite, declineContactInvite } from '@/lib/contact-invite-api';
 import { ThemeSwitcher } from '@/lib/theme';
 import { ShieldCheck } from 'lucide-react';
+import { tx } from '@/lib/i18n';
 
 /**
  * Rota /join-contact?token=... — pra onde aponta o link/QR gerado pelo
@@ -48,7 +49,7 @@ export function ContactJoin() {
       })
       .catch((err) => {
         setStatus('error');
-        setErrorMessage(err instanceof Error ? err.message : 'Erro desconhecido.');
+        setErrorMessage(err instanceof Error ? err.message : tx('Erro desconhecido.'));
       });
   }, []);
 
@@ -73,7 +74,7 @@ export function ContactJoin() {
       setLocation('/contact/bio?first=1');
     } catch (err) {
       setStatus('error');
-      setErrorMessage(err instanceof Error ? err.message : 'Erro ao confirmar convite.');
+      setErrorMessage(err instanceof Error ? err.message : tx('Erro ao confirmar convite.'));
     }
   }
 
@@ -86,7 +87,7 @@ export function ContactJoin() {
       setStatus('declined');
     } catch (err) {
       setStatus('error');
-      setErrorMessage(err instanceof Error ? err.message : 'Erro ao recusar convite.');
+      setErrorMessage(err instanceof Error ? err.message : tx('Erro ao recusar convite.'));
     }
   }
 
@@ -99,35 +100,35 @@ export function ContactJoin() {
       <div className="absolute right-4 top-4"><ThemeSwitcher /></div>
       <div className="w-full max-w-md rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-7 shadow-card">
         {status === 'loading' && (
-          <p className="text-center text-sm text-[hsl(var(--muted-foreground))]">Carregando convite…</p>
+          <p className="text-center text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando convite…')}</p>
         )}
 
         {status === 'no_token' && (
           <div className="text-center">
-            <h1 className="text-xl font-bold">Link incompleto</h1>
+            <h1 className="text-xl font-bold">{tx('Link incompleto')}</h1>
             <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
-              Este link não tem um código de convite válido. Peça para quem te convidou enviar um novo.
+              {tx('Este link não tem um código de convite válido. Peça para quem te convidou enviar um novo.')}
             </p>
           </div>
         )}
 
         {status === 'error' && (
           <div className="text-center">
-            <h1 className="text-xl font-bold">Não foi possível confirmar</h1>
+            <h1 className="text-xl font-bold">{tx('Não foi possível confirmar')}</h1>
             <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
-              O convite pode ter expirado (válido por 7 dias) ou já foi usado. Peça um novo link.
+              {tx('O convite pode ter expirado (válido por 7 dias) ou já foi usado. Peça um novo link.')}
             </p>
             {errorMessage && (
-              <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">Detalhe técnico: {errorMessage}</p>
+              <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">{tx('Detalhe técnico:')} {errorMessage}</p>
             )}
           </div>
         )}
 
         {status === 'declined' && (
           <div className="text-center" data-testid="status-contact-invite-declined">
-            <h1 className="text-xl font-bold">Convite recusado</h1>
+            <h1 className="text-xl font-bold">{tx('Convite recusado')}</h1>
             <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
-              Tudo certo, você não vai ganhar acesso a essa conversa. Nada mais a fazer por aqui.
+              {tx('Tudo certo, você não vai ganhar acesso a essa conversa. Nada mais a fazer por aqui.')}
             </p>
           </div>
         )}
@@ -136,24 +137,24 @@ export function ContactJoin() {
           <>
             <div className="flex items-center gap-2 text-[hsl(var(--primary))]">
               <ShieldCheck size={20} />
-              <span className="text-xs font-bold uppercase tracking-wide">Convite do Amparo</span>
+              <span className="text-xs font-bold uppercase tracking-wide">{tx('Convite do Amparo')}</span>
             </div>
             <h1 className="mt-3 text-xl font-bold">
-              Você foi convidado(a) a conversar com {childName}
+              {tx('Você foi convidado(a) a conversar com')} {childName}
             </h1>
             <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-              Confirme (ou ajuste) seu nome abaixo pra concluir. Depois disso você poderá conversar com{' '}
-              {childName} por aqui — a conversa também fica visível para o responsável dela.
-              {minutesLeft !== null && <> Convite válido por mais {minutesLeft} min.</>}
+              {tx('Confirme (ou ajuste) seu nome abaixo pra concluir. Depois disso você poderá conversar com')}{' '}
+              {childName} {tx('por aqui — a conversa também fica visível para o responsável dela.')}
+              {minutesLeft !== null && <> {tx('Convite válido por mais')} {minutesLeft} min.</>}
             </p>
             <form onSubmit={handleConfirm} className="mt-5 flex flex-col gap-4">
               <label className="flex flex-col gap-1 text-sm font-medium">
-                Seu nome
+                {tx('Seu nome')}
                 <input
                   className="rounded-md border border-[hsl(var(--border))] bg-transparent px-3 py-2"
                   value={contactName}
                   onChange={(e) => setContactName(e.target.value)}
-                  placeholder="Ex: Tia Lorena"
+                  placeholder={tx('Ex: Tia Lorena')}
                   required
                   data-testid="input-contact-name"
                 />
@@ -164,7 +165,7 @@ export function ContactJoin() {
                 data-testid="button-confirm-contact-invite"
                 className="rounded-md bg-[hsl(var(--primary))] px-4 py-2 font-semibold text-[hsl(var(--primary-foreground))] disabled:opacity-60"
               >
-                {status === 'confirming' ? 'Confirmando…' : 'Confirmar e começar a conversar'}
+                {status === 'confirming' ? tx('Confirmando…') : tx('Confirmar e começar a conversar')}
               </button>
               <button
                 type="button"
@@ -173,7 +174,7 @@ export function ContactJoin() {
                 data-testid="button-decline-contact-invite"
                 className="text-sm font-medium text-[hsl(var(--muted-foreground))] underline disabled:opacity-60"
               >
-                {status === 'declining' ? 'Recusando…' : 'Não quero conversar por aqui'}
+                {status === 'declining' ? tx('Recusando…') : tx('Não quero conversar por aqui')}
               </button>
             </form>
           </>

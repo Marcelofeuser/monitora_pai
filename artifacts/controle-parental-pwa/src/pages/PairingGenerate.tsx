@@ -6,6 +6,7 @@ import { useAuth } from '@clerk/react';
 import { createPairing, reconnectPairing } from '@/lib/pairing-api';
 import { fetchChildren, deleteChild } from '@/lib/conversations-api';
 import type { ChildUser } from '@/lib/conversations-api';
+import { tx, pick } from '@/lib/i18n';
 
 /**
  * Tela do Responsável: cadastra o perfil da Criança e gera o QR code real
@@ -60,7 +61,7 @@ export function PairingGenerate() {
         }
       })
       .catch((err) => {
-        if (!cancelled) setChildrenError(err instanceof Error ? err.message : 'Erro ao carregar crianças.');
+        if (!cancelled) setChildrenError(err instanceof Error ? err.message : tx('Erro ao carregar crianças.'));
       });
     return () => {
       cancelled = true;
@@ -85,7 +86,7 @@ export function PairingGenerate() {
       const result = await reconnectPairing(child.id, authToken);
       await buildQr(child.name, result);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Erro ao gerar o código de reconexão.');
+      setErrorMessage(err instanceof Error ? err.message : tx('Erro ao gerar o código de reconexão.'));
     } finally {
       setReconnectingId(null);
     }
@@ -98,7 +99,7 @@ export function PairingGenerate() {
   async function handleDeleteChild(child: ChildUser) {
     if (deletingChildId || reconnectingId) return;
     const ok = window.confirm(
-      `Excluir "${child.name}" de verdade? Isso apaga o histórico de conversas, localização e tempo de uso dela. Não dá pra desfazer.`,
+      pick({ pt: `Excluir "${child.name}" de verdade? Isso apaga o histórico de conversas, localização e tempo de uso dela. Não dá pra desfazer.`, en: `Really delete "${child.name}"? This erases their conversation history, location and screen time. It cannot be undone.`, es: `¿Eliminar a "${child.name}" de verdad? Esto borra su historial de conversaciones, ubicación y tiempo de uso. No se puede deshacer.` }),
     );
     if (!ok) return;
     setDeletingChildId(child.id);
@@ -112,7 +113,7 @@ export function PairingGenerate() {
         return next;
       });
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Erro ao excluir a criança.');
+      setErrorMessage(err instanceof Error ? err.message : tx('Erro ao excluir a criança.'));
     } finally {
       setDeletingChildId(null);
     }
@@ -134,9 +135,9 @@ export function PairingGenerate() {
       setStatus('idle');
     } catch (err) {
       setStatus('error');
-      const message = err instanceof Error ? err.message : 'Erro desconhecido ao gerar o pareamento.';
+      const message = err instanceof Error ? err.message : tx('Erro desconhecido ao gerar o pareamento.');
       setErrorMessage(message.includes('children_limit_reached')
-        ? 'Este plano já atingiu o limite de crianças. O titular da assinatura pode revisar o plano para incluir mais perfis.'
+        ? tx('Este plano já atingiu o limite de crianças. O titular da assinatura pode revisar o plano para incluir mais perfis.')
         : message);
     }
   }
@@ -171,10 +172,9 @@ export function PairingGenerate() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-6 p-6">
       <div>
-        <h1 className="text-xl font-bold">Vincular dispositivo da criança</h1>
+        <h1 className="text-xl font-bold">{tx('Vincular dispositivo da criança')}</h1>
         <p className="text-sm text-[hsl(var(--muted-foreground))]">
-          Gere um QR code para a criança escanear com a câmera do aparelho dela. Funciona com
-          Wi-Fi, não precisa de chip/SIM.
+          {tx('Gere um QR code para a criança escanear com a câmera do aparelho dela. Funciona com Wi-Fi, não precisa de chip/SIM.')}
         </p>
       </div>
 
@@ -187,11 +187,9 @@ export function PairingGenerate() {
           {children && children.length > 0 && (
             <div className="flex flex-col gap-3 rounded-lg border border-[hsl(var(--border))] p-4">
               <div>
-                <h2 className="text-sm font-semibold">Reconectar uma criança já vinculada</h2>
+                <h2 className="text-sm font-semibold">{tx('Reconectar uma criança já vinculada')}</h2>
                 <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
-                  Se o aparelho dela perdeu a conexão (limpou os dados do navegador, trocou de
-                  celular), clique no nome — o histórico de conversas, localização e tempo de uso
-                  continua o mesmo, só o aparelho muda.
+                  {tx('Se o aparelho dela perdeu a conexão (limpou os dados do navegador, trocou de celular), clique no nome — o histórico de conversas, localização e tempo de uso continua o mesmo, só o aparelho muda.')}
                 </p>
               </div>
               <div className="flex flex-col gap-2">
@@ -209,7 +207,7 @@ export function PairingGenerate() {
                     >
                       {child.name}
                       <span className="text-xs font-normal text-[hsl(var(--muted-foreground))]">
-                        {reconnectingId === child.id ? 'Gerando…' : 'Reconectar'}
+                        {reconnectingId === child.id ? tx('Gerando…') : 'Reconectar'}
                       </span>
                     </button>
                     <button
@@ -235,28 +233,28 @@ export function PairingGenerate() {
               className="text-sm font-medium underline"
               data-testid="button-show-new-child-form"
             >
-              + Cadastrar uma criança nova
+              {tx('+ Cadastrar uma criança nova')}
             </button>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-lg border border-[hsl(var(--border))] p-4">
-              <h2 className="text-sm font-semibold">Cadastrar uma criança nova</h2>
+              <h2 className="text-sm font-semibold">{tx('Cadastrar uma criança nova')}</h2>
               <label className="flex flex-col gap-1 text-sm font-medium">
-                Nome da criança
+                {tx('Nome da criança')}
                 <input
                   className="rounded-md border border-[hsl(var(--border))] bg-transparent px-3 py-2"
                   value={childName}
                   onChange={(e) => setChildName(e.target.value)}
-                  placeholder="Ex: Rafaella"
+                  placeholder={tx('Ex: Rafaella')}
                   required
                 />
               </label>
               <label className="flex flex-col gap-1 text-sm font-medium">
-                Idade (opcional)
+                {tx('Idade (opcional)')}
                 <input
                   className="rounded-md border border-[hsl(var(--border))] bg-transparent px-3 py-2"
                   value={childAge}
                   onChange={(e) => setChildAge(e.target.value)}
-                  placeholder="Ex: 10"
+                  placeholder={tx('Ex: 10')}
                 />
               </label>
               <label className="flex items-start gap-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
@@ -268,16 +266,14 @@ export function PairingGenerate() {
                   data-testid="checkbox-pairing-consent"
                   required
                 />
-                Confirmo que sou responsável legal por {childName.trim() || 'esta criança'} e concordo com o
-                tratamento dos dados dela pelo Ampara Kids para as finalidades de monitoramento e proteção
-                descritas na Política de Privacidade.
+                {tx('Confirmo que sou responsável legal por')} {childName.trim() || tx('esta criança')} {tx('e concordo com o tratamento dos dados dela pelo Ampara Kids para as finalidades de monitoramento e proteção descritas na Política de Privacidade.')}
               </label>
               <button
                 type="submit"
                 disabled={status === 'loading' || !consentChecked}
                 className="rounded-md bg-[hsl(var(--primary))] px-4 py-2 font-semibold text-[hsl(var(--primary-foreground))] disabled:opacity-60"
               >
-                {status === 'loading' ? 'Gerando…' : 'Gerar QR code'}
+                {status === 'loading' ? tx('Gerando…') : tx('Gerar QR code')}
               </button>
             </form>
           )}
@@ -294,11 +290,11 @@ export function PairingGenerate() {
         <div className="flex flex-col items-center gap-4 rounded-lg border border-[hsl(var(--border))] p-6">
           <img src={qrDataUrl} alt={`QR code de pareamento para ${pairedChildLabel}`} width={280} height={280} />
           <p className="text-center text-sm text-[hsl(var(--muted-foreground))]">
-            Peça para {pairedChildLabel} abrir a câmera do aparelho dela e apontar para este código.
+            {tx('Peça para')} {pairedChildLabel} {tx('abrir a câmera do aparelho dela e apontar para este código.')}
             {minutesLeft !== null && (
               <>
                 {' '}
-                Válido por {minutesLeft} min.
+                {tx('Válido por')} {minutesLeft} min.
               </>
             )}
           </p>
@@ -317,12 +313,12 @@ export function PairingGenerate() {
                 data-testid="button-copy-pairing-join-url"
                 className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[hsl(var(--primary))] px-4 text-sm font-semibold text-[hsl(var(--primary-foreground))]"
               >
-                {linkCopied ? 'Copiado!' : 'Copiar link'}
+                {linkCopied ? tx('Copiado!') : tx('Copiar link')}
               </button>
             </div>
           )}
           <button type="button" onClick={resetToStart} className="text-sm font-medium underline">
-            Voltar
+            {tx('Voltar')}
           </button>
         </div>
       )}

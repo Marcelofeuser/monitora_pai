@@ -30,6 +30,7 @@ import { BioEditor } from '@/components/bio-editor';
 import { Hourglass, Bell, BellOff, Sparkles, Send, MapPin, Phone, Plus, Maximize2, Minimize2, X, ArrowLeft, ChevronRight, UserCircle2, MessageCircle } from 'lucide-react';
 import { useCall } from '@/hooks/use-call';
 import { CallOverlays } from '@/components/call/CallOverlays';
+import { tx, pick, getCurrentLanguage } from '@/lib/i18n';
 
 /**
  * Rota /join?token=... — é para onde o link do QR code aponta.
@@ -198,7 +199,7 @@ export function PairingJoin() {
       })
       .catch((err) => {
         setStatus('error');
-        setErrorMessage(err instanceof Error ? err.message : 'Erro desconhecido.');
+        setErrorMessage(err instanceof Error ? err.message : tx('Erro desconhecido.'));
       });
   }, []);
 
@@ -239,7 +240,7 @@ export function PairingJoin() {
         // inicial, pra não ficar piscando aviso a cada 5s se a rede cair
         // por um instante.
         if (!cancelled && showSpinner) {
-          setPrivateError(err instanceof Error ? err.message : 'Erro ao carregar a conversa.');
+          setPrivateError(err instanceof Error ? err.message : tx('Erro ao carregar a conversa.'));
         }
       } finally {
         if (!cancelled && showSpinner) setPrivateLoading(false);
@@ -286,7 +287,7 @@ export function PairingJoin() {
         }
       }
     } catch (err) {
-      setBioError(err instanceof Error ? err.message : 'Erro ao salvar.');
+      setBioError(err instanceof Error ? err.message : tx('Erro ao salvar.'));
     } finally {
       setBioSaving(false);
     }
@@ -300,7 +301,7 @@ export function PairingJoin() {
       const { photoUrl } = await uploadChildBioPhoto(file, deviceToken);
       setChildBio((current) => (current ? { ...current, photoUrl } : current));
     } catch (err) {
-      setBioError(err instanceof Error ? err.message : 'Erro ao enviar foto.');
+      setBioError(err instanceof Error ? err.message : tx('Erro ao enviar foto.'));
     } finally {
       setBioUploadingPhoto(false);
     }
@@ -370,7 +371,7 @@ export function PairingJoin() {
         }
       } catch (err) {
         if (!cancelled && showSpinner) {
-          setGroupChatError(err instanceof Error ? err.message : 'Erro ao carregar o chat do grupo.');
+          setGroupChatError(err instanceof Error ? err.message : tx('Erro ao carregar o chat do grupo.'));
         }
       } finally {
         if (!cancelled && showSpinner) setGroupChatLoading(false);
@@ -435,7 +436,7 @@ export function PairingJoin() {
       setGroupCreatorOpen(false);
       selectGroupChat(group.id);
     } catch (err) {
-      setChildGroupError(err instanceof Error ? err.message : 'Erro ao criar o grupo.');
+      setChildGroupError(err instanceof Error ? err.message : tx('Erro ao criar o grupo.'));
     } finally {
       setCreatingChildGroup(false);
     }
@@ -457,7 +458,7 @@ export function PairingJoin() {
       setGroupPendingFile(null);
       if (groupTextareaRef.current) groupTextareaRef.current.style.height = 'auto';
     } catch (err) {
-      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+      setGroupChatError(err instanceof Error ? err.message : tx('Erro ao enviar mensagem.'));
     } finally {
       setGroupSending(false);
     }
@@ -472,7 +473,7 @@ export function PairingJoin() {
       const message = await sendChildGroupMessage(token, selectedGroupId, { stickerEmoji: emoji });
       setGroupChatMessages((current) => [...current, message]);
     } catch (err) {
-      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
+      setGroupChatError(err instanceof Error ? err.message : tx('Erro ao enviar figurinha.'));
     } finally {
       setGroupSending(false);
     }
@@ -487,7 +488,7 @@ export function PairingJoin() {
       const message = await sendChildGroupMessage(token, selectedGroupId, { file });
       setGroupChatMessages((current) => [...current, message]);
     } catch (err) {
-      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
+      setGroupChatError(err instanceof Error ? err.message : tx('Erro ao enviar áudio.'));
     } finally {
       setGroupSending(false);
     }
@@ -518,7 +519,7 @@ export function PairingJoin() {
       setPendingFile(null);
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
     } catch (err) {
-      setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+      setPrivateError(err instanceof Error ? err.message : tx('Erro ao enviar mensagem.'));
     } finally {
       setPrivateSending(false);
     }
@@ -534,7 +535,7 @@ export function PairingJoin() {
       const message = await sendCurrent(token, { stickerEmoji: emoji });
       setPrivateMessages((current) => [...current, message]);
     } catch (err) {
-      setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
+      setPrivateError(err instanceof Error ? err.message : tx('Erro ao enviar figurinha.'));
     } finally {
       setPrivateSending(false);
     }
@@ -550,7 +551,7 @@ export function PairingJoin() {
       const message = await sendCurrent(token, { file });
       setPrivateMessages((current) => [...current, message]);
     } catch (err) {
-      setPrivateError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
+      setPrivateError(err instanceof Error ? err.message : tx('Erro ao enviar áudio.'));
     } finally {
       setPrivateSending(false);
     }
@@ -591,10 +592,10 @@ export function PairingJoin() {
       const message = err instanceof Error ? err.message : '';
       setNotificationsError(
         message === 'permission_denied'
-          ? 'Permissão de notificação negada — libere nas configurações do navegador.'
+          ? tx('Permissão de notificação negada — libere nas configurações do navegador.')
           : message === 'push_not_supported'
-            ? 'Este navegador não suporta notificações.'
-            : 'Não foi possível ativar as notificações agora.',
+            ? tx('Este navegador não suporta notificações.')
+            : tx('Não foi possível ativar as notificações agora.'),
       );
     } finally {
       setNotificationsBusy(false);
@@ -613,7 +614,7 @@ export function PairingJoin() {
     if (!token) return;
     if (!('geolocation' in navigator)) {
       setLocationStatus('error');
-      setLocationError('Este navegador não suporta localização.');
+      setLocationError(tx('Este navegador não suporta localização.'));
       return;
     }
 
@@ -636,7 +637,7 @@ export function PairingJoin() {
             .catch((err) => {
               if (cancelled) return;
               setLocationStatus('error');
-              setLocationError(err instanceof Error ? err.message : 'Erro desconhecido.');
+              setLocationError(err instanceof Error ? err.message : tx('Erro desconhecido.'));
             });
         },
         (err) => {
@@ -644,8 +645,8 @@ export function PairingJoin() {
           setLocationStatus('error');
           setLocationError(
             err.code === err.PERMISSION_DENIED
-              ? 'Permissão de localização negada.'
-              : 'Não foi possível obter a localização.',
+              ? tx('Permissão de localização negada.')
+              : tx('Não foi possível obter a localização.'),
           );
         },
         { enableHighAccuracy: true, timeout: 15000 },
@@ -776,9 +777,9 @@ export function PairingJoin() {
   const callTarget = selectedGroupId
     ? null
     : selectedContactUserId
-      ? { id: selectedContactUserId, name: contacts.find((c) => c.contactUserId === selectedContactUserId)?.contactName ?? 'Contato' }
+      ? { id: selectedContactUserId, name: contacts.find((c) => c.contactUserId === selectedContactUserId)?.contactName ?? tx('Contato') }
       : parentId
-        ? { id: parentId, name: parentName ?? relationshipInfo.label }
+        ? { id: parentId, name: parentName ?? tx(relationshipInfo.label) }
         : null;
 
   return (
@@ -797,7 +798,7 @@ export function PairingJoin() {
           <div className="flex w-full shrink-0 items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 rounded-full bg-[hsl(var(--card)/.8)] px-3 py-1.5 shadow-sm backdrop-blur">
               <span aria-hidden="true">🔒</span>
-              <span className="text-[11px] font-extrabold text-[hsl(var(--muted-foreground))]">local e privado</span>
+              <span className="text-[11px] font-extrabold text-[hsl(var(--muted-foreground))]">{tx('local e privado')}</span>
             </div>
             <div className="flex items-center gap-2">
               {/* Alterna entre a BIO e o chat (pedido do Marcelo, 08/09) --
@@ -806,8 +807,8 @@ export function PairingJoin() {
               <button
                 type="button"
                 onClick={() => setChildView((current) => (current === 'bio' ? 'chat' : 'bio'))}
-                aria-label={childView === 'bio' ? 'Ir para o chat' : 'Ver minha BIO'}
-                title={childView === 'bio' ? 'Ir para o chat' : 'Ver minha BIO'}
+                aria-label={childView === 'bio' ? tx('Ir para o chat') : tx('Ver minha BIO')}
+                title={childView === 'bio' ? tx('Ir para o chat') : tx('Ver minha BIO')}
                 data-testid="button-toggle-child-view"
                 className="grid size-10 place-items-center rounded-full bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm transition-transform hover:scale-105 active:scale-95"
               >
@@ -818,7 +819,7 @@ export function PairingJoin() {
                   type="button"
                   onClick={() => { void toggleNotifications(); }}
                   disabled={notificationsBusy}
-                  aria-label={notifications ? 'Desativar notificações' : 'Ativar notificações'}
+                  aria-label={notifications ? tx('Desativar notificações') : tx('Ativar notificações')}
                   data-testid="button-toggle-child-notifications"
                   className="grid size-10 place-items-center rounded-full bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
                 >
@@ -836,17 +837,16 @@ export function PairingJoin() {
         {status === 'checking' && (
           <div className="mt-16 flex flex-col items-center gap-3">
             <span className="animate-bob text-6xl" aria-hidden="true">🎈</span>
-            <p className="font-kid text-lg font-bold text-[hsl(var(--foreground))]">Confirmando vínculo com o Responsável…</p>
+            <p className="font-kid text-lg font-bold text-[hsl(var(--foreground))]">{tx('Confirmando vínculo com o Responsável…')}</p>
           </div>
         )}
 
         {status === 'no_token' && (
           <div className="mt-10 flex flex-col items-center gap-3 rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-7 shadow-card">
             <span className="text-5xl" aria-hidden="true">🧩</span>
-            <h1 className="font-kid text-xl font-extrabold">Link incompleto</h1>
+            <h1 className="font-kid text-xl font-extrabold">{tx('Link incompleto')}</h1>
             <p className="text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-              Este link não tem um código de pareamento válido. Peça para o Responsável gerar um
-              novo QR code.
+              {tx('Este link não tem um código de pareamento válido. Peça para o Responsável gerar um novo QR code.')}
             </p>
           </div>
         )}
@@ -854,13 +854,12 @@ export function PairingJoin() {
         {status === 'error' && (
           <div className="mt-10 flex flex-col items-center gap-3 rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-7 shadow-card">
             <span className="text-5xl" aria-hidden="true">😅</span>
-            <h1 className="font-kid text-xl font-extrabold">Não foi possível vincular</h1>
+            <h1 className="font-kid text-xl font-extrabold">{tx('Não foi possível vincular')}</h1>
             <p className="text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-              O código pode ter expirado (válido por 15 minutos) ou já foi usado. Peça para o
-              Responsável gerar um novo QR code.
+              {tx('O código pode ter expirado (válido por 15 minutos) ou já foi usado. Peça para o Responsável gerar um novo QR code.')}
             </p>
             {errorMessage && (
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Detalhe técnico: {errorMessage}</p>
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">{tx('Detalhe técnico:')} {errorMessage}</p>
             )}
           </div>
         )}
@@ -876,10 +875,10 @@ export function PairingJoin() {
             data-testid="panel-child-bio"
           >
             <h1 className="font-kid text-lg font-extrabold text-[hsl(var(--foreground))]">
-              Oi{childName ? `, ${childName}` : ''}! <span aria-hidden="true">👋</span>
+              {pick({ pt: 'Oi', en: 'Hi', es: 'Hola' })}{childName ? `, ${childName}` : ''}! <span aria-hidden="true">👋</span>
             </h1>
             <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
-              Essa página é sua! Coloque uma foto e, se quiser, mais informações. Tudo é opcional.
+              {tx('Essa página é sua! Coloque uma foto e, se quiser, mais informações. Tudo é opcional.')}
             </p>
             {childBio ? (
               <div className="mt-4">
@@ -900,7 +899,7 @@ export function PairingJoin() {
                 />
               </div>
             ) : (
-              <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">Carregando…</p>
+              <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando…')}</p>
             )}
             <button
               type="button"
@@ -925,10 +924,12 @@ export function PairingJoin() {
               </div>
               <div className="min-w-0 flex-1">
                 <h1 className="font-kid truncate text-lg font-extrabold text-[hsl(var(--foreground))]" style={{ textShadow: '0 2px 18px hsl(var(--background) / .55)' }}>
-                  Oi, {childName ?? 'tudo certo'}! <span aria-hidden="true">👋</span>
+                  {pick({ pt: 'Oi', en: 'Hi', es: 'Hola' })}, {childName ?? pick({ pt: 'tudo certo', en: 'there', es: 'qué tal' })}! <span aria-hidden="true">👋</span>
                 </h1>
                 <p className="truncate text-xs leading-5 text-[hsl(var(--muted-foreground))]">
-                  vinculado{parentName ? <> a <strong className="font-extrabold text-[hsl(var(--foreground))]">{parentName}</strong></> : <> {relationshipInfo.article === 'o' ? 'ao' : 'à'} {relationshipInfo.label}</>}
+                  {getCurrentLanguage() === 'pt-BR'
+                    ? <>vinculado{parentName ? <> a <strong className="font-extrabold text-[hsl(var(--foreground))]">{parentName}</strong></> : <> {relationshipInfo.article === 'o' ? 'ao' : 'à'} {relationshipInfo.label}</>}</>
+                    : <>{pick({ pt: '', en: 'paired with', es: 'vinculado con' })} <strong className="font-extrabold text-[hsl(var(--foreground))]">{parentName ?? tx(relationshipInfo.label)}</strong></>}
                 </p>
               </div>
             </div>
@@ -940,12 +941,12 @@ export function PairingJoin() {
               >
                 <Hourglass className="mx-auto text-[hsl(var(--primary))]" size={34} />
                 <h2 className="font-kid mt-3 text-lg font-extrabold">
-                  {screenLock.lockReason === 'manual' ? `${relationshipInfo.article === 'o' ? 'Seu' : 'Sua'} ${relationshipInfo.label} bloqueou o app por enquanto` : 'Seu tempo de uso de hoje acabou'}
+                  {screenLock.lockReason === 'manual' ? pick({ pt: `${relationshipInfo.article === 'o' ? 'Seu' : 'Sua'} ${relationshipInfo.label} bloqueou o app por enquanto`, en: `Your ${tx(relationshipInfo.label)} paused the app for now`, es: `Tu ${tx(relationshipInfo.label)} pausó la app por ahora` }) : tx('Seu tempo de uso de hoje acabou')}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
                   {screenLock.lockReason === 'manual'
-                    ? `Fale com ${relationshipInfo.article === 'o' ? 'ele' : 'ela'} se precisar usar o chat agora.`
-                    : `Volte amanhã, ou peça ${relationshipInfo.article === 'a' ? 'pra' : 'pro'} ${relationshipInfo.label} liberar mais tempo hoje.`}
+                    ? pick({ pt: `Fale com ${relationshipInfo.article === 'o' ? 'ele' : 'ela'} se precisar usar o chat agora.`, en: 'Talk to them if you need to use the chat now.', es: 'Habla con esa persona si necesitas usar el chat ahora.' })
+                    : pick({ pt: `Volte amanhã, ou peça ${relationshipInfo.article === 'a' ? 'pra' : 'pro'} ${relationshipInfo.label} liberar mais tempo hoje.`, en: `Come back tomorrow, or ask your ${tx(relationshipInfo.label)} for more time today.`, es: `Vuelve mañana o pídele a tu ${tx(relationshipInfo.label)} más tiempo hoy.` })}
                 </p>
               </div>
             ) : (
@@ -965,7 +966,7 @@ export function PairingJoin() {
                   <>
                     <div className="flex shrink-0 items-center gap-2">
                       <Sparkles size={18} className="shrink-0 text-[hsl(var(--secondary))]" />
-                      <h2 className="font-kid min-w-0 flex-1 truncate text-base font-extrabold">Conversas</h2>
+                      <h2 className="font-kid min-w-0 flex-1 truncate text-base font-extrabold">{tx('Conversas')}</h2>
                     </div>
                     <div className="mt-3 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto" data-testid="list-chat-selector">
                       <button
@@ -978,11 +979,11 @@ export function PairingJoin() {
                           className="grid size-12 shrink-0 place-items-center rounded-full text-base font-extrabold text-white shadow-sm"
                           style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
                         >
-                          {(parentName ?? relationshipInfo.label).trim().slice(0, 1).toUpperCase()}
+                          {(parentName ?? tx(relationshipInfo.label)).trim().slice(0, 1).toUpperCase()}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{parentName ?? relationshipInfo.label}</span>
-                          <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">{relationshipInfo.label}</span>
+                          <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{parentName ?? tx(relationshipInfo.label)}</span>
+                          <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">{tx(relationshipInfo.label)}</span>
                         </span>
                         <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
                       </button>
@@ -999,7 +1000,7 @@ export function PairingJoin() {
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{contact.contactName}</span>
-                            <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">Contato</span>
+                            <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">{tx('Contato')}</span>
                           </span>
                           <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
                         </button>
@@ -1017,7 +1018,7 @@ export function PairingJoin() {
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{group.name}</span>
-                            <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">Grupo</span>
+                            <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">{tx('Grupo')}</span>
                           </span>
                           <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
                         </button>
@@ -1032,7 +1033,7 @@ export function PairingJoin() {
                         <span className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]">
                           <Plus size={18} />
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-extrabold text-[hsl(var(--muted-foreground))]">Criar grupo</span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-extrabold text-[hsl(var(--muted-foreground))]">{tx('Criar grupo')}</span>
                       </button>
                     </div>
                   </>
@@ -1041,7 +1042,7 @@ export function PairingJoin() {
                     <button
                       type="button"
                       onClick={() => setChatListOpen(true)}
-                      aria-label="Voltar pra lista de conversas"
+                      aria-label={tx('Voltar pra lista de conversas')}
                       data-testid="button-back-to-chat-list"
                       className="grid size-8 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
                     >
@@ -1050,12 +1051,12 @@ export function PairingJoin() {
                     <Sparkles size={18} className="shrink-0 text-[hsl(var(--secondary))]" />
                     <h2 className="font-kid min-w-0 flex-1 truncate text-base font-extrabold">
                       {selectedGroupId
-                        ? (groups.find((g) => g.id === selectedGroupId)?.name ?? 'Grupo')
+                        ? (groups.find((g) => g.id === selectedGroupId)?.name ?? tx('Grupo'))
                         : selectedContactUserId
                           ? (contacts.find((c) => c.contactUserId === selectedContactUserId)?.contactName ?? 'Conversa')
                           : parentName
-                            ? `${parentName} (${relationshipInfo.label})`
-                            : relationshipInfo.label}
+                            ? `${parentName} (${tx(relationshipInfo.label)})`
+                            : tx(relationshipInfo.label)}
                     </h2>
                     {callTarget && (
                       <button
@@ -1071,8 +1072,8 @@ export function PairingJoin() {
                     <button
                       type="button"
                       onClick={() => setChatExpanded((current) => !current)}
-                      aria-label={chatExpanded ? 'Reduzir conversa' : 'Expandir conversa pra tela toda'}
-                      title={chatExpanded ? 'Reduzir conversa' : 'Expandir conversa pra tela toda'}
+                      aria-label={chatExpanded ? tx('Reduzir conversa') : tx('Expandir conversa pra tela toda')}
+                      title={chatExpanded ? tx('Reduzir conversa') : tx('Expandir conversa pra tela toda')}
                       data-testid="button-toggle-chat-fullscreen"
                       className="grid size-8 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
                     >
@@ -1082,7 +1083,7 @@ export function PairingJoin() {
                 )}
                 {!chatListOpen && (
                 <p className="mt-1 shrink-0 text-xs font-semibold text-[hsl(var(--muted-foreground))]">
-                  {selectedGroupId ? 'Todo mundo do grupo vê essa conversa.' : selectedContactUserId ? 'Essa conversa também é vista pelo responsável.' : 'Só vocês dois veem essa conversa.'}
+                  {selectedGroupId ? tx('Todo mundo do grupo vê essa conversa.') : selectedContactUserId ? tx('Essa conversa também é vista pelo responsável.') : tx('Só vocês dois veem essa conversa.')}
                 </p>
                 )}
                 {!chatListOpen && (selectedGroupId ? (
@@ -1096,9 +1097,9 @@ export function PairingJoin() {
                       className="mt-3 flex min-h-[80px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3"
                     >
                       {groupChatLoading && groupChatMessages.length === 0 ? (
-                        <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+                        <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando conversa…')}</p>
                       ) : groupChatMessages.length === 0 ? (
-                        <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda neste grupo. Diga oi! <span aria-hidden="true">👋</span></p>
+                        <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Nenhuma mensagem ainda neste grupo. Diga oi!')} <span aria-hidden="true">👋</span></p>
                       ) : (
                         groupChatMessages.map((message) => {
                           const fromMe = childId !== null && message.senderId === childId;
@@ -1129,11 +1130,11 @@ export function PairingJoin() {
                     {groupAttachError && <p className="mt-2 shrink-0 text-sm font-semibold text-[hsl(var(--destructive))]">{groupAttachError}</p>}
                     {groupPendingFile && (
                       <div className="mt-2 flex shrink-0 items-center gap-2 rounded-full bg-[hsl(var(--muted))] px-3.5 py-2 text-xs font-bold">
-                        {groupPendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {groupPendingFile.name}
+                        {groupPendingFile.type.startsWith('video/') ? tx('Vídeo selecionado:') : tx('Foto selecionada:')} {groupPendingFile.name}
                         <button
                           type="button"
                           onClick={() => setGroupPendingFile(null)}
-                          aria-label="Remover anexo"
+                          aria-label={tx('Remover anexo')}
                           className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
                         >
                           ×
@@ -1145,7 +1146,7 @@ export function PairingJoin() {
                         <button
                           type="button"
                           onClick={() => setGroupComposerToolsOpen((current) => !current)}
-                          aria-label={groupComposerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                          aria-label={groupComposerToolsOpen ? tx('Fechar opções') : tx('Mais opções (emoji, foto, figurinha, áudio)')}
                           data-testid="button-composer-tools-group"
                           className={`grid size-11 shrink-0 place-items-center rounded-full border transition-transform ${
                             groupComposerToolsOpen
@@ -1207,14 +1208,14 @@ export function PairingJoin() {
                             event.currentTarget.form?.requestSubmit();
                           }
                         }}
-                        placeholder={groupPendingFile ? 'Legenda (opcional)…' : 'Escreva pro grupo…'}
+                        placeholder={groupPendingFile ? tx('Legenda (opcional)…') : tx('Escreva pro grupo…')}
                         rows={1}
                         className="max-h-32 min-h-[44px] flex-1 resize-none rounded-3xl border border-[hsl(var(--border))] bg-transparent px-4 py-2.5 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
                       />
                       <button
                         type="submit"
                         disabled={(!groupDraft.trim() && !groupPendingFile) || groupSending}
-                        aria-label="Enviar mensagem"
+                        aria-label={tx('Enviar mensagem')}
                         data-testid="button-send-group-message"
                         className="grid size-11 shrink-0 place-items-center rounded-full text-white shadow-sm transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
                         style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
@@ -1234,9 +1235,9 @@ export function PairingJoin() {
                       className="mt-3 flex min-h-[80px] flex-1 flex-col gap-2 overflow-y-auto rounded-2xl bg-[hsl(var(--muted)/.6)] p-3"
                     >
                       {privateLoading && privateMessages.length === 0 ? (
-                        <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+                        <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando conversa…')}</p>
                       ) : privateMessages.length === 0 ? (
-                        <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda. Diga oi! <span aria-hidden="true">👋</span></p>
+                        <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Nenhuma mensagem ainda. Diga oi!')} <span aria-hidden="true">👋</span></p>
                       ) : (
                         privateMessages.map((message) => {
                           const fromMe = childId !== null && message.senderId === childId;
@@ -1263,11 +1264,11 @@ export function PairingJoin() {
                     {attachError && <p className="mt-2 shrink-0 text-sm font-semibold text-[hsl(var(--destructive))]">{attachError}</p>}
                     {pendingFile && (
                       <div className="mt-2 flex shrink-0 items-center gap-2 rounded-full bg-[hsl(var(--muted))] px-3.5 py-2 text-xs font-bold">
-                        {pendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {pendingFile.name}
+                        {pendingFile.type.startsWith('video/') ? tx('Vídeo selecionado:') : tx('Foto selecionada:')} {pendingFile.name}
                         <button
                           type="button"
                           onClick={() => setPendingFile(null)}
-                          aria-label="Remover anexo"
+                          aria-label={tx('Remover anexo')}
                           className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
                         >
                           ×
@@ -1279,7 +1280,7 @@ export function PairingJoin() {
                         <button
                           type="button"
                           onClick={() => setComposerToolsOpen((current) => !current)}
-                          aria-label={composerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                          aria-label={composerToolsOpen ? tx('Fechar opções') : tx('Mais opções (emoji, foto, figurinha, áudio)')}
                           data-testid="button-composer-tools"
                           className={`grid size-11 shrink-0 place-items-center rounded-full border transition-transform ${
                             composerToolsOpen
@@ -1341,14 +1342,14 @@ export function PairingJoin() {
                             event.currentTarget.form?.requestSubmit();
                           }
                         }}
-                        placeholder={pendingFile ? 'Legenda (opcional)…' : 'Escreva uma mensagem…'}
+                        placeholder={pendingFile ? tx('Legenda (opcional)…') : tx('Escreva uma mensagem…')}
                         rows={1}
                         className="max-h-32 min-h-[44px] flex-1 resize-none rounded-3xl border border-[hsl(var(--border))] bg-transparent px-4 py-2.5 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
                       />
                       <button
                         type="submit"
                         disabled={(!privateDraft.trim() && !pendingFile) || privateSending}
-                        aria-label="Enviar mensagem"
+                        aria-label={tx('Enviar mensagem')}
                         data-testid="button-send-private-message"
                         className="grid size-11 shrink-0 place-items-center rounded-full text-white shadow-sm transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
                         style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))' }}
@@ -1366,7 +1367,7 @@ export function PairingJoin() {
                 explicativo virou o `title` (tooltip ao segurar/passar o dedo). */}
             <div
               className="mt-1 flex w-full shrink-0 items-center gap-2 rounded-full border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] px-4 py-2 text-xs font-bold shadow-card"
-              title="Localização fica ligada automaticamente enquanto este app estiver aberto."
+              title={tx('Localização fica ligada automaticamente enquanto este app estiver aberto.')}
             >
               <MapPin size={14} className="shrink-0 text-[hsl(var(--accent))]" />
               <span
@@ -1374,10 +1375,10 @@ export function PairingJoin() {
               />
               {locationStatus === 'active' && (
                 <span className="truncate text-green-700">
-                  Localização ativa{lastSharedAt ? ` · ${lastSharedAt.toLocaleTimeString('pt-BR')}` : ''}
+                  {tx('Localização ativa')}{lastSharedAt ? ` · ${lastSharedAt.toLocaleTimeString('pt-BR')}` : ''}
                 </span>
               )}
-              {locationStatus === 'idle' && <span className="truncate text-[hsl(var(--muted-foreground))]">Ativando localização…</span>}
+              {locationStatus === 'idle' && <span className="truncate text-[hsl(var(--muted-foreground))]">{tx('Ativando localização…')}</span>}
               {locationStatus === 'error' && <span className="truncate text-[hsl(var(--destructive))]">{locationError}</span>}
             </div>
           </>
@@ -1392,11 +1393,11 @@ export function PairingJoin() {
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50 p-3" data-testid="overlay-group-creator">
           <div className="max-h-[85vh] w-full overflow-y-auto rounded-[26px] bg-[hsl(var(--card))] p-5 text-left shadow-card">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="font-kid text-lg font-extrabold">Criar grupo</h2>
+              <h2 className="font-kid text-lg font-extrabold">{tx('Criar grupo')}</h2>
               <button
                 type="button"
                 onClick={() => setGroupCreatorOpen(false)}
-                aria-label="Fechar"
+                aria-label={tx('Fechar')}
                 data-testid="button-close-group-creator"
                 className="grid size-9 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
               >
@@ -1406,13 +1407,13 @@ export function PairingJoin() {
             <input
               value={newGroupName}
               onChange={(event) => setNewGroupName(event.target.value)}
-              placeholder="Nome do grupo (ex: Amigas da escola)"
+              placeholder={tx('Nome do grupo (ex: Amigas da escola)')}
               data-testid="input-new-group-name"
               className="h-11 w-full rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
             />
             <p className="mb-2 mt-4 text-xs font-bold text-[hsl(var(--muted-foreground))]">Quem participa:</p>
             {contacts.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">Você ainda não tem nenhum contato conectado.</p>
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Você ainda não tem nenhum contato conectado.')}</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {contacts.map((contact) => {
@@ -1439,7 +1440,7 @@ export function PairingJoin() {
               data-testid="button-create-child-group"
               className="mt-4 h-11 w-full rounded-full bg-[hsl(var(--primary))] text-sm font-extrabold text-[hsl(var(--primary-foreground))] disabled:opacity-60"
             >
-              {creatingChildGroup ? 'Criando…' : 'Criar grupo'}
+              {creatingChildGroup ? tx('Criando…') : tx('Criar grupo')}
             </button>
           </div>
         </div>

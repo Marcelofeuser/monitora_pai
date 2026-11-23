@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { Camera } from 'lucide-react';
 import type { SocialLinks, UpdateBioInput } from '@/lib/bio-api';
 import { useAuthedMediaUrl } from '@/lib/media';
+import { tx } from '@/lib/i18n';
 
 /**
  * Formulário de BIO reutilizado nas 3 pontas (pedido do Marcelo, 08/09):
@@ -101,37 +102,37 @@ export function BioEditor({
           )}
           <label
             className="absolute -bottom-1 -right-1 grid size-7 cursor-pointer place-items-center rounded-full border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] text-[hsl(var(--primary))] shadow-sm"
-            aria-label="Trocar foto"
+            aria-label={tx('Trocar foto')}
           >
             <Camera size={13} />
             <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} disabled={uploadingPhoto} data-testid="input-bio-photo" />
           </label>
         </div>
         <p className="text-xs leading-5 text-[hsl(var(--muted-foreground))]">
-          {uploadingPhoto ? 'Enviando foto…' : 'Toque no ícone da câmera pra colocar ou trocar sua foto.'}
+          {uploadingPhoto ? tx('Enviando foto…') : tx('Toque no ícone da câmera pra colocar ou trocar sua foto.')}
         </p>
       </div>
 
       {nameEditable && (
         <label className="flex flex-col gap-1">
-          <span className={labelClass}>Seu nome</span>
+          <span className={labelClass}>{tx('Seu nome')}</span>
           <input className={inputClass} value={draftName} onChange={(e) => setDraftName(e.target.value)} required data-testid="input-bio-name" />
         </label>
       )}
 
       <label className="flex flex-col gap-1">
-        <span className={labelClass}>Telefone (opcional)</span>
+        <span className={labelClass}>{tx('Telefone (opcional)')}</span>
         <input className={inputClass} value={draftPhone} onChange={(e) => setDraftPhone(e.target.value)} placeholder="(DDD) 9 9999-9999" data-testid="input-bio-phone" />
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className={labelClass}>E-mail (opcional)</span>
-        <input type="email" className={inputClass} value={draftEmail} onChange={(e) => setDraftEmail(e.target.value)} placeholder="voce@exemplo.com" data-testid="input-bio-email" />
+        <span className={labelClass}>{tx('E-mail (opcional)')}</span>
+        <input type="email" className={inputClass} value={draftEmail} onChange={(e) => setDraftEmail(e.target.value)} placeholder={tx('voce@exemplo.com')} data-testid="input-bio-email" />
       </label>
 
       <label className="flex flex-col gap-1">
         <span className={labelClass}>Instagram (opcional)</span>
-        <input className={inputClass} value={draftInstagram} onChange={(e) => setDraftInstagram(e.target.value)} placeholder="@seuusuario" data-testid="input-bio-instagram" />
+        <input className={inputClass} value={draftInstagram} onChange={(e) => setDraftInstagram(e.target.value)} placeholder={tx('@seuusuario')} data-testid="input-bio-instagram" />
       </label>
 
       <label className="flex flex-col gap-1">
@@ -141,7 +142,7 @@ export function BioEditor({
 
       <label className="flex flex-col gap-1">
         <span className={labelClass}>Outra rede ou link (opcional)</span>
-        <input className={inputClass} value={draftOther} onChange={(e) => setDraftOther(e.target.value)} placeholder="Ex: TikTok, site, etc." data-testid="input-bio-other" />
+        <input className={inputClass} value={draftOther} onChange={(e) => setDraftOther(e.target.value)} placeholder={tx('Ex: TikTok, site, etc.')} data-testid="input-bio-other" />
       </label>
 
       {error && <p className="text-sm font-semibold text-[hsl(var(--destructive))]" data-testid="status-bio-error">{error}</p>}
@@ -156,7 +157,7 @@ export function BioEditor({
             : 'mt-1 h-11 rounded-md bg-[hsl(var(--primary))] text-sm font-bold text-[hsl(var(--primary-foreground))] disabled:opacity-60'
         }
       >
-        {saving ? 'Salvando…' : 'Salvar'}
+        {saving ? tx('Salvando…') : 'Salvar'}
       </button>
     </form>
   );
