@@ -4,6 +4,7 @@ import { useAuth } from '@clerk/react';
 import { getGuardianInviteInfo, acceptGuardianInvite } from '@/lib/guardians-api';
 import { ThemeSwitcher } from '@/lib/theme';
 import { Users } from 'lucide-react';
+import { tx, pick } from '@/lib/i18n';
 
 /**
  * Rota /aceitar-responsavel?token=... — pra onde aponta o link/QR gerado
@@ -51,7 +52,7 @@ export function GuardianJoin() {
       })
       .catch((err) => {
         setStatus('error');
-        setErrorMessage(err instanceof Error ? err.message : 'Erro desconhecido.');
+        setErrorMessage(err instanceof Error ? err.message : tx('Erro desconhecido.'));
       });
   }, []);
 
@@ -69,9 +70,9 @@ export function GuardianJoin() {
       setStatus('done');
     } catch (err) {
       setStatus('error');
-      const message = err instanceof Error ? err.message : 'Erro ao confirmar convite.';
+      const message = err instanceof Error ? err.message : tx('Erro ao confirmar convite.');
       setErrorMessage(message.includes('guardians_limit_reached')
-        ? 'Este plano já atingiu o limite de responsáveis. O titular da assinatura pode revisar o plano para ampliar o espaço da família.'
+        ? tx('Este plano já atingiu o limite de responsáveis. O titular da assinatura pode revisar o plano para ampliar o espaço da família.')
         : message);
     }
   }
@@ -103,26 +104,26 @@ export function GuardianJoin() {
       <div className="absolute right-4 top-4"><ThemeSwitcher /></div>
       <div className="w-full max-w-md rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-7 shadow-card">
         {status === 'loading' && (
-          <p className="text-center text-sm text-[hsl(var(--muted-foreground))]">Carregando convite…</p>
+          <p className="text-center text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando convite…')}</p>
         )}
 
         {status === 'no_token' && (
           <div className="text-center">
-            <h1 className="text-xl font-bold">Link incompleto</h1>
+            <h1 className="text-xl font-bold">{tx('Link incompleto')}</h1>
             <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
-              Este link não tem um código de convite válido. Peça para quem te convidou enviar um novo.
+              {tx('Este link não tem um código de convite válido. Peça para quem te convidou enviar um novo.')}
             </p>
           </div>
         )}
 
         {status === 'error' && (
           <div className="text-center">
-            <h1 className="text-xl font-bold">Não foi possível confirmar</h1>
+            <h1 className="text-xl font-bold">{tx('Não foi possível confirmar')}</h1>
             <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
-              O convite pode ter expirado (válido por 7 dias) ou já foi usado. Peça um novo link.
+              {tx('O convite pode ter expirado (válido por 7 dias) ou já foi usado. Peça um novo link.')}
             </p>
             {errorMessage && (
-              <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">Detalhe técnico: {errorMessage}</p>
+              <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">{tx('Detalhe técnico:')} {errorMessage}</p>
             )}
           </div>
         )}
@@ -131,14 +132,13 @@ export function GuardianJoin() {
           <>
             <div className="flex items-center gap-2 text-[hsl(var(--primary))]">
               <Users size={20} />
-              <span className="text-xs font-bold uppercase tracking-wide">Convite do Ampara</span>
+              <span className="text-xs font-bold uppercase tracking-wide">{tx('Convite do Ampara')}</span>
             </div>
             <h1 className="mt-3 text-xl font-bold">
-              {invitedByName ? `${invitedByName} te convidou` : 'Você foi convidado(a)'} pra ser Responsável junto
+              {invitedByName ? pick({ pt: `${invitedByName} te convidou`, en: `${invitedByName} invited you`, es: `${invitedByName} te invitó` }) : tx('Você foi convidado(a)')} {tx('pra ser Responsável junto')}
             </h1>
             <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-              Ao aceitar, você passa a ver e acompanhar as mesmas crianças deste espaço da família — conversas,
-              localização, contatos e tempo de uso.
+              {tx('Ao aceitar, você passa a ver e acompanhar as mesmas crianças deste espaço da família — conversas, localização, contatos e tempo de uso.')}
             </p>
 
             {status === 'ready' && (
@@ -150,14 +150,12 @@ export function GuardianJoin() {
                   onChange={(e) => setConsentChecked(e.target.checked)}
                   data-testid="checkbox-guardian-consent"
                 />
-                Confirmo que sou responsável legal e concordo com o tratamento dos dados das crianças deste
-                espaço pelo Ampara Kids, para as finalidades de monitoramento e proteção descritas na Política
-                de Privacidade.
+                {tx('Confirmo que sou responsável legal e concordo com o tratamento dos dados das crianças deste espaço pelo Ampara Kids, para as finalidades de monitoramento e proteção descritas na Política de Privacidade.')}
               </label>
             )}
 
             {status === 'accepting' && (
-              <p className="mt-4 text-sm font-semibold text-[hsl(var(--primary))]">Confirmando convite…</p>
+              <p className="mt-4 text-sm font-semibold text-[hsl(var(--primary))]">{tx('Confirmando convite…')}</p>
             )}
 
             {status === 'ready' && isLoaded && isSignedIn && (
@@ -168,14 +166,14 @@ export function GuardianJoin() {
                 data-testid="button-guardian-invite-accept"
                 className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-[hsl(var(--primary))] px-4 font-semibold text-[hsl(var(--primary-foreground))] disabled:opacity-60"
               >
-                Aceitar convite
+                {tx('Aceitar convite')}
               </button>
             )}
 
             {status === 'ready' && !isSignedIn && isLoaded && (
               <div className="mt-5 flex flex-col gap-3">
                 <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                  Para aceitar, entre com sua conta ou crie uma nova — você volta pra cá automaticamente.
+                  {tx('Para aceitar, entre com sua conta ou crie uma nova — você volta pra cá automaticamente.')}
                 </p>
                 <Link
                   href="/sign-in"
@@ -191,7 +189,7 @@ export function GuardianJoin() {
                   data-testid="link-guardian-invite-sign-up"
                   className={`inline-flex min-h-11 items-center justify-center rounded-md border border-[hsl(var(--border))] px-4 font-semibold ${consentChecked ? '' : 'pointer-events-none opacity-60'}`}
                 >
-                  Criar conta
+                  {tx('Criar conta')}
                 </Link>
               </div>
             )}
@@ -201,11 +199,11 @@ export function GuardianJoin() {
         {status === 'done' && (
           <div className="text-center">
             <Users size={28} className="mx-auto text-[hsl(var(--primary))]" />
-            <h1 className="mt-3 text-xl font-bold">Pronto!</h1>
+            <h1 className="mt-3 text-xl font-bold">{tx('Pronto!')}</h1>
             <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
               {childrenCount === 1
-                ? 'Você agora também é Responsável por 1 criança deste espaço.'
-                : `Você agora também é Responsável por ${childrenCount ?? 0} crianças deste espaço.`}
+                ? tx('Você agora também é Responsável por 1 criança deste espaço.')
+                : pick({ pt: `Você agora também é Responsável por ${childrenCount ?? 0} crianças deste espaço.`, en: `You are now also a guardian of ${childrenCount ?? 0} children in this space.`, es: `Ahora también eres responsable de ${childrenCount ?? 0} niños de este espacio.` })}
             </p>
             <button
               type="button"
@@ -213,7 +211,7 @@ export function GuardianJoin() {
               data-testid="button-guardian-invite-go-dashboard"
               className="mt-5 inline-flex min-h-11 items-center justify-center rounded-md bg-[hsl(var(--primary))] px-5 font-semibold text-[hsl(var(--primary-foreground))]"
             >
-              Ir para o painel
+              {tx('Ir para o painel')}
             </button>
           </div>
         )}

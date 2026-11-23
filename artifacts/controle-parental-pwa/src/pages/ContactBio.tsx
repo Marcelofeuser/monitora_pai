@@ -5,6 +5,7 @@ import { ThemeSwitcher } from '@/lib/theme';
 import { BioEditor } from '@/components/bio-editor';
 import { fetchContactBio, updateContactBio, uploadContactBioPhoto } from '@/lib/bio-api';
 import type { BioProfile, UpdateBioInput } from '@/lib/bio-api';
+import { tx } from '@/lib/i18n';
 
 /**
  * Rota /contact/bio — BIO do Contato (mãe, avó, tia etc). Pedido do
@@ -52,7 +53,7 @@ export function ContactBio() {
       })
       .catch((err) => {
         setStatus('error');
-        setErrorMessage(err instanceof Error ? err.message : 'Erro desconhecido.');
+        setErrorMessage(err instanceof Error ? err.message : tx('Erro desconhecido.'));
       });
   }, []);
 
@@ -70,7 +71,7 @@ export function ContactBio() {
       }
       if (isFirstTime) setLocation('/contact');
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Erro ao salvar.');
+      setErrorMessage(err instanceof Error ? err.message : tx('Erro ao salvar.'));
     } finally {
       setSaving(false);
     }
@@ -84,7 +85,7 @@ export function ContactBio() {
       const { photoUrl } = await uploadContactBioPhoto(file, deviceToken);
       setBio((current) => (current ? { ...current, photoUrl } : current));
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Erro ao enviar foto.');
+      setErrorMessage(err instanceof Error ? err.message : tx('Erro ao enviar foto.'));
     } finally {
       setUploadingPhoto(false);
     }
@@ -95,22 +96,22 @@ export function ContactBio() {
       <div className="absolute right-4 top-4"><ThemeSwitcher /></div>
       <div className="w-full max-w-md rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-7 shadow-card">
         {status === 'loading' && (
-          <p className="text-center text-sm text-[hsl(var(--muted-foreground))]">Carregando…</p>
+          <p className="text-center text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando…')}</p>
         )}
 
         {status === 'no_session' && (
           <div className="text-center">
-            <h1 className="text-xl font-bold">Sessão não encontrada</h1>
+            <h1 className="text-xl font-bold">{tx('Sessão não encontrada')}</h1>
             <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
-              Abra o link de convite que você recebeu pra entrar de novo.
+              {tx('Abra o link de convite que você recebeu pra entrar de novo.')}
             </p>
           </div>
         )}
 
         {status === 'error' && (
           <div className="text-center">
-            <h1 className="text-xl font-bold">Não foi possível carregar seu perfil</h1>
-            {errorMessage && <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">Detalhe técnico: {errorMessage}</p>}
+            <h1 className="text-xl font-bold">{tx('Não foi possível carregar seu perfil')}</h1>
+            {errorMessage && <p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">{tx('Detalhe técnico:')} {errorMessage}</p>}
           </div>
         )}
 
@@ -118,13 +119,13 @@ export function ContactBio() {
           <>
             <div className="flex items-center gap-2 text-[hsl(var(--primary))]">
               <ShieldCheck size={20} />
-              <span className="text-xs font-bold uppercase tracking-wide">{isFirstTime ? 'Convite confirmado' : 'Meu perfil'}</span>
+              <span className="text-xs font-bold uppercase tracking-wide">{isFirstTime ? tx('Convite confirmado') : tx('Meu perfil')}</span>
             </div>
-            <h1 className="mt-3 text-xl font-bold">{isFirstTime ? 'Complete seu perfil' : 'Seu perfil'}</h1>
+            <h1 className="mt-3 text-xl font-bold">{isFirstTime ? tx('Complete seu perfil') : tx('Seu perfil')}</h1>
             <p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
               {isFirstTime
-                ? 'Coloque uma foto e, se quiser, seu telefone e redes sociais. Você pode mudar isso depois quando quiser.'
-                : 'Atualize sua foto e informações quando quiser.'}
+                ? tx('Coloque uma foto e, se quiser, seu telefone e redes sociais. Você pode mudar isso depois quando quiser.')
+                : tx('Atualize sua foto e informações quando quiser.')}
             </p>
             <div className="mt-5">
               <BioEditor

@@ -1,4 +1,5 @@
 import { useAuthedMediaUrl } from '@/lib/media';
+import { tx } from '@/lib/i18n';
 
 export type ChatMessageLike = {
   type: string;
@@ -15,7 +16,7 @@ export function isStickerMessage(message: ChatMessageLike): boolean {
 function StickerContent({ contentUrl }: { contentUrl: string }) {
   const emoji = contentUrl.slice(STICKER_PREFIX.length);
   return (
-    <span className="text-6xl leading-none" role="img" aria-label="Figurinha">
+    <span className="text-6xl leading-none" role="img" aria-label={tx('Figurinha')}>
       {emoji}
     </span>
   );
@@ -24,27 +25,27 @@ function StickerContent({ contentUrl }: { contentUrl: string }) {
 function PhotoContent({ contentUrl, authHeaders }: { contentUrl: string; authHeaders: HeadersInit }) {
   const { url, error } = useAuthedMediaUrl(contentUrl, authHeaders);
   if (error) {
-    return <p className="text-xs text-[hsl(var(--destructive))]">Não foi possível carregar a foto.</p>;
+    return <p className="text-xs text-[hsl(var(--destructive))]">{tx('Não foi possível carregar a foto.')}</p>;
   }
   if (!url) {
     return (
       <div className="flex h-40 w-40 items-center justify-center rounded-lg bg-[hsl(var(--muted)/.6)] text-xs text-[hsl(var(--muted-foreground))]">
-        Carregando foto…
+        {tx('Carregando foto…')}
       </div>
     );
   }
-  return <img src={url} alt="Foto enviada no chat" className="max-h-64 max-w-full rounded-lg object-cover" />;
+  return <img src={url} alt={tx('Foto enviada no chat')} className="max-h-64 max-w-full rounded-lg object-cover" />;
 }
 
 function VideoContent({ contentUrl, authHeaders }: { contentUrl: string; authHeaders: HeadersInit }) {
   const { url, error } = useAuthedMediaUrl(contentUrl, authHeaders);
   if (error) {
-    return <p className="text-xs text-[hsl(var(--destructive))]">Não foi possível carregar o vídeo.</p>;
+    return <p className="text-xs text-[hsl(var(--destructive))]">{tx('Não foi possível carregar o vídeo.')}</p>;
   }
   if (!url) {
     return (
       <div className="flex h-40 w-56 items-center justify-center rounded-lg bg-[hsl(var(--muted)/.6)] text-xs text-[hsl(var(--muted-foreground))]">
-        Carregando vídeo…
+        {tx('Carregando vídeo…')}
       </div>
     );
   }
@@ -55,10 +56,10 @@ function VideoContent({ contentUrl, authHeaders }: { contentUrl: string; authHea
 function AudioContent({ contentUrl, authHeaders }: { contentUrl: string; authHeaders: HeadersInit }) {
   const { url, error } = useAuthedMediaUrl(contentUrl, authHeaders);
   if (error) {
-    return <p className="text-xs text-[hsl(var(--destructive))]">Não foi possível carregar o áudio.</p>;
+    return <p className="text-xs text-[hsl(var(--destructive))]">{tx('Não foi possível carregar o áudio.')}</p>;
   }
   if (!url) {
-    return <p className="text-xs text-[hsl(var(--muted-foreground))]">Carregando áudio…</p>;
+    return <p className="text-xs text-[hsl(var(--muted-foreground))]">{tx('Carregando áudio…')}</p>;
   }
   // eslint-disable-next-line jsx-a11y/media-has-caption -- áudio de chat pessoal, sem legendas
   return <audio src={url} controls className="h-10 max-w-full" />;

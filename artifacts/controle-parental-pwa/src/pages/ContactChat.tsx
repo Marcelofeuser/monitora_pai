@@ -21,6 +21,7 @@ import { MessageContent, isStickerMessage } from '@/components/message-content';
 import { LockKeyhole, Phone, Plus, Send, ArrowLeft, ChevronRight, UserCircle2 } from 'lucide-react';
 import { useCall } from '@/hooks/use-call';
 import { CallOverlays } from '@/components/call/CallOverlays';
+import { tx } from '@/lib/i18n';
 
 /**
  * Rota /contact — chat contínuo de um Contato aprovado (mãe, avó, tia)
@@ -135,7 +136,7 @@ export function ContactChat() {
         }
       } catch (err) {
         if (!cancelled && showSpinner) {
-          setError(err instanceof Error ? err.message : 'Erro ao carregar a conversa.');
+          setError(err instanceof Error ? err.message : tx('Erro ao carregar a conversa.'));
         }
       } finally {
         if (!cancelled && showSpinner) setLoading(false);
@@ -189,7 +190,7 @@ export function ContactChat() {
         }
       } catch (err) {
         if (!cancelled && showSpinner) {
-          setGroupChatError(err instanceof Error ? err.message : 'Erro ao carregar o chat do grupo.');
+          setGroupChatError(err instanceof Error ? err.message : tx('Erro ao carregar o chat do grupo.'));
         }
       } finally {
         if (!cancelled && showSpinner) setGroupChatLoading(false);
@@ -242,7 +243,7 @@ export function ContactChat() {
         }
       } catch (err) {
         if (!cancelled && showSpinner) {
-          setParentChatError(err instanceof Error ? err.message : 'Erro ao carregar a conversa.');
+          setParentChatError(err instanceof Error ? err.message : tx('Erro ao carregar a conversa.'));
         }
       } finally {
         if (!cancelled && showSpinner) setParentChatLoading(false);
@@ -298,7 +299,7 @@ export function ContactChat() {
       setGroupPendingFile(null);
       if (groupTextareaRef.current) groupTextareaRef.current.style.height = 'auto';
     } catch (err) {
-      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+      setGroupChatError(err instanceof Error ? err.message : tx('Erro ao enviar mensagem.'));
     } finally {
       setGroupSending(false);
     }
@@ -312,7 +313,7 @@ export function ContactChat() {
       const message = await sendContactGroupMessage(deviceToken, selectedGroupId, { stickerEmoji: emoji });
       setGroupChatMessages((current) => [...current, message]);
     } catch (err) {
-      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
+      setGroupChatError(err instanceof Error ? err.message : tx('Erro ao enviar figurinha.'));
     } finally {
       setGroupSending(false);
     }
@@ -326,7 +327,7 @@ export function ContactChat() {
       const message = await sendContactGroupMessage(deviceToken, selectedGroupId, { file });
       setGroupChatMessages((current) => [...current, message]);
     } catch (err) {
-      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
+      setGroupChatError(err instanceof Error ? err.message : tx('Erro ao enviar áudio.'));
     } finally {
       setGroupSending(false);
     }
@@ -347,7 +348,7 @@ export function ContactChat() {
       setParentPendingFile(null);
       if (parentTextareaRef.current) parentTextareaRef.current.style.height = 'auto';
     } catch (err) {
-      setParentChatError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+      setParentChatError(err instanceof Error ? err.message : tx('Erro ao enviar mensagem.'));
     } finally {
       setParentSending(false);
     }
@@ -361,7 +362,7 @@ export function ContactChat() {
       const message = await sendContactParentMessage(deviceToken, selectedParentId, { stickerEmoji: emoji });
       setParentChatMessages((current) => [...current, message]);
     } catch (err) {
-      setParentChatError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
+      setParentChatError(err instanceof Error ? err.message : tx('Erro ao enviar figurinha.'));
     } finally {
       setParentSending(false);
     }
@@ -375,7 +376,7 @@ export function ContactChat() {
       const message = await sendContactParentMessage(deviceToken, selectedParentId, { file });
       setParentChatMessages((current) => [...current, message]);
     } catch (err) {
-      setParentChatError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
+      setParentChatError(err instanceof Error ? err.message : tx('Erro ao enviar áudio.'));
     } finally {
       setParentSending(false);
     }
@@ -396,7 +397,7 @@ export function ContactChat() {
       setPendingFile(null);
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+      setError(err instanceof Error ? err.message : tx('Erro ao enviar mensagem.'));
     } finally {
       setSending(false);
     }
@@ -410,7 +411,7 @@ export function ContactChat() {
       const message = await sendContactMessage(deviceToken, { stickerEmoji: emoji });
       setMessages((current) => [...current, message]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
+      setError(err instanceof Error ? err.message : tx('Erro ao enviar figurinha.'));
     } finally {
       setSending(false);
     }
@@ -424,7 +425,7 @@ export function ContactChat() {
       const message = await sendContactMessage(deviceToken, { file });
       setMessages((current) => [...current, message]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
+      setError(err instanceof Error ? err.message : tx('Erro ao enviar áudio.'));
     } finally {
       setSending(false);
     }
@@ -434,9 +435,9 @@ export function ContactChat() {
     return (
       <main className="grid min-h-[100dvh] place-items-center bg-[hsl(var(--background))] px-4 py-8">
         <div className="w-full max-w-md rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-7 text-center shadow-card">
-          <h1 className="text-xl font-bold">Convite não encontrado</h1>
+          <h1 className="text-xl font-bold">{tx('Convite não encontrado')}</h1>
           <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
-            Peça um novo link de convite para o responsável da criança.
+            {tx('Peça um novo link de convite para o responsável da criança.')}
           </p>
         </div>
       </main>
@@ -449,9 +450,9 @@ export function ContactChat() {
   const callTarget = inChatList || selectedGroupId
     ? null
     : selectedParentId
-      ? { id: selectedParentId, name: parents.find((p) => p.parentId === selectedParentId)?.parentName ?? 'Responsável' }
+      ? { id: selectedParentId, name: parents.find((p) => p.parentId === selectedParentId)?.parentName ?? tx('Responsável') }
       : childId
-        ? { id: childId, name: childName ?? 'Criança' }
+        ? { id: childId, name: childName ?? tx('Criança') }
         : null;
 
   return (
@@ -463,7 +464,7 @@ export function ContactChat() {
             <button
               type="button"
               onClick={() => setChatListOpen(true)}
-              aria-label="Voltar pra lista de conversas"
+              aria-label={tx('Voltar pra lista de conversas')}
               data-testid="button-back-to-chat-list"
               className="grid size-9 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
             >
@@ -473,17 +474,17 @@ export function ContactChat() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-bold">
               {chatListOpen && (groups.length > 0 || parents.length > 0)
-                ? 'Conversas'
+                ? tx('Conversas')
                 : selectedGroupId
-                  ? (groups.find((g) => g.id === selectedGroupId)?.name ?? 'Grupo')
+                  ? (groups.find((g) => g.id === selectedGroupId)?.name ?? tx('Grupo'))
                   : selectedParentId
-                    ? (parents.find((p) => p.parentId === selectedParentId)?.parentName ?? 'Responsável')
+                    ? (parents.find((p) => p.parentId === selectedParentId)?.parentName ?? tx('Responsável'))
                     : (childName ?? 'Conversa')}
             </h1>
             <p className="text-xs text-[hsl(var(--muted-foreground))]">
               {chatListOpen && (groups.length > 0 || parents.length > 0)
-                ? (contactName ? `Conectado como ${contactName}` : 'Contato aprovado')
-                : selectedGroupId ? 'Chat de grupo' : selectedParentId ? 'Conversa com o responsável' : contactName ? `Conectado como ${contactName}` : 'Contato aprovado'}
+                ? (contactName ? `Conectado como ${contactName}` : tx('Contato aprovado'))
+                : selectedGroupId ? tx('Chat de grupo') : selectedParentId ? tx('Conversa com o responsável') : contactName ? `Conectado como ${contactName}` : tx('Contato aprovado')}
             </p>
           </div>
         </div>
@@ -505,8 +506,8 @@ export function ContactChat() {
               aqui pra editar depois. */}
           <Link
             href="/contact/bio"
-            aria-label="Meu perfil"
-            title="Meu perfil"
+            aria-label={tx('Meu perfil')}
+            title={tx('Meu perfil')}
             data-testid="link-contact-profile"
             className="grid size-9 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
           >
@@ -531,8 +532,8 @@ export function ContactChat() {
               {(childName ?? '?').trim().slice(0, 1).toUpperCase()}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{childName ?? 'Criança'}</span>
-              <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">Conversa com a criança</span>
+              <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{childName ?? tx('Criança')}</span>
+              <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">{tx('Conversa com a criança')}</span>
             </span>
             <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
           </button>
@@ -549,7 +550,7 @@ export function ContactChat() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{parent.parentName}</span>
-                <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">Responsável</span>
+                <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">{tx('Responsável')}</span>
               </span>
               <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
             </button>
@@ -567,7 +568,7 @@ export function ContactChat() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-extrabold text-[hsl(var(--foreground))]">{group.name}</span>
-                <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">Grupo</span>
+                <span className="block truncate text-xs text-[hsl(var(--muted-foreground))]">{tx('Grupo')}</span>
               </span>
               <ChevronRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
             </button>
@@ -586,9 +587,9 @@ export function ContactChat() {
       >
         {selectedGroupId ? (
           groupChatLoading && groupChatMessages.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+            <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando conversa…')}</p>
           ) : groupChatMessages.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda neste grupo. Escreva a primeira aqui embaixo.</p>
+            <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Nenhuma mensagem ainda neste grupo. Escreva a primeira aqui embaixo.')}</p>
           ) : (
             groupChatMessages.map((message) => {
               const fromMe = contactUserId !== null && message.senderId === contactUserId;
@@ -614,10 +615,10 @@ export function ContactChat() {
           )
         ) : selectedParentId ? (
           parentChatLoading && parentChatMessages.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+            <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando conversa…')}</p>
           ) : parentChatMessages.length === 0 ? (
             <p className="text-sm text-[hsl(var(--muted-foreground))]">
-              Nenhuma mensagem ainda com {parents.find((p) => p.parentId === selectedParentId)?.parentName ?? 'o responsável'}. Escreva a primeira aqui embaixo.
+              {tx('Nenhuma mensagem ainda com')} {parents.find((p) => p.parentId === selectedParentId)?.parentName ?? tx('o responsável')}{tx('. Escreva a primeira aqui embaixo.')}
             </p>
           ) : (
             parentChatMessages.map((message) => {
@@ -637,10 +638,10 @@ export function ContactChat() {
             })
           )
         ) : loading && messages.length === 0 ? (
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando conversa…')}</p>
         ) : messages.length === 0 ? (
           <p className="text-sm text-[hsl(var(--muted-foreground))]">
-            Nenhuma mensagem ainda com {childName ?? 'a criança'}. Escreva a primeira aqui embaixo.
+            {tx('Nenhuma mensagem ainda com')} {childName ?? tx('a criança')}{tx('. Escreva a primeira aqui embaixo.')}
           </p>
         ) : (
           messages.map((message) => {
@@ -668,8 +669,8 @@ export function ContactChat() {
             {groupAttachError && <p className="mb-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{groupAttachError}</p>}
             {groupPendingFile && (
               <div className="mb-2 flex items-center gap-2 self-start rounded-xl bg-[hsl(var(--muted)/.6)] px-3 py-2 text-xs font-semibold">
-                {groupPendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {groupPendingFile.name}
-                <button type="button" onClick={() => setGroupPendingFile(null)} aria-label="Remover anexo" className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+                {groupPendingFile.type.startsWith('video/') ? tx('Vídeo selecionado:') : tx('Foto selecionada:')} {groupPendingFile.name}
+                <button type="button" onClick={() => setGroupPendingFile(null)} aria-label={tx('Remover anexo')} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
                   ×
                 </button>
               </div>
@@ -679,7 +680,7 @@ export function ContactChat() {
                 <button
                   type="button"
                   onClick={() => setGroupComposerToolsOpen((current) => !current)}
-                  aria-label={groupComposerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                  aria-label={groupComposerToolsOpen ? tx('Fechar opções') : tx('Mais opções (emoji, foto, figurinha, áudio)')}
                   className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl border transition-transform ${
                     groupComposerToolsOpen
                       ? 'rotate-45 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
@@ -737,14 +738,14 @@ export function ContactChat() {
                     event.currentTarget.form?.requestSubmit();
                   }
                 }}
-                placeholder={groupPendingFile ? 'Adicione uma legenda (opcional)…' : 'Escreva pro grupo…'}
+                placeholder={groupPendingFile ? tx('Adicione uma legenda (opcional)…') : tx('Escreva pro grupo…')}
                 rows={1}
                 className="max-h-32 min-h-[48px] flex-1 resize-none rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--background)/.65)] px-4 py-3 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
               />
               <button
                 type="submit"
                 disabled={(!groupDraft.trim() && !groupPendingFile) || groupSending}
-                aria-label="Enviar mensagem"
+                aria-label={tx('Enviar mensagem')}
                 className="grid size-12 shrink-0 place-items-center rounded-xl bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] disabled:opacity-60"
               >
                 {groupSending ? '…' : <Send size={18} />}
@@ -757,8 +758,8 @@ export function ContactChat() {
             {parentAttachError && <p className="mb-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{parentAttachError}</p>}
             {parentPendingFile && (
               <div className="mb-2 flex items-center gap-2 self-start rounded-xl bg-[hsl(var(--muted)/.6)] px-3 py-2 text-xs font-semibold">
-                {parentPendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {parentPendingFile.name}
-                <button type="button" onClick={() => setParentPendingFile(null)} aria-label="Remover anexo" className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+                {parentPendingFile.type.startsWith('video/') ? tx('Vídeo selecionado:') : tx('Foto selecionada:')} {parentPendingFile.name}
+                <button type="button" onClick={() => setParentPendingFile(null)} aria-label={tx('Remover anexo')} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
                   ×
                 </button>
               </div>
@@ -768,7 +769,7 @@ export function ContactChat() {
                 <button
                   type="button"
                   onClick={() => setParentComposerToolsOpen((current) => !current)}
-                  aria-label={parentComposerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                  aria-label={parentComposerToolsOpen ? tx('Fechar opções') : tx('Mais opções (emoji, foto, figurinha, áudio)')}
                   className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl border transition-transform ${
                     parentComposerToolsOpen
                       ? 'rotate-45 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
@@ -826,14 +827,14 @@ export function ContactChat() {
                     event.currentTarget.form?.requestSubmit();
                   }
                 }}
-                placeholder={parentPendingFile ? 'Adicione uma legenda (opcional)…' : `Escreva pro responsável…`}
+                placeholder={parentPendingFile ? tx('Adicione uma legenda (opcional)…') : tx('Escreva pro responsável…')}
                 rows={1}
                 className="max-h-32 min-h-[48px] flex-1 resize-none rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--background)/.65)] px-4 py-3 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
               />
               <button
                 type="submit"
                 disabled={(!parentDraft.trim() && !parentPendingFile) || parentSending}
-                aria-label="Enviar mensagem"
+                aria-label={tx('Enviar mensagem')}
                 className="grid size-12 shrink-0 place-items-center rounded-xl bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] disabled:opacity-60"
               >
                 {parentSending ? '…' : <Send size={18} />}
@@ -846,8 +847,8 @@ export function ContactChat() {
             {attachError && <p className="mb-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{attachError}</p>}
             {pendingFile && (
               <div className="mb-2 flex items-center gap-2 self-start rounded-xl bg-[hsl(var(--muted)/.6)] px-3 py-2 text-xs font-semibold">
-                {pendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {pendingFile.name}
-                <button type="button" onClick={() => setPendingFile(null)} aria-label="Remover anexo" className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+                {pendingFile.type.startsWith('video/') ? tx('Vídeo selecionado:') : tx('Foto selecionada:')} {pendingFile.name}
+                <button type="button" onClick={() => setPendingFile(null)} aria-label={tx('Remover anexo')} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
                   ×
                 </button>
               </div>
@@ -857,7 +858,7 @@ export function ContactChat() {
                 <button
                   type="button"
                   onClick={() => setComposerToolsOpen((current) => !current)}
-                  aria-label={composerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                  aria-label={composerToolsOpen ? tx('Fechar opções') : tx('Mais opções (emoji, foto, figurinha, áudio)')}
                   className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl border transition-transform ${
                     composerToolsOpen
                       ? 'rotate-45 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
@@ -915,14 +916,14 @@ export function ContactChat() {
                     event.currentTarget.form?.requestSubmit();
                   }
                 }}
-                placeholder={pendingFile ? 'Adicione uma legenda (opcional)…' : `Escreva pra ${childName ?? 'a criança'}…`}
+                placeholder={pendingFile ? tx('Adicione uma legenda (opcional)…') : `Escreva pra ${childName ?? tx('a criança')}…`}
                 rows={1}
                 className="max-h-32 min-h-[48px] flex-1 resize-none rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--background)/.65)] px-4 py-3 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
               />
               <button
                 type="submit"
                 disabled={(!draft.trim() && !pendingFile) || sending}
-                aria-label="Enviar mensagem"
+                aria-label={tx('Enviar mensagem')}
                 className="grid size-12 shrink-0 place-items-center rounded-xl bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] disabled:opacity-60"
               >
                 {sending ? '…' : <Send size={18} />}
@@ -937,10 +938,10 @@ export function ContactChat() {
       <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-5 py-3 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
         <LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" />{' '}
         {selectedGroupId
-          ? 'Esta conversa de grupo também fica visível para o responsável.'
+          ? tx('Esta conversa de grupo também fica visível para o responsável.')
           : selectedParentId
-            ? 'Esta é uma conversa direta com o responsável -- não aparece pra criança.'
-            : <>Esta conversa também fica visível para o responsável de {childName ?? 'a criança'}.</>}
+            ? tx('Esta é uma conversa direta com o responsável -- não aparece pra criança.')
+            : <>{tx('Esta conversa também fica visível para o responsável de')} {childName ?? tx('a criança')}.</>}
       </div>
       )}
     </main>

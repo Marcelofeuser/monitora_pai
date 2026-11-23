@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, Fragment, useContext, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent, ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -88,13 +88,13 @@ import type { ParentRelationship } from '@/lib/relationship';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { tx, pick, detectLanguage, setCurrentLanguage, LANGUAGE_KEY, type Language } from '@/lib/i18n';
 
 type Role = 'responsible' | 'child';
 type Profile = { displayName: string; familyName: string; role: Role };
 const queryClient = new QueryClient();
 const PROFILE_KEY = 'amparo-profile';
 const CONTACTS_KEY = 'amparo-contacts';
-const LANGUAGE_KEY = 'amparo-language';
 const TOUR_KEY_PREFIX = 'amparo-onboarding-completed';
 // publishableKeyFromHost() foi removido: ele deriva a chave como
 // `clerk.<hostname-atual>` (pensado pra Clerk custom domain POR
@@ -106,7 +106,7 @@ const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 const pt = {
-  language: { brazil: 'Português do Brasil', english: 'English', switcher: 'Idioma' },
+  language: { brazil: 'Português do Brasil', english: 'Inglês', spanish: 'Espanhol', switcher: 'Idioma' },
   onboarding: {
     aside: 'um espaço de família, não uma sala de controle', overline: 'privado por padrão',
     heroOne: 'Segurança funciona', heroTwo: 'melhor', heroThree: 'às claras.',
@@ -217,15 +217,15 @@ const pt = {
     notifications: 'Notificações', notificationsText: 'Uma preferência local para futuras atualizações aprovadas.',
     device: 'Este dispositivo', deviceText: 'O Ampara está rodando em modo local. Não há sincronização de conta nem coleta em segundo plano.',
     browserData: 'Os dados ficam no seu navegador', remove: 'Remover perfil local', removeText: 'Isso limpa seu perfil e as escolhas locais de compartilhamento deste dispositivo.',
-    removeButton: 'Remover perfil', removeConfirm: 'Remover este perfil local de família deste dispositivo?', tutorialTitle: 'Tutorial guiado', tutorialText: 'Revise os passos principais do Ampara sempre que quiser.', tutorialAction: 'Ver tutorial novamente',
-    relationshipTitle: 'Como a criança te chama', relationshipText: 'Escolha como você aparece para ela na tela de conversa — em vez do genérico "Responsável".', relationshipSaved: 'Salvo.',
+    removeButton: 'Remover perfil', removeConfirm: 'Remover este perfil local de família deste dispositivo?', tutorialTitle: tx('Tutorial guiado'), tutorialText: 'Revise os passos principais do Ampara sempre que quiser.', tutorialAction: 'Ver tutorial novamente',
+    relationshipTitle: 'Como a criança te chama', relationshipText: 'Escolha como você aparece para ela na tela de conversa — em vez do genérico "Responsável".', relationshipSaved: tx('Salvo.'),
   },
   notFound: { title: 'Esta página não está aqui.', text: 'O espaço do Ampara que você pediu não existe.', back: 'Voltar ao Ampara' },
   metadata: { title: 'Ampara — um espaço claro para cuidar', description: 'Um espaço transparente de segurança familiar para adultos responsáveis e crianças.' },
 } as const;
 
 const en = {
-  language: { brazil: 'Brazilian Portuguese', english: 'English', switcher: 'Language' },
+  language: { brazil: 'Brazilian Portuguese', english: 'English', spanish: 'Spanish', switcher: 'Language' },
   onboarding: {
     aside: 'a family space, not a control room', overline: 'private by default',
     heroOne: 'Safety works', heroTwo: 'better', heroThree: 'in the open.',
@@ -339,9 +339,124 @@ const en = {
   metadata: { title: 'Ampara — a clear space for care', description: 'A transparent family safety space for responsible adults and children.' },
 } as const;
 
-type Language = 'pt-BR' | 'en';
-type Copy = typeof pt | typeof en;
-const copies = { 'pt-BR': pt, en };
+const es = {
+  language: { brazil: 'Portugués de Brasil', english: 'Inglés', spanish: 'Español', switcher: 'Idioma' },
+  onboarding: {
+    aside: 'un espacio familiar, no una sala de control', overline: 'privado por defecto',
+    heroOne: 'La seguridad funciona', heroTwo: 'mejor', heroThree: 'a la vista.',
+    description: 'Ampara le da a la familia un lugar compartido para ponerse de acuerdo, conversar y compartir una ubicación cuando todos estén de acuerdo. Sin monitoreo oculto. Sin adivinar qué es real.',
+    checkOne: 'Todos pueden ver lo que se comparte', checkTwo: 'Nada empieza sin consentimiento',
+    step: '01 / empieza aquí', question: 'Vamos a crear el espacio de tu familia', choiceDescription: 'Esta pantalla es solo para ti, el adulto responsable — el niño o la niña nunca se registra aquí, entra por el enlace o código QR de vinculación.',
+    adult: 'Adulto responsable', adultDescription: 'Ayudo a mantener a la familia conectada.',
+    child: 'Niño o niña', childDescription: 'Quiero participar en mi espacio de seguridad.',
+    yourName: 'Tu nombre', yourNamePlaceholder: 'Escribe tu nombre', familyName: 'Nombre del espacio familiar', familyNamePlaceholder: 'Ponle un nombre a tu espacio',
+    localNote: 'Por ahora, esto se queda en este dispositivo. Ampara nunca inventa una persona, un mensaje ni una ubicación.',
+    error: 'Elige un rol y completa los dos campos para continuar.', create: 'Crear mi espacio familiar',
+    footer: 'Ampara / un espacio claro para cuidar', help: '¿Necesitas ayuda? Pide a tu familia que lo configure contigo.',
+    relationshipTitle: 'Cómo te llama el niño o la niña', relationshipText: 'Elige cómo apareces en su pantalla de conversación, en lugar del genérico "Responsable".', relationshipSaved: 'Guardado.',
+  },
+  auth: {
+    title: 'Cuenta del adulto responsable', description: 'Inicia sesión para mantener tu espacio seguro en todos tus dispositivos. Los niños solo entran por la vinculación familiar.',
+    signIn: 'Iniciar sesión', signUp: 'Crear cuenta', signedIn: 'Cuenta conectada', signedOut: '¿Todavía no tienes cuenta?', signOut: 'Cerrar sesión',
+  },
+  nav: { overview: 'Inicio', pair: 'Vincular niño', conversations: 'Espejo', invites: 'Invitaciones', location: 'Ubicación', screenTime: 'Tiempo de uso', settings: 'Configuración' },
+  shell: {
+    yourProfile: 'Tu perfil', setupIncomplete: 'Configuración incompleta', completeSetup: 'Completar configuración',
+    familySpace: 'Espacio familiar', noMonitoring: 'Sin monitoreo oculto, nunca.', localMode: 'modo local',
+    familyNotSet: 'sin configurar', localPrivate: 'local y privado', openMenu: 'Abrir menú', closeMenu: 'Cerrar menú',
+    closeNavigation: 'Cerrar navegación', mainNav: 'Navegación principal', mobileNav: 'Navegación móvil', bottomNav: 'Navegación inferior',
+  },
+  dashboard: {
+    eyebrow: '01 / inicio', greeting: 'Qué bueno tenerte aquí, {name}.', title: 'Un lugar claro para cuidar.',
+    description: 'Este es el espacio de seguridad compartido de tu familia. Empieza en silencio, porque aquí solo deben aparecer novedades reales.',
+    noProfileDescription: 'Configura el perfil de tu familia para que este espacio sea tuyo. Hasta entonces, no se recopila ni se supone nada.',
+    setupTitle: 'Tu espacio familiar todavía no está configurado.', setupText: 'Empieza con tu rol y un nombre para que este espacio sea tuyo.', setupAction: 'Configurar espacio',
+    sharedTruth: 'verdad compartida', noReport: 'Nada que informar', goodNews: 'es una buena noticia.',
+    emptyExplanation: 'Cuando tu familia empiece a compartir, aquí aparecerán las novedades claras y acordadas.',
+    status: 'estado del espacio', quietReady: 'Tranquilo y listo', profile: 'Tu perfil', profileDone: 'Configurado en este dispositivo', profileNeeds: 'Faltan tus datos',
+    approved: 'No hay conversaciones aprobadas', approvedCount: '{count} contacto(s) aprobado(s) guardado(s) localmente', noChildLocation: 'Ningún niño compartió su ubicación',
+    onlyShows: 'Ampara solo muestra información que alguien eligió compartir activamente con este espacio familiar.',
+    connectEyebrow: 'mantente en contacto', connectTitle: 'Conversaciones aprobadas', connectText: 'Un lugar para mensajes que todos saben que forman parte del espacio familiar.', connectAction: 'Abrir conversaciones',
+    locationEyebrow: 'cuando importa', locationTitle: 'Ubicación, con consentimiento', locationText: 'La ubicación está vacía hasta que el niño o la niña decide compartirla. El permiso siempre está a la vista.', locationAction: 'Revisar ubicación',
+  },
+  contacts: {
+    eyebrow: 'contactos locales', title: '¿Quién puede hablar aquí?', description: 'Por ahora, las aprobaciones se quedan en este dispositivo. No se envía nada a otro dispositivo hasta que la vinculación familiar y el servidor estén disponibles.',
+    childTitle: 'Pedir un contacto', childText: 'Usa el nombre real y una referencia que tu familia reconozca. La solicitud queda pendiente en este dispositivo; no se envía a nadie más.',
+    adultTitle: 'Aprobar contactos', adultText: 'Revisa las solicitudes hechas en este dispositivo. Aprobar no envía notificaciones ni crea mensajes.',
+    idLabel: 'ID o referencia del contacto', idPlaceholder: 'Escribe una referencia acordada',
+    nameLabel: 'Nombre del contacto', namePlaceholder: 'Escribe el nombre real',
+    identifierLabel: 'Teléfono u otro identificador (opcional)', identifierPlaceholder: 'Opcional',
+    request: 'Pedir aprobación', pending: 'pendiente', approved: 'aprobado', denied: 'rechazado', revoked: 'revocado', textOnly: 'solo texto',
+    pendingTitle: 'Solicitudes pendientes', pendingEmpty: 'No hay solicitudes pendientes en este dispositivo.',
+    approvedTitle: 'Contactos aprobados', approvedEmpty: 'Todavía no hay contactos aprobados.',
+    historyTitle: 'Rechazados y revocados', historyEmpty: 'No hay contactos rechazados ni revocados.',
+    approve: 'Aprobar', deny: 'Rechazar', approveTextOnly: 'Aprobar solo texto', revoke: 'Revocar',
+    channelsTitle: 'Canales disponibles', channelsEmpty: 'No hay canales disponibles. Un adulto responsable debe aprobar un contacto primero.',
+    channelNote: 'Canal aprobado, todavía sin mensajes.', localId: 'ID local', submitted: 'Solicitud guardada en este dispositivo.',
+    duplicate: 'Ya existe un contacto con este ID local.', missing: 'Escribe un ID y un nombre para continuar.',
+    noControls: 'Los niños no ven los controles de aprobación. La decisión la toma un adulto responsable.',
+    statusLabel: 'estado', identifierMissing: 'sin identificador adicional',
+    approveAlert: 'La aprobación se guardó solo en este dispositivo.', denyAlert: 'La decisión se guardó solo en este dispositivo.', revokeAlert: 'El contacto se revocó en este dispositivo.',
+  },
+  tutorial: {
+    skip: 'Saltar tutorial', back: 'Atrás', next: 'Siguiente', finish: 'Ir al panel', stepOf: 'paso {current} de {total}',
+    parent: [
+      { title: 'Bienvenido a Ampara', text: 'Este es un lugar claro para cuidar, conversar y compartir solo lo que tu familia elija.', target: 'dashboard' },
+      { title: 'Perfil del niño', text: 'Revisa el perfil del niño o la niña y mantén aquí los datos reales de la familia.', target: 'child-profile' },
+      { title: 'Actividad compartida', text: 'Las conversaciones aprobadas y la ubicación aparecen en el panel cuando realmente se comparten.', target: 'activity' },
+      { title: 'Aprobar contactos', text: 'Antes de que alguien hable, revisa cada solicitud y elige aprobar, solo texto, rechazar o revocar.', target: 'approved-contacts' },
+      { title: 'Chat privado', text: 'La conversación entre el adulto responsable y el niño queda aparte y nunca se refleja en el espejo.', target: 'private-channel' },
+    ],
+    child: [
+      { title: 'Tu espacio de seguridad', text: 'Participas en las decisiones de aquí y siempre sabes qué se está compartiendo.', target: 'dashboard' },
+      { title: 'Contactos aprobados', text: 'Pide un contacto con una referencia que tu familia reconozca. Solo puedes hablar después de la aprobación.', target: 'approved-contacts' },
+      { title: 'Chat privado', text: 'El canal con el adulto responsable es privado y no aparece en el espejo de conversaciones aprobadas.', target: 'private-channel' },
+      { title: 'Ubicación por elección', text: 'Tú decides cuándo compartir tu ubicación y puedes ver claramente cuándo el permiso está activo.', target: 'activity' },
+    ],
+  },
+  conversations: {
+    eyebrow: '02 / espejo', title: 'Espejo de conversaciones',
+    description: 'Solo lectura: sigue las conversaciones que cada contacto aprobado tiene con el niño o la niña. Toca un niño (si hay más de uno) y luego un contacto para ver el historial.',
+    emptyEyebrow: 'nada compartido todavía', emptyTitle: 'Tus conversaciones están vacías.',
+    emptyText: 'Cuando un familiar sea aprobado y empiece una conversación, aparecerá aquí. Ampara no crea mensajes de relleno.',
+  },
+  invites: {
+    eyebrow: '02 / invitaciones', title: 'Invitaciones',
+    description: 'Quién puede hablar con el niño o la niña, y quién todavía tiene que aceptar la invitación.',
+  },
+  groups: {
+    eyebrow: '02 / grupos', title: 'Grupos',
+    description: 'Un grupo solo existe si tú lo creas: elige entre los contactos que ya aceptaron la invitación.',
+  },
+  location: {
+    eyebrow: '03 / ubicación', title: 'Ubicación, de común acuerdo.',
+    description: 'Aquí nunca se deduce una ubicación. Solo aparece después de que el niño o la niña decide compartirla y el dispositivo lo permite.',
+    permission: 'Permiso del dispositivo', allowed: 'permitido', denied: 'no permitido', notRequested: 'no solicitado',
+    permissionText: 'El permiso y compartir con la familia son decisiones separadas. Ampara solo le pregunta al dispositivo cuando tú se lo pides.',
+    waiting: 'Esperando tu decisión…', granted: 'Permiso concedido', ask: 'Pedir permiso',
+    locationUnavailable: 'El permiso de ubicación no está disponible en este navegador.', notGranted: 'No se concedió el permiso. No se guardó ninguna ubicación.',
+    share: 'Compartir mi ubicación', sharedChoice: 'Tu familia puede ver que elegiste compartir.', privateChoice: 'Tu ubicación sigue siendo privada.',
+    map: 'mapa familiar', consent: 'requiere consentimiento', noLocation: 'Ninguna ubicación compartida',
+    sharingOnEmpty: 'Compartir está activado, pero todavía no hay una actualización de ubicación.',
+    mapEmpty: 'Este mapa queda vacío a propósito hasta que un niño elija compartir una ubicación.',
+    noTracking: 'Sin rastreo en segundo plano. Sin marcador de última vez visto.',
+  },
+  settings: {
+    eyebrow: '04 / configuración', title: 'Tu espacio, tu decisión.',
+    description: 'Mira y cambia el perfil y los permisos del dispositivo que dan forma a este espacio de Ampara.',
+    profile: 'Perfil familiar', stored: 'Guardado solo en este dispositivo', save: 'Guardar cambios', saved: 'Guardado en este dispositivo.',
+    notifications: 'Notificaciones', notificationsText: 'Una preferencia local para futuras novedades aprobadas.',
+    device: 'Este dispositivo', deviceText: 'Ampara funciona en modo local. No hay sincronización de cuenta ni recopilación en segundo plano.',
+    browserData: 'Los datos se quedan en tu navegador', remove: 'Eliminar perfil local', removeText: 'Esto borra tu perfil y tus opciones de compartir locales de este dispositivo.',
+    removeButton: 'Eliminar perfil', removeConfirm: '¿Eliminar este perfil familiar local de este dispositivo?', tutorialTitle: tx('Tutorial guiado'), tutorialText: 'Repasa los pasos principales de Ampara cuando quieras.', tutorialAction: 'Ver el tutorial otra vez',
+    relationshipTitle: 'Cómo te llama el niño o la niña', relationshipText: 'Elige cómo apareces en su pantalla de conversación, en lugar del genérico "Responsable".', relationshipSaved: 'Guardado.',
+  },
+  notFound: { title: 'Esta página no existe.', text: 'El espacio de Ampara que buscaste no existe.', back: 'Volver a Ampara' },
+  metadata: { title: 'Ampara — un espacio claro para cuidar', description: 'Un espacio de seguridad familiar transparente para adultos responsables y niños.' },
+} as const;
+
+type Copy = typeof pt | typeof en | typeof es;
+const copies = { 'pt-BR': pt, en, es };
 const LanguageContext = createContext<{ language: Language; setLanguage: (language: Language) => void; t: Copy }>({
   language: 'pt-BR', setLanguage: () => undefined, t: pt,
 });
@@ -351,13 +466,15 @@ function useLanguage() {
 }
 
 function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>(() => localStorage.getItem(LANGUAGE_KEY) === 'en' ? 'en' : 'pt-BR');
+  const [language, setLanguageState] = useState<Language>(() => detectLanguage());
+  // tx() (lib/i18n) lê este valor de forma síncrona durante a renderização.
+  setCurrentLanguage(language);
   const setLanguage = (next: Language) => {
     setLanguageState(next);
     localStorage.setItem(LANGUAGE_KEY, next);
   };
   useEffect(() => {
-    document.documentElement.lang = language === 'en' ? 'en' : 'pt-BR';
+    document.documentElement.lang = language;
     document.title = copies[language].metadata.title;
     const description = document.querySelector('meta[name="description"]');
     description?.setAttribute('content', copies[language].metadata.description);
@@ -371,21 +488,33 @@ function LanguageSwitcher() {
     <div className="flex items-center gap-1 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--card)/.7)] p-1" aria-label={t.language.switcher}>
       <button type="button" onClick={() => setLanguage('pt-BR')} aria-label={t.language.brazil} aria-pressed={language === 'pt-BR'} data-testid="button-language-pt" className={`grid size-8 place-items-center rounded-full text-base transition-colors ${language === 'pt-BR' ? 'bg-[hsl(var(--primary))] grayscale-0' : 'grayscale opacity-60 hover:grayscale-0 hover:opacity-100'}`}>🇧🇷</button>
       <button type="button" onClick={() => setLanguage('en')} aria-label={t.language.english} aria-pressed={language === 'en'} data-testid="button-language-en" className={`grid size-8 place-items-center rounded-full text-base transition-colors ${language === 'en' ? 'bg-[hsl(var(--primary))] grayscale-0' : 'grayscale opacity-60 hover:grayscale-0 hover:opacity-100'}`}>🇺🇸</button>
+      <button type="button" onClick={() => setLanguage('es')} aria-label={t.language.spanish} aria-pressed={language === 'es'} data-testid="button-language-es" className={`grid size-8 place-items-center rounded-full text-base transition-colors ${language === 'es' ? 'bg-[hsl(var(--primary))] grayscale-0' : 'grayscale opacity-60 hover:grayscale-0 hover:opacity-100'}`}>🇪🇸</button>
     </div>
   );
+}
+
+// O perfil local (nome, nome do espaço) fica no navegador. Ele guarda o id
+// da conta Clerk que o criou: assim, se outra pessoa entrar no mesmo
+// navegador, ela não vê o nome de quem usou antes (bug de 23/11/2026).
+let profileOwnerId: string | null = null;
+function setProfileOwner(userId: string | null | undefined) {
+  profileOwnerId = userId ?? null;
 }
 
 function readProfile(): Profile | null {
   try {
     const raw = localStorage.getItem(PROFILE_KEY);
-    return raw ? (JSON.parse(raw) as Profile) : null;
+    if (!raw) return null;
+    const stored = JSON.parse(raw) as Profile & { ownerId?: string };
+    if (profileOwnerId && stored.ownerId !== profileOwnerId) return null;
+    return stored;
   } catch {
     return null;
   }
 }
 
 function saveProfile(profile: Profile) {
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...profile, ownerId: profileOwnerId ?? undefined }));
 }
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
@@ -651,8 +780,8 @@ function AppShell({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setGuardianAcceptedMessage(
             result.childrenCount === 1
-              ? 'Você agora também é Responsável por 1 criança deste espaço.'
-              : `Você agora também é Responsável por ${result.childrenCount} crianças deste espaço.`,
+              ? tx('Você agora também é Responsável por 1 criança deste espaço.')
+              : pick({ pt: `Você agora também é Responsável por ${result.childrenCount} crianças deste espaço.`, en: `You are now also a guardian of ${result.childrenCount} children in this space.`, es: `Ahora también eres responsable de ${result.childrenCount} niños de este espacio.` }),
           );
         }
       } catch {
@@ -794,7 +923,7 @@ function GuidedTour({ profile }: { profile: Profile | null }) {
     setOpen(false);
   };
   return (
-    <div className="fixed inset-0 z-[60] pointer-events-none" aria-label="Tutorial guiado" data-testid="guided-tour">
+    <div className="fixed inset-0 z-[60] pointer-events-none" aria-label={tx('Tutorial guiado')} data-testid="guided-tour">
       {spotlight && <div className="pointer-events-none fixed rounded-2xl border-2 border-[hsl(var(--accent))] transition-all duration-300" style={{ top: spotlight.top, left: spotlight.left, width: spotlight.width, height: spotlight.height, boxShadow: '0 0 0 9999px rgba(18, 35, 35, .58)' }} />}
       <section className="pointer-events-auto fixed bottom-5 left-5 right-5 mx-auto max-w-[460px] rounded-[24px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-5 shadow-[0_24px_70px_rgba(18,35,35,.25)] sm:bottom-8 sm:left-auto sm:right-8 sm:p-6">
         <div className="flex items-center justify-between gap-4">
@@ -847,7 +976,7 @@ function Avatar({ name, dark = false, shape = 'circle', photoUrl }: { name?: str
     return (
       <span className="relative inline-grid size-10 shrink-0 place-items-center" data-testid="avatar-profile">
         {resolvedPhotoUrl ? (
-          <img src={resolvedPhotoUrl} alt={name ?? 'Grupo'} className="size-10 -rotate-6 rounded-[50%_50%_50%_4px] object-cover" />
+          <img src={resolvedPhotoUrl} alt={name ?? tx('Grupo')} className="size-10 -rotate-6 rounded-[50%_50%_50%_4px] object-cover" />
         ) : (
           <span className={`grid size-10 -rotate-6 place-items-center rounded-[50%_50%_50%_4px] text-xs font-extrabold ${tone}`}>{initials}</span>
         )}
@@ -986,12 +1115,12 @@ function Dashboard() {
         <Link
           href="/perfil"
           data-testid="link-dashboard-bio"
-          aria-label="Sua BIO"
-          title="Sua BIO"
+          aria-label={tx('Sua BIO')}
+          title={tx('Sua BIO')}
           className="mt-1 flex shrink-0 items-center gap-2 rounded-full border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] px-3 py-2 text-xs font-extrabold shadow-card transition-colors hover:border-[hsl(var(--primary))]"
         >
           <Avatar name={profile?.displayName} />
-          <span className="hidden sm:inline">Sua BIO</span>
+          <span className="hidden sm:inline">{tx('Sua BIO')}</span>
         </Link>
       </div>
       <SetupNotice />
@@ -1085,7 +1214,7 @@ function Conversations() {
         setChildren(kids);
         setSelectedChildId((current) => current ?? kids[0]?.id ?? null);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar conversas.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar conversas.'));
       }
     }
     load();
@@ -1101,7 +1230,7 @@ function Conversations() {
         const contacts = await fetchApprovedContacts(selectedChildId!, token);
         if (!cancelled) setApprovedContacts(contacts);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar conversas.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar conversas.'));
       }
     }
     loadContacts();
@@ -1124,7 +1253,7 @@ function Conversations() {
         }
       } catch (err) {
         if (!cancelled && showSpinner) {
-          setContactMirrorError(err instanceof Error ? err.message : 'Erro ao carregar a conversa.');
+          setContactMirrorError(err instanceof Error ? err.message : tx('Erro ao carregar a conversa.'));
         }
       } finally {
         if (!cancelled && showSpinner) setContactMirrorLoading(false);
@@ -1148,7 +1277,7 @@ function Conversations() {
   // também (cascade no backend).
   async function handleDeleteContact(contact: ApprovedContact) {
     if (deletingContactId || !selectedChildId) return;
-    if (!window.confirm(`Excluir o contato "${contact.contactName}"? Ele sai de qualquer grupo do qual participe.`)) return;
+    if (!window.confirm(pick({ pt: `Excluir o contato "${contact.contactName}"? Ele sai de qualquer grupo do qual participe.`, en: `Delete the contact "${contact.contactName}"? They will leave any group they are in.`, es: `¿Eliminar el contacto "${contact.contactName}"? Saldrá de cualquier grupo en el que participe.` }))) return;
     setDeletingContactId(contact.id);
     setDeleteContactError(null);
     try {
@@ -1156,7 +1285,7 @@ function Conversations() {
       await deleteContact(contact.id, token);
       setApprovedContacts((current) => current.filter((item) => item.id !== contact.id));
     } catch (err) {
-      setDeleteContactError(err instanceof Error ? err.message : 'Erro ao excluir contato.');
+      setDeleteContactError(err instanceof Error ? err.message : tx('Erro ao excluir contato.'));
     } finally {
       setDeletingContactId(null);
     }
@@ -1171,14 +1300,14 @@ function Conversations() {
       setApprovedContacts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setContactSheetTarget(updated);
     } catch (err) {
-      setContactSheetError(err instanceof Error ? err.message : 'Erro ao favoritar.');
+      setContactSheetError(err instanceof Error ? err.message : tx('Erro ao favoritar.'));
     } finally {
       setContactSheetBusy(false);
     }
   }
 
   async function handleRenameContact(contact: ApprovedContact) {
-    const name = window.prompt('Novo nome do contato:', contact.contactName)?.trim();
+    const name = window.prompt(tx('Novo nome do contato:'), contact.contactName)?.trim();
     if (!name || name === contact.contactName) return;
     setContactSheetBusy(true);
     setContactSheetError(null);
@@ -1188,14 +1317,14 @@ function Conversations() {
       setApprovedContacts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setContactSheetTarget(updated);
     } catch (err) {
-      setContactSheetError(err instanceof Error ? err.message : 'Erro ao renomear.');
+      setContactSheetError(err instanceof Error ? err.message : tx('Erro ao renomear.'));
     } finally {
       setContactSheetBusy(false);
     }
   }
 
   async function handleBlockContact(contact: ApprovedContact) {
-    if (!window.confirm(`Bloquear "${contact.contactName}"? A pessoa deixa de poder conversar com a criança — some das listas de Convites, Conversas e Grupos.`)) return;
+    if (!window.confirm(pick({ pt: `Bloquear "${contact.contactName}"? A pessoa deixa de poder conversar com a criança — some das listas de Convites, Conversas e Grupos.`, en: `Block "${contact.contactName}"? This person will no longer be able to talk to the child and will disappear from Invites, Conversations and Groups.`, es: `¿Bloquear a "${contact.contactName}"? Esta persona ya no podrá conversar con el niño y desaparecerá de Invitaciones, Conversaciones y Grupos.` }))) return;
     setContactSheetBusy(true);
     setContactSheetError(null);
     try {
@@ -1204,7 +1333,7 @@ function Conversations() {
       setApprovedContacts((current) => current.filter((item) => item.id !== contact.id));
       setContactSheetTarget(null);
     } catch (err) {
-      setContactSheetError(err instanceof Error ? err.message : 'Erro ao bloquear.');
+      setContactSheetError(err instanceof Error ? err.message : tx('Erro ao bloquear.'));
     } finally {
       setContactSheetBusy(false);
     }
@@ -1236,9 +1365,9 @@ function Conversations() {
       {loadError ? (
         <p className="rounded-2xl bg-[hsl(var(--destructive)/.08)] p-5 text-sm text-[hsl(var(--destructive))]" data-testid="status-conversations-error">{loadError}</p>
       ) : !hasChild ? (
-        <EmptyState icon={MessageCircle} eyebrow={t.conversations.emptyEyebrow} title={t.conversations.emptyTitle} text="Nenhuma criança vinculada ainda. Vá em 'Vincular criança' para gerar o QR code de pareamento." actionLabel="Vincular criança" onAction={() => { window.location.href = '/pair'; }} testId="button-empty-mirror" />
+        <EmptyState icon={MessageCircle} eyebrow={t.conversations.emptyEyebrow} title={t.conversations.emptyTitle} text={tx("Nenhuma criança vinculada ainda. Vá em 'Vincular criança' para gerar o QR code de pareamento.")} actionLabel={tx('Vincular criança')} onAction={() => { window.location.href = '/pair'; }} testId="button-empty-mirror" />
       ) : connectedContacts.length === 0 ? (
-        <EmptyState icon={EyeOff} eyebrow={t.conversations.emptyEyebrow} title={t.conversations.emptyTitle} text="Assim que alguém aceitar um convite em Convites, a conversa dela com a criança aparece aqui." actionLabel="Ver Convites" onAction={() => { window.location.href = '/invites'; }} testId="button-empty-mirror-invites" />
+        <EmptyState icon={EyeOff} eyebrow={t.conversations.emptyEyebrow} title={t.conversations.emptyTitle} text={tx('Assim que alguém aceitar um convite em Convites, a conversa dela com a criança aparece aqui.')} actionLabel={tx('Ver Convites')} onAction={() => { window.location.href = '/invites'; }} testId="button-empty-mirror-invites" />
       ) : (
         <section className="overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8" data-testid="row-contact-mirror-bubbles">
           <div className="flex flex-col gap-1">
@@ -1260,11 +1389,11 @@ function Conversations() {
             <div className="flex min-w-0 items-center gap-3">
               <Avatar name={approvedContacts.find((contact) => contact.contactUserId === openContactMirrorId)?.contactName} />
               <div className="min-w-0">
-                <h1 className="truncate text-base font-bold">{approvedContacts.find((contact) => contact.contactUserId === openContactMirrorId)?.contactName ?? 'Contato'}</h1>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Espelho da conversa com {contactMirrorChildName ?? 'a criança'} — só leitura</p>
+                <h1 className="truncate text-base font-bold">{approvedContacts.find((contact) => contact.contactUserId === openContactMirrorId)?.contactName ?? tx('Contato')}</h1>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">{tx('Espelho da conversa com')} {contactMirrorChildName ?? tx('a criança')} {tx('— só leitura')}</p>
               </div>
             </div>
-            <button type="button" onClick={closeContactMirror} aria-label="Fechar conversa" data-testid="button-close-contact-mirror" className="grid size-10 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+            <button type="button" onClick={closeContactMirror} aria-label={tx('Fechar conversa')} data-testid="button-close-contact-mirror" className="grid size-10 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
               <X size={20} />
             </button>
           </header>
@@ -1279,15 +1408,15 @@ function Conversations() {
             data-testid="list-contact-mirror-messages"
           >
             {contactMirrorLoading && contactMirrorMessages.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando conversa…')}</p>
             ) : contactMirrorMessages.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda nessa conversa.</p>
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Nenhuma mensagem ainda nessa conversa.')}</p>
             ) : (
               contactMirrorMessages.map((message) => {
                 const fromContact = message.senderId === openContactMirrorId;
                 const senderName = fromContact
-                  ? approvedContacts.find((contact) => contact.contactUserId === openContactMirrorId)?.contactName ?? 'Contato'
-                  : contactMirrorChildName ?? 'Criança';
+                  ? approvedContacts.find((contact) => contact.contactUserId === openContactMirrorId)?.contactName ?? tx('Contato')
+                  : contactMirrorChildName ?? tx('Criança');
                 const sticker = isStickerMessage(message);
                 const bubbleClass = sticker
                   ? `${fromContact ? 'self-end' : 'self-start'}`
@@ -1307,7 +1436,7 @@ function Conversations() {
             )}
           </div>
           {contactMirrorError && <p className="shrink-0 px-4 pb-2 text-sm font-semibold text-[hsl(var(--destructive))]">{contactMirrorError}</p>}
-          <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-6 py-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" /> Espelho: você só acompanha, quem manda mensagem aqui é {contactMirrorChildName ?? 'a criança'} e a pessoa aprovada.</div>
+          <div className="border-t border-[hsl(var(--border))] bg-[hsl(var(--muted)/.35)] px-6 py-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><LockKeyhole size={13} className="mr-1 inline-block align-[-2px]" /> {tx('Espelho: você só acompanha, quem manda mensagem aqui é')} {contactMirrorChildName ?? tx('a criança')} {tx('e a pessoa aprovada.')}</div>
         </div>
       )}
 
@@ -1331,16 +1460,16 @@ function Conversations() {
                     volta pra não-nulo -- mesmo padrão documentado em
                     GroupsPage()/ContactChat.tsx. */}
                 <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-block" onClick={() => { void handleBlockContact(contactSheetTarget!); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)] disabled:opacity-60">
-                  <Ban size={18} /> Bloquear pessoa
+                  <Ban size={18} /> {tx('Bloquear pessoa')}
                 </button>
                 <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-rename" onClick={() => { void handleRenameContact(contactSheetTarget!); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)] disabled:opacity-60">
                   <Pencil size={18} /> Renomear
                 </button>
                 <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-favorite" onClick={() => { void handleToggleFavorite(contactSheetTarget!); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)] disabled:opacity-60">
-                  <Star size={18} /> {contactSheetTarget.isFavorite ? 'Remover dos favoritos' : 'Favoritar'}
+                  <Star size={18} /> {contactSheetTarget.isFavorite ? tx('Remover dos favoritos') : tx('Favoritar')}
                 </button>
                 <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-delete" onClick={() => { const target = contactSheetTarget!; setContactSheetTarget(null); void handleDeleteContact(target); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)]">
-                  <Trash2 size={18} /> Excluir contato
+                  <Trash2 size={18} /> {tx('Excluir contato')}
                 </button>
               </div>
             </>
@@ -1413,7 +1542,7 @@ function GroupsPage() {
         setChildren(kids);
         setSelectedChildId((current) => current ?? kids[0]?.id ?? null);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar suas crianças.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar suas crianças.'));
       }
     })();
     return () => { cancelled = true; };
@@ -1428,7 +1557,7 @@ function GroupsPage() {
         const contacts = await fetchApprovedContacts(selectedChildId!, token);
         if (!cancelled) setApprovedContacts(contacts);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar os convites já aceitos.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar os convites já aceitos.'));
       }
     })();
     return () => { cancelled = true; };
@@ -1443,7 +1572,7 @@ function GroupsPage() {
         const data = await fetchGroups(selectedChildId!, token);
         if (!cancelled) setGroups(data);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar grupos.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar grupos.'));
       }
     })();
     return () => { cancelled = true; };
@@ -1462,7 +1591,7 @@ function GroupsPage() {
       setGroupName('');
       setSelectedContactIds([]);
     } catch (err) {
-      setGroupError(err instanceof Error ? err.message : 'Erro ao criar grupo.');
+      setGroupError(err instanceof Error ? err.message : tx('Erro ao criar grupo.'));
     } finally {
       setCreatingGroup(false);
     }
@@ -1474,7 +1603,7 @@ function GroupsPage() {
       await deleteGroup(groupId, token);
       setGroups((current) => current.filter((group) => group.id !== groupId));
     } catch (err) {
-      setGroupError(err instanceof Error ? err.message : 'Erro ao excluir grupo.');
+      setGroupError(err instanceof Error ? err.message : tx('Erro ao excluir grupo.'));
     }
   }
 
@@ -1492,7 +1621,7 @@ function GroupsPage() {
         );
       }
     } catch (err) {
-      setGroupError(err instanceof Error ? err.message : 'Erro ao adicionar ao grupo.');
+      setGroupError(err instanceof Error ? err.message : tx('Erro ao adicionar ao grupo.'));
     }
   }
 
@@ -1506,7 +1635,7 @@ function GroupsPage() {
         ),
       );
     } catch (err) {
-      setGroupError(err instanceof Error ? err.message : 'Erro ao remover do grupo.');
+      setGroupError(err instanceof Error ? err.message : tx('Erro ao remover do grupo.'));
     }
   }
 
@@ -1522,7 +1651,7 @@ function GroupsPage() {
       setGroups((current) => current.map((group) => (group.id === updated.id ? { ...group, photoUrl: updated.photoUrl } : group)));
       setGroupSheetTarget((current) => (current ? { ...current, photoUrl: updated.photoUrl } : current));
     } catch (err) {
-      setGroupSheetError(err instanceof Error ? err.message : 'Erro ao trocar a foto.');
+      setGroupSheetError(err instanceof Error ? err.message : tx('Erro ao trocar a foto.'));
     } finally {
       setGroupSheetBusy(false);
     }
@@ -1544,7 +1673,7 @@ function GroupsPage() {
         }
       } catch (err) {
         if (!cancelled && showSpinner) {
-          setGroupChatError(err instanceof Error ? err.message : 'Erro ao carregar o chat do grupo.');
+          setGroupChatError(err instanceof Error ? err.message : tx('Erro ao carregar o chat do grupo.'));
         }
       } finally {
         if (!cancelled && showSpinner) setGroupChatLoading(false);
@@ -1582,7 +1711,7 @@ function GroupsPage() {
       setGroupPendingFile(null);
       if (groupTextareaRef.current) groupTextareaRef.current.style.height = 'auto';
     } catch (err) {
-      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+      setGroupChatError(err instanceof Error ? err.message : tx('Erro ao enviar mensagem.'));
     } finally {
       setGroupSending(false);
     }
@@ -1597,7 +1726,7 @@ function GroupsPage() {
       const message = await sendGroupMessage(openGroupChatId, { stickerEmoji: emoji }, token);
       setGroupChatMessages((current) => [...current, message]);
     } catch (err) {
-      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
+      setGroupChatError(err instanceof Error ? err.message : tx('Erro ao enviar figurinha.'));
     } finally {
       setGroupSending(false);
     }
@@ -1612,7 +1741,7 @@ function GroupsPage() {
       const message = await sendGroupMessage(openGroupChatId, { file }, token);
       setGroupChatMessages((current) => [...current, message]);
     } catch (err) {
-      setGroupChatError(err instanceof Error ? err.message : 'Erro ao enviar audio.');
+      setGroupChatError(err instanceof Error ? err.message : tx('Erro ao enviar audio.'));
     } finally {
       setGroupSending(false);
     }
@@ -1648,17 +1777,17 @@ function GroupsPage() {
               ))}
             </div>
           )}
-          <h2 className="text-lg font-extrabold">Criar grupo</h2>
+          <h2 className="text-lg font-extrabold">{tx('Criar grupo')}</h2>
           <form onSubmit={handleCreateGroup} className="mt-3 flex flex-col gap-3" data-testid="form-create-group">
             <input
               value={groupName}
               onChange={(event) => setGroupName(event.target.value)}
-              placeholder="Nome do grupo (ex: Família)"
+              placeholder={tx('Nome do grupo (ex: Família)')}
               data-testid="input-group-name"
               className="h-11 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
             />
             {approvedContacts.length === 0 ? (
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Aceite pelo menos um convite antes de criar um grupo.</p>
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">{tx('Aceite pelo menos um convite antes de criar um grupo.')}</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {approvedContacts.map((contact) => {
@@ -1679,11 +1808,11 @@ function GroupsPage() {
             )}
             {groupError && <p className="text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{groupError}</p>}
             <Button type="submit" disabled={!groupName.trim() || selectedContactIds.length === 0 || creatingGroup} className="w-fit" testId="button-create-group">
-              {creatingGroup ? 'Criando…' : 'Criar grupo'}
+              {creatingGroup ? tx('Criando…') : tx('Criar grupo')}
             </Button>
           </form>
-          {groups.length === 0 && <p className="mt-5 text-sm text-[hsl(var(--muted-foreground))]">Nenhum grupo criado ainda.</p>}
-          <p className="mt-5 flex items-center gap-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><Info size={13} /> Toque na bolinha do grupo, no topo, para abrir o chat. Segure 2s para ver informações, trocar foto, adicionar pessoas ou excluir.</p>
+          {groups.length === 0 && <p className="mt-5 text-sm text-[hsl(var(--muted-foreground))]">{tx('Nenhum grupo criado ainda.')}</p>}
+          <p className="mt-5 flex items-center gap-2 text-xs leading-5 text-[hsl(var(--muted-foreground))]"><Info size={13} /> {tx('Toque na bolinha do grupo, no topo, para abrir o chat. Segure 2s para ver informações, trocar foto, adicionar pessoas ou excluir.')}</p>
         </div>
       </section>
 
@@ -1693,11 +1822,11 @@ function GroupsPage() {
             <div className="flex min-w-0 items-center gap-3">
               <Avatar name={groups.find((group) => group.id === openGroupChatId)?.name} />
               <div className="min-w-0">
-                <h1 className="truncate text-base font-bold">{groups.find((group) => group.id === openGroupChatId)?.name ?? 'Grupo'}</h1>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Chat de grupo</p>
+                <h1 className="truncate text-base font-bold">{groups.find((group) => group.id === openGroupChatId)?.name ?? tx('Grupo')}</h1>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">{tx('Chat de grupo')}</p>
               </div>
             </div>
-            <button type="button" onClick={closeGroupChat} aria-label="Fechar chat do grupo" data-testid="button-close-group-chat" className="grid size-10 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+            <button type="button" onClick={closeGroupChat} aria-label={tx('Fechar chat do grupo')} data-testid="button-close-group-chat" className="grid size-10 shrink-0 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
               <X size={20} />
             </button>
           </header>
@@ -1712,9 +1841,9 @@ function GroupsPage() {
             data-testid="list-group-messages"
           >
             {groupChatLoading && groupChatMessages.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando conversa…')}</p>
             ) : groupChatMessages.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda neste grupo. Escreva a primeira aqui embaixo.</p>
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Nenhuma mensagem ainda neste grupo. Escreva a primeira aqui embaixo.')}</p>
             ) : (
               groupChatMessages.map((message) => {
                 const fromMe = message.senderId === userId;
@@ -1745,8 +1874,8 @@ function GroupsPage() {
             {groupAttachError && <p className="mb-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{groupAttachError}</p>}
             {groupPendingFile && (
               <div className="mb-2 flex items-center gap-2 self-start rounded-xl bg-[hsl(var(--muted)/.6)] px-3 py-2 text-xs font-semibold">
-                {groupPendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {groupPendingFile.name}
-                <button type="button" onClick={() => setGroupPendingFile(null)} aria-label="Remover anexo" className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+                {groupPendingFile.type.startsWith('video/') ? tx('Vídeo selecionado:') : tx('Foto selecionada:')} {groupPendingFile.name}
+                <button type="button" onClick={() => setGroupPendingFile(null)} aria-label={tx('Remover anexo')} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
                   ×
                 </button>
               </div>
@@ -1756,7 +1885,7 @@ function GroupsPage() {
                 <button
                   type="button"
                   onClick={() => setGroupComposerToolsOpen((current) => !current)}
-                  aria-label={groupComposerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                  aria-label={groupComposerToolsOpen ? tx('Fechar opções') : tx('Mais opções (emoji, foto, figurinha, áudio)')}
                   className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl border transition-transform ${
                     groupComposerToolsOpen
                       ? 'rotate-45 border-[hsl(var(--primary))] text-[hsl(var(--primary))]'
@@ -1814,12 +1943,12 @@ function GroupsPage() {
                     event.currentTarget.form?.requestSubmit();
                   }
                 }}
-                placeholder={groupPendingFile ? 'Adicione uma legenda (opcional)…' : 'Escreva pro grupo…'}
+                placeholder={groupPendingFile ? tx('Adicione uma legenda (opcional)…') : tx('Escreva pro grupo…')}
                 rows={1}
                 className="max-h-32 min-h-[48px] flex-1 resize-none rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--background)/.65)] px-4 py-3 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
               />
               <Button type="submit" disabled={(!groupDraft.trim() && !groupPendingFile) || groupSending} testId="button-send-group-message">
-                {groupSending ? 'Enviando…' : 'Enviar'}
+                {groupSending ? tx('Enviando…') : 'Enviar'}
               </Button>
             </form>
           </div>
@@ -1869,7 +1998,7 @@ function GroupsPage() {
                             void handleRemoveGroupMember(target.id, member.id);
                             setGroupSheetTarget((current) => (current ? { ...current, members: current.members.filter((item) => item.id !== member.id) } : current));
                           }}
-                          aria-label={`Remover ${member.contactName} do grupo`}
+                          aria-label={pick({ pt: `Remover ${member.contactName} do grupo`, en: `Remove ${member.contactName} from the group`, es: `Quitar a ${member.contactName} del grupo` })}
                           data-testid={`button-remove-group-member-${target.id}-${member.id}`}
                           className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))]"
                         >
@@ -1881,16 +2010,16 @@ function GroupsPage() {
                 )}
                 <div className="mt-4 flex flex-col gap-1">
                   <label className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)]">
-                    <Camera size={18} /> {groupSheetBusy ? 'Enviando…' : 'Trocar foto'}
+                    <Camera size={18} /> {groupSheetBusy ? tx('Enviando…') : tx('Trocar foto')}
                     <input type="file" accept="image/*" className="hidden" disabled={groupSheetBusy} onChange={handleGroupSheetPhotoChange} data-testid="input-group-sheet-photo" />
                   </label>
                   <button type="button" data-testid="button-group-sheet-add" onClick={() => setGroupSheetAddOpen((current) => !current)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)]">
-                    <UserPlus size={18} /> Adicionar pessoas
+                    <UserPlus size={18} /> {tx('Adicionar pessoas')}
                   </button>
                   {groupSheetAddOpen && (
                     <div className="ml-9 flex flex-wrap gap-2 pb-2">
                       {availableToAdd.length === 0 ? (
-                        <p className="text-xs text-[hsl(var(--muted-foreground))]">Todos os Convites já estão nesse grupo.</p>
+                        <p className="text-xs text-[hsl(var(--muted-foreground))]">{tx('Todos os Convites já estão nesse grupo.')}</p>
                       ) : (
                         availableToAdd.map((contact) => (
                           <button
@@ -1913,13 +2042,13 @@ function GroupsPage() {
                     type="button"
                     data-testid="button-group-sheet-delete"
                     onClick={() => {
-                      if (!window.confirm(`Excluir o grupo "${target.name}"? Essa ação não pode ser desfeita.`)) return;
+                      if (!window.confirm(pick({ pt: `Excluir o grupo "${target.name}"? Essa ação não pode ser desfeita.`, en: `Delete the group "${target.name}"? This cannot be undone.`, es: `¿Eliminar el grupo "${target.name}"? Esta acción no se puede deshacer.` }))) return;
                       setGroupSheetTarget(null);
                       void handleDeleteGroup(target.id);
                     }}
                     className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)]"
                   >
-                    <Trash2 size={18} /> Excluir grupo
+                    <Trash2 size={18} /> {tx('Excluir grupo')}
                   </button>
                 </div>
               </>
@@ -1974,12 +2103,12 @@ function StatTile({ label, value, tone }: { label: string; value: number; tone: 
 // lib/relationship.ts pra sub-escolha "o que esse responsável é da
 // criança").
 const CONTACT_ROLE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'amigo', label: 'Amigo(a)' },
-  { value: 'primo', label: 'Primo(a)' },
-  { value: 'tio', label: 'Tio(a)' },
-  { value: 'avo', label: 'Avô/Avó' },
+  { value: 'amigo', label: tx('Amigo(a)') },
+  { value: 'primo', label: tx('Primo(a)') },
+  { value: 'tio', label: tx('Tio(a)') },
+  { value: 'avo', label: tx('Avô/Avó') },
   { value: 'padrinho', label: 'Padrinho/Madrinha' },
-  { value: 'professor', label: 'Professor(a)' },
+  { value: 'professor', label: tx('Professor(a)') },
   { value: 'outro', label: 'Outro' },
 ];
 
@@ -2030,7 +2159,7 @@ function Invites() {
         setChildren(kids);
         setSelectedChildId((current) => current ?? kids[0]?.id ?? null);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar convites.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar convites.'));
       }
     })();
     return () => { cancelled = true; };
@@ -2055,7 +2184,7 @@ function Invites() {
           setDeletedCount(deletedTotal);
         }
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar convites.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar convites.'));
       }
     })();
     return () => { cancelled = true; };
@@ -2080,7 +2209,7 @@ function Invites() {
       setApprovedContacts((current) => [...current, contact]);
       setNewContactName('');
     } catch (err) {
-      setAddContactError(err instanceof Error ? err.message : 'Erro ao adicionar contato.');
+      setAddContactError(err instanceof Error ? err.message : tx('Erro ao adicionar contato.'));
     } finally {
       setAddingContact(false);
     }
@@ -2100,7 +2229,7 @@ function Invites() {
       setGuardianInviteResult({ joinUrl: invite.joinUrl, expiresAt: invite.expiresAt });
       setGuardianInviteCopied(false);
     } catch (err) {
-      setGuardianInviteError(err instanceof Error ? err.message : 'Erro ao gerar o convite de Responsável.');
+      setGuardianInviteError(err instanceof Error ? err.message : tx('Erro ao gerar o convite de Responsável.'));
     } finally {
       setGuardianInviteBusy(false);
     }
@@ -2126,7 +2255,7 @@ function Invites() {
 
   async function handleDeleteContact(contact: ApprovedContact) {
     if (deletingContactId || !selectedChildId) return;
-    if (!window.confirm(`Excluir o contato "${contact.contactName}"? Ele sai de qualquer grupo do qual participe.`)) return;
+    if (!window.confirm(pick({ pt: `Excluir o contato "${contact.contactName}"? Ele sai de qualquer grupo do qual participe.`, en: `Delete the contact "${contact.contactName}"? They will leave any group they are in.`, es: `¿Eliminar el contacto "${contact.contactName}"? Saldrá de cualquier grupo en el que participe.` }))) return;
     setDeletingContactId(contact.id);
     setDeleteContactError(null);
     try {
@@ -2135,7 +2264,7 @@ function Invites() {
       setApprovedContacts((current) => current.filter((item) => item.id !== contact.id));
       setDeletedCount((current) => current + 1);
     } catch (err) {
-      setDeleteContactError(err instanceof Error ? err.message : 'Erro ao excluir contato.');
+      setDeleteContactError(err instanceof Error ? err.message : tx('Erro ao excluir contato.'));
     } finally {
       setDeletingContactId(null);
     }
@@ -2150,14 +2279,14 @@ function Invites() {
       setApprovedContacts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setContactSheetTarget(updated);
     } catch (err) {
-      setContactSheetError(err instanceof Error ? err.message : 'Erro ao favoritar.');
+      setContactSheetError(err instanceof Error ? err.message : tx('Erro ao favoritar.'));
     } finally {
       setContactSheetBusy(false);
     }
   }
 
   async function handleRenameContact(contact: ApprovedContact) {
-    const name = window.prompt('Novo nome do contato:', contact.contactName)?.trim();
+    const name = window.prompt(tx('Novo nome do contato:'), contact.contactName)?.trim();
     if (!name || name === contact.contactName) return;
     setContactSheetBusy(true);
     setContactSheetError(null);
@@ -2167,14 +2296,14 @@ function Invites() {
       setApprovedContacts((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setContactSheetTarget(updated);
     } catch (err) {
-      setContactSheetError(err instanceof Error ? err.message : 'Erro ao renomear.');
+      setContactSheetError(err instanceof Error ? err.message : tx('Erro ao renomear.'));
     } finally {
       setContactSheetBusy(false);
     }
   }
 
   async function handleBlockContact(contact: ApprovedContact) {
-    if (!window.confirm(`Bloquear "${contact.contactName}"? A pessoa deixa de poder conversar com a criança — some das listas de Convites, Conversas e Grupos.`)) return;
+    if (!window.confirm(pick({ pt: `Bloquear "${contact.contactName}"? A pessoa deixa de poder conversar com a criança — some das listas de Convites, Conversas e Grupos.`, en: `Block "${contact.contactName}"? This person will no longer be able to talk to the child and will disappear from Invites, Conversations and Groups.`, es: `¿Bloquear a "${contact.contactName}"? Esta persona ya no podrá conversar con el niño y desaparecerá de Invitaciones, Conversaciones y Grupos.` }))) return;
     setContactSheetBusy(true);
     setContactSheetError(null);
     try {
@@ -2184,7 +2313,7 @@ function Invites() {
       setBlockedCount((current) => current + 1);
       setContactSheetTarget(null);
     } catch (err) {
-      setContactSheetError(err instanceof Error ? err.message : 'Erro ao bloquear.');
+      setContactSheetError(err instanceof Error ? err.message : tx('Erro ao bloquear.'));
     } finally {
       setContactSheetBusy(false);
     }
@@ -2203,7 +2332,7 @@ function Invites() {
       setInviteJoinUrl(result.joinUrl);
       setInviteExpiresAt(result.expiresAt);
     } catch (err) {
-      setInviteError(err instanceof Error ? err.message : 'Erro ao gerar o convite.');
+      setInviteError(err instanceof Error ? err.message : tx('Erro ao gerar o convite.'));
     } finally {
       setInvitingContactId(null);
     }
@@ -2232,8 +2361,8 @@ function Invites() {
   async function shareInviteLink() {
     if (!inviteJoinUrl || !inviteTarget) return;
     const shareData = {
-      title: 'Convite do Ampara',
-      text: `${inviteTarget.contactName}, aqui está seu convite para o Ampara:`,
+      title: tx('Convite do Ampara'),
+      text: pick({ pt: `${inviteTarget.contactName}, aqui está seu convite para o Ampara:`, en: `${inviteTarget.contactName}, here is your Ampara invite:`, es: `${inviteTarget.contactName}, aquí está tu invitación a Ampara:` }),
       url: inviteJoinUrl,
     };
     if (navigator.share) {
@@ -2269,18 +2398,18 @@ function Invites() {
       )}
       {hasChild && (
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" data-testid="row-invite-stats">
-          <StatTile label="Convites" value={totalInvitesCount} tone="muted" />
-          <StatTile label="Aceitos" value={acceptedCount} tone="teal" />
-          <StatTile label="Pendentes" value={pendingCount} tone="gold" />
-          <StatTile label="Recusados" value={deniedCount} tone="destructive" />
-          <StatTile label="Bloqueados" value={blockedCount} tone="destructive" />
-          <StatTile label="Excluídos" value={deletedCount} tone="destructive" />
+          <StatTile label={tx('Convites')} value={totalInvitesCount} tone="muted" />
+          <StatTile label={tx('Aceitos')} value={acceptedCount} tone="teal" />
+          <StatTile label={tx('Pendentes')} value={pendingCount} tone="gold" />
+          <StatTile label={tx('Recusados')} value={deniedCount} tone="destructive" />
+          <StatTile label={tx('Bloqueados')} value={blockedCount} tone="destructive" />
+          <StatTile label={tx('Excluídos')} value={deletedCount} tone="destructive" />
         </div>
       )}
       {loadError ? (
         <p className="rounded-2xl bg-[hsl(var(--destructive)/.08)] p-5 text-sm text-[hsl(var(--destructive))]" data-testid="status-invites-error">{loadError}</p>
       ) : !hasChild ? (
-        <EmptyState icon={UserPlus} eyebrow="convites" title="Nada por aqui ainda" text="Vincule uma criança primeiro em 'Vincular criança'." actionLabel="Vincular criança" onAction={() => { window.location.href = '/pair'; }} testId="button-invites-empty-nochild" />
+        <EmptyState icon={UserPlus} eyebrow={tx('convites')} title={tx('Nada por aqui ainda')} text={tx("Vincule uma criança primeiro em 'Vincular criança'.")} actionLabel={tx('Vincular criança')} onAction={() => { window.location.href = '/pair'; }} testId="button-invites-empty-nochild" />
       ) : (
         <section className="overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] shadow-card">
           <div className="p-6 sm:p-8">
@@ -2290,7 +2419,7 @@ function Invites() {
                   <input
                     value={newContactName}
                     onChange={(event) => setNewContactName(event.target.value)}
-                    placeholder="Nome do contato (ex: Vovó Ana)"
+                    placeholder={tx('Nome do contato (ex: Vovó Ana)')}
                     data-testid="input-new-contact-name"
                     className="h-11 min-w-[160px] flex-1 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
                   />
@@ -2302,9 +2431,9 @@ function Invites() {
                   className="h-11 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
                 >
                   {CONTACT_ROLE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
+                    <option key={option.value} value={option.value}>{tx(option.label)}</option>
                   ))}
-                  <option value="responsavel">Responsável</option>
+                  <option value="responsavel">{tx('Responsável')}</option>
                 </select>
                 {isGuardianRole && (
                   <select
@@ -2314,7 +2443,7 @@ function Invites() {
                     className="h-11 min-w-[160px] flex-1 rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
                   >
                     {RELATIONSHIP_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label} da criança</option>
+                      <option key={option.value} value={option.value}>{tx(option.label)} {tx('da criança')}</option>
                     ))}
                   </select>
                 )}
@@ -2324,12 +2453,12 @@ function Invites() {
                   data-testid="button-add-contact"
                   className="h-11 whitespace-nowrap rounded-md bg-[hsl(var(--primary))] px-4 text-sm font-medium text-[hsl(var(--primary-foreground))] disabled:opacity-60"
                 >
-                  {isGuardianRole ? (guardianInviteBusy ? "Gerando…" : "Gerar convite") : (addingContact ? "…" : "Adicionar")}
+                  {isGuardianRole ? (guardianInviteBusy ? "Gerando…" : tx("Gerar convite")) : (addingContact ? "…" : "Adicionar")}
                 </button>
               </div>
               {isGuardianRole && (
                 <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                  Gera um link de convite para outro adulto Responsável acompanhar o mesmo espaço — a pessoa completa o próprio cadastro ao abrir o link, sem precisar de nome aqui.
+                  {tx('Gera um link de convite para outro adulto Responsável acompanhar o mesmo espaço — a pessoa completa o próprio cadastro ao abrir o link, sem precisar de nome aqui.')}
                 </p>
               )}
             </form>
@@ -2337,7 +2466,7 @@ function Invites() {
             {guardianInviteError && <p className="mt-2 text-sm text-red-600" data-testid="status-guardian-invite-error">{guardianInviteError}</p>}
             {deleteContactError && <p className="mt-2 text-sm text-red-600" data-testid="status-delete-contact-error">{deleteContactError}</p>}
             {approvedContacts.length === 0 ? (
-              <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">Nenhum convite feito ainda.</p>
+              <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">{tx('Nenhum convite feito ainda.')}</p>
             ) : (
               <ul className="mt-4 flex flex-col gap-2">
                 {approvedContacts.map((contact) => (
@@ -2361,14 +2490,14 @@ function Invites() {
                           data-testid={`button-invite-contact-${contact.id}`}
                           className="text-xs font-semibold text-[hsl(var(--primary))] transition-colors hover:underline disabled:opacity-60"
                         >
-                          {invitingContactId === contact.id ? 'Gerando…' : 'Convidar'}
+                          {invitingContactId === contact.id ? tx('Gerando…') : 'Convidar'}
                         </button>
                       )}
                       <button
                         type="button"
                         onClick={() => { void handleDeleteContact(contact); }}
                         disabled={deletingContactId === contact.id}
-                        aria-label={`Excluir contato ${contact.contactName}`}
+                        aria-label={`${tx('Excluir contato')} ${contact.contactName}`}
                         data-testid={`button-delete-contact-${contact.id}`}
                         className="text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--destructive))] disabled:opacity-60"
                       >
@@ -2377,7 +2506,7 @@ function Invites() {
                       <button
                         type="button"
                         onClick={() => { setContactSheetError(null); setContactSheetTarget(contact); }}
-                        aria-label={`Mais opções para ${contact.contactName}`}
+                        aria-label={pick({ pt: `Mais opções para ${contact.contactName}`, en: `More options for ${contact.contactName}`, es: `Más opciones para ${contact.contactName}` })}
                         data-testid={`button-contact-more-${contact.id}`}
                         className="text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
                       >
@@ -2408,8 +2537,8 @@ function Invites() {
               <img src={inviteQrDataUrl} alt={`QR code de convite para ${inviteTarget.contactName}`} width={220} height={220} />
             )}
             <p className="text-sm text-[hsl(var(--muted-foreground))]">
-              Peça para {inviteTarget.contactName} escanear este código com a câmera do celular, ou copie o link abaixo.
-              {inviteExpiresAt && <> Válido por 7 dias.</>}
+              {tx('Peça para')} {inviteTarget.contactName} {tx('escanear este código com a câmera do celular, ou copie o link abaixo.')}
+              {inviteExpiresAt && <> {tx('Válido por 7 dias.')}</>}
             </p>
             {inviteJoinUrl && (
               <div className="flex w-full flex-col gap-2">
@@ -2427,7 +2556,7 @@ function Invites() {
                     data-testid="button-copy-invite-link-action"
                     className="shrink-0 rounded-md bg-[hsl(var(--primary))] px-3 py-2 text-xs font-bold text-[hsl(var(--primary-foreground))]"
                   >
-                    {inviteCopied ? 'Copiado!' : 'Copiar link'}
+                    {inviteCopied ? tx('Copiado!') : tx('Copiar link')}
                   </button>
                 </div>
                 <button
@@ -2441,7 +2570,7 @@ function Invites() {
               </div>
             )}
             <button type="button" onClick={closeInviteModal} className="text-sm font-medium underline" data-testid="button-close-invite-modal">
-              Fechar
+              {tx('Fechar')}
             </button>
           </div>
         </div>
@@ -2453,9 +2582,9 @@ function Invites() {
             className="flex w-full max-w-sm flex-col items-center gap-4 rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 text-center shadow-card"
             onClick={(event) => event.stopPropagation()}
           >
-            <h2 className="text-lg font-extrabold">Convite de Responsável</h2>
+            <h2 className="text-lg font-extrabold">{tx('Convite de Responsável')}</h2>
             <p className="text-sm text-[hsl(var(--muted-foreground))]">
-              Envie este link para a pessoa — ao entrar ou criar conta, ela já ganha acesso ao mesmo espaço. Válido por 7 dias.
+              {tx('Envie este link para a pessoa — ao entrar ou criar conta, ela já ganha acesso ao mesmo espaço. Válido por 7 dias.')}
             </p>
             <div className="flex w-full flex-col gap-2">
               <div className="flex w-full items-center gap-2">
@@ -2472,12 +2601,12 @@ function Invites() {
                   data-testid="button-copy-guardian-invite-link-action"
                   className="shrink-0 rounded-md bg-[hsl(var(--primary))] px-3 py-2 text-xs font-bold text-[hsl(var(--primary-foreground))]"
                 >
-                  {guardianInviteCopied ? 'Copiado!' : 'Copiar link'}
+                  {guardianInviteCopied ? tx('Copiado!') : tx('Copiar link')}
                 </button>
               </div>
             </div>
             <button type="button" onClick={closeGuardianInviteModal} className="text-sm font-medium underline" data-testid="button-close-guardian-invite-modal">
-              Fechar
+              {tx('Fechar')}
             </button>
           </div>
         </div>
@@ -2496,16 +2625,16 @@ function Invites() {
               {contactSheetError && <p className="mt-2 text-sm font-semibold text-[hsl(var(--destructive))]">{contactSheetError}</p>}
               <div className="mt-4 flex flex-col gap-1">
                 <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-block" onClick={() => { void handleBlockContact(contactSheetTarget!); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)] disabled:opacity-60">
-                  <Ban size={18} /> Bloquear pessoa
+                  <Ban size={18} /> {tx('Bloquear pessoa')}
                 </button>
                 <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-rename" onClick={() => { void handleRenameContact(contactSheetTarget!); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)] disabled:opacity-60">
                   <Pencil size={18} /> Renomear
                 </button>
                 <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-favorite" onClick={() => { void handleToggleFavorite(contactSheetTarget!); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold transition-colors hover:bg-[hsl(var(--muted)/.5)] disabled:opacity-60">
-                  <Star size={18} /> {contactSheetTarget.isFavorite ? 'Remover dos favoritos' : 'Favoritar'}
+                  <Star size={18} /> {contactSheetTarget.isFavorite ? tx('Remover dos favoritos') : tx('Favoritar')}
                 </button>
                 <button type="button" disabled={contactSheetBusy} data-testid="button-contact-sheet-delete" onClick={() => { const target = contactSheetTarget!; setContactSheetTarget(null); void handleDeleteContact(target); }} className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)]">
-                  <Trash2 size={18} /> Excluir contato
+                  <Trash2 size={18} /> {tx('Excluir contato')}
                 </button>
               </div>
             </>
@@ -2571,7 +2700,7 @@ function MyChat() {
         setChildren(kids);
         setSelectedChildId((current) => current ?? kids[0]?.id ?? null);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar.'));
       }
     })();
     return () => { cancelled = true; };
@@ -2586,7 +2715,7 @@ function MyChat() {
         const data = await fetchApprovedContacts(selectedChildId!, token);
         if (!cancelled) setContacts(data);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar contatos.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar contatos.'));
       }
     })();
     return () => { cancelled = true; };
@@ -2635,7 +2764,7 @@ function MyChat() {
           setThreadError(null);
         }
       } catch (err) {
-        if (!cancelled && showSpinner) setThreadError(err instanceof Error ? err.message : 'Erro ao carregar a conversa.');
+        if (!cancelled && showSpinner) setThreadError(err instanceof Error ? err.message : tx('Erro ao carregar a conversa.'));
       } finally {
         if (!cancelled && showSpinner) setThreadLoading(false);
       }
@@ -2651,7 +2780,7 @@ function MyChat() {
     setThreadError(null);
     setDraft('');
     setPendingFile(null);
-    setOpenThread({ kind: 'child', id: selectedChildId, name: selectedChildName ?? 'Criança' });
+    setOpenThread({ kind: 'child', id: selectedChildId, name: selectedChildName ?? tx('Criança') });
   }
 
   function openContactChat(contact: ApprovedContact) {
@@ -2686,7 +2815,7 @@ function MyChat() {
       setPendingFile(null);
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
     } catch (err) {
-      setThreadError(err instanceof Error ? err.message : 'Erro ao enviar mensagem.');
+      setThreadError(err instanceof Error ? err.message : tx('Erro ao enviar mensagem.'));
     } finally {
       setSending(false);
     }
@@ -2704,7 +2833,7 @@ function MyChat() {
       const message = await sendPrivateMessage(openThread.id, { file }, token);
       setMessages((current) => [...current, message]);
     } catch (err) {
-      setThreadError(err instanceof Error ? err.message : 'Erro ao enviar áudio.');
+      setThreadError(err instanceof Error ? err.message : tx('Erro ao enviar áudio.'));
     } finally {
       setSending(false);
     }
@@ -2720,7 +2849,7 @@ function MyChat() {
       const message = await sendPrivateMessage(openThread.id, { stickerEmoji: emoji }, token);
       setMessages((current) => [...current, message]);
     } catch (err) {
-      setThreadError(err instanceof Error ? err.message : 'Erro ao enviar figurinha.');
+      setThreadError(err instanceof Error ? err.message : tx('Erro ao enviar figurinha.'));
     } finally {
       setSending(false);
     }
@@ -2735,7 +2864,7 @@ function MyChat() {
   return (
     <>
       <CallOverlays call={call} peerName={openThread?.name} />
-      <PageIntro eyebrow="seu chat" title="Chat" description="Seu próprio espaço para conversar com quem você quiser da família — a criança, sempre no topo, e quem mais aceitar o convite." />
+      <PageIntro eyebrow={tx('seu chat')} title="Chat" description={tx('Seu próprio espaço para conversar com quem você quiser da família — a criança, sempre no topo, e quem mais aceitar o convite.')} />
       {children && children.length > 1 && (
         <div className="mb-6 flex flex-wrap items-center gap-1 rounded-2xl bg-[hsl(var(--muted)/.65)] p-1 sm:w-fit" data-testid="selector-my-chat-child">
           {children.map((child) => (
@@ -2754,7 +2883,7 @@ function MyChat() {
       {loadError ? (
         <p className="rounded-2xl bg-[hsl(var(--destructive)/.08)] p-5 text-sm text-[hsl(var(--destructive))]" data-testid="status-my-chat-error">{loadError}</p>
       ) : !hasChild ? (
-        <EmptyState icon={MessageCircle} eyebrow="sem crianças" title="Nada por aqui ainda" text="Vincule uma criança primeiro em 'Vincular criança'." actionLabel="Vincular criança" onAction={() => { window.location.href = '/pair'; }} testId="button-my-chat-empty-nochild" />
+        <EmptyState icon={MessageCircle} eyebrow={tx('sem crianças')} title={tx('Nada por aqui ainda')} text={tx("Vincule uma criança primeiro em 'Vincular criança'.")} actionLabel={tx('Vincular criança')} onAction={() => { window.location.href = '/pair'; }} testId="button-my-chat-empty-nochild" />
       ) : (
         <div className="flex flex-col gap-1" data-testid="list-my-chat-conversations">
           <button
@@ -2763,10 +2892,10 @@ function MyChat() {
             className="flex items-center gap-3 rounded-2xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] px-4 py-3.5 text-left shadow-card transition-colors hover:border-[hsl(var(--primary))]"
             data-testid="button-my-chat-open-child"
           >
-            <Avatar name={selectedChildName ?? 'Criança'} />
+            <Avatar name={selectedChildName ?? tx('Criança')} />
             <span className="min-w-0 flex-1">
-              <span className="block font-bold">{selectedChildName ?? 'Criança'}</span>
-              <span className="block text-xs text-[hsl(var(--muted-foreground))]">Criança</span>
+              <span className="block font-bold">{selectedChildName ?? tx('Criança')}</span>
+              <span className="block text-xs text-[hsl(var(--muted-foreground))]">{tx('Criança')}</span>
             </span>
           </button>
           {chatableContacts.map((contact) => (
@@ -2793,7 +2922,7 @@ function MyChat() {
             </Link>
           ))}
           {chatableContacts.length === 0 && groups.length === 0 && (
-            <p className="mt-2 px-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Convide alguém da família em Convites e, assim que a pessoa aceitar, ela aparece aqui também.</p>
+            <p className="mt-2 px-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{tx('Convide alguém da família em Convites e, assim que a pessoa aceitar, ela aparece aqui também.')}</p>
           )}
           <Link
             href="/groups/new"
@@ -2801,7 +2930,7 @@ function MyChat() {
             data-testid="link-my-chat-create-group"
           >
             <span className="grid size-10 shrink-0 place-items-center rounded-full border border-dashed border-current"><Plus size={18} /></span>
-            <span className="font-bold">Criar grupo</span>
+            <span className="font-bold">{tx('Criar grupo')}</span>
           </Link>
         </div>
       )}
@@ -2813,7 +2942,7 @@ function MyChat() {
               <Avatar name={openThread.name} />
               <div className="min-w-0">
                 <h1 className="truncate text-base font-bold">{openThread.name}</h1>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">{openThread.kind === 'child' ? 'Criança' : 'Meu Chat'}</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">{openThread.kind === 'child' ? tx('Criança') : 'Meu Chat'}</p>
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -2826,7 +2955,7 @@ function MyChat() {
               >
                 <Phone size={20} />
               </button>
-              <button type="button" onClick={closeChat} aria-label="Fechar conversa" data-testid="button-close-my-chat" className="grid size-10 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+              <button type="button" onClick={closeChat} aria-label={tx('Fechar conversa')} data-testid="button-close-my-chat" className="grid size-10 place-items-center rounded-full text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
                 <X size={20} />
               </button>
             </div>
@@ -2842,9 +2971,9 @@ function MyChat() {
             data-testid="list-my-chat-messages"
           >
             {threadLoading && messages.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando conversa…</p>
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando conversa…')}</p>
             ) : messages.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhuma mensagem ainda — mande a primeira.</p>
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Nenhuma mensagem ainda — mande a primeira.')}</p>
             ) : (
               messages.map((message) => {
                 // openThread! aqui: dentro desta closure (arrow do .map) o
@@ -2873,8 +3002,8 @@ function MyChat() {
           {attachError && openThread.kind === 'child' && <p className="shrink-0 px-4 pb-2 text-xs font-semibold text-[hsl(var(--destructive))]">{attachError}</p>}
           {pendingFile && openThread.kind === 'child' && (
             <div className="mx-4 mb-2 flex items-center gap-2 self-start rounded-xl bg-[hsl(var(--muted)/.6)] px-3 py-2 text-xs font-semibold" data-testid="chip-my-chat-pending-attachment">
-              {pendingFile.type.startsWith('video/') ? 'Vídeo selecionado:' : 'Foto selecionada:'} {pendingFile.name}
-              <button type="button" onClick={() => setPendingFile(null)} aria-label="Remover anexo" className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+              {pendingFile.type.startsWith('video/') ? tx('Vídeo selecionado:') : tx('Foto selecionada:')} {pendingFile.name}
+              <button type="button" onClick={() => setPendingFile(null)} aria-label={tx('Remover anexo')} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
                 <X size={14} />
               </button>
             </div>
@@ -2885,7 +3014,7 @@ function MyChat() {
                 <button
                   type="button"
                   onClick={() => setComposerToolsOpen((current) => !current)}
-                  aria-label={composerToolsOpen ? 'Fechar opções' : 'Mais opções (emoji, foto, figurinha, áudio)'}
+                  aria-label={composerToolsOpen ? tx('Fechar opções') : tx('Mais opções (emoji, foto, figurinha, áudio)')}
                   data-testid="button-my-chat-composer-tools"
                   className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl border transition-transform ${
                     composerToolsOpen
@@ -2944,13 +3073,13 @@ function MyChat() {
                     event.currentTarget.form?.requestSubmit();
                   }
                 }}
-                placeholder={pendingFile ? 'Adicione uma legenda (opcional)…' : `Escreva pra ${openThread.name}…`}
+                placeholder={pendingFile ? tx('Adicione uma legenda (opcional)…') : `Escreva pra ${openThread.name}…`}
                 rows={1}
                 className="max-h-32 min-h-[48px] flex-1 resize-none rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--background)/.65)] px-4 py-3 text-sm leading-5 outline-none focus:border-[hsl(var(--primary))]"
                 data-testid="input-my-chat-message"
               />
               <Button type="submit" disabled={(!draft.trim() && !pendingFile) || sending} testId="button-my-chat-send">
-                {sending ? 'Enviando…' : 'Enviar'}
+                {sending ? tx('Enviando…') : 'Enviar'}
               </Button>
             </form>
           ) : (
@@ -2958,7 +3087,7 @@ function MyChat() {
               <input
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
-                placeholder="Escreva uma mensagem…"
+                placeholder={tx('Escreva uma mensagem…')}
                 className="h-11 flex-1 rounded-full border border-[hsl(var(--border))] bg-transparent px-4 text-sm outline-none focus:border-[hsl(var(--primary))]"
                 data-testid="input-my-chat-message"
               />
@@ -3015,7 +3144,7 @@ function ResponsibleLocationPage() {
         setChildren(kids);
         setSelectedChildId((current) => current ?? kids[0]?.id ?? null);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar localização.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar localização.'));
       }
     }
     load();
@@ -3033,7 +3162,7 @@ function ResponsibleLocationPage() {
         const loc = await fetchChildLocation(selectedChildId!, token);
         if (!cancelled) setLocation(loc);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar localização.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar localização.'));
       }
     }
     loadLocation();
@@ -3076,21 +3205,21 @@ function ResponsibleLocationPage() {
           {loadError ? (
             <p className="mt-3 text-xs font-semibold leading-5 text-[hsl(var(--destructive))]" role="alert" data-testid="status-location-error">{loadError}</p>
           ) : !hasChild ? (
-            <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">Nenhuma criança vinculada ainda. Vá em "Vincular criança" para gerar o QR code de pareamento.</p>
+            <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{tx('Nenhuma criança vinculada ainda. Vá em "Vincular criança" para gerar o QR code de pareamento.')}</p>
           ) : !location ? (
-            <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{selectedChild?.name ?? 'A criança'} ainda não compartilhou a localização. Isso só acontece quando ela toca em "Compartilhar minha localização" no aparelho dela.</p>
+            <p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{selectedChild?.name ?? tx('A criança')} {tx('ainda não compartilhou a localização. Isso só acontece quando ela toca em "Compartilhar minha localização" no aparelho dela.')}</p>
           ) : (
             <div className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-              <p>Última localização de {selectedChild?.name}:</p>
+              <p>{tx('Última localização de')} {selectedChild?.name}:</p>
               <p className="mt-2 font-mono-app text-xs">{location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}</p>
-              <p className="mt-1 text-xs">Registrada em {recordedLabel}{location.accuracyMeters ? ` · precisão de ~${Math.round(location.accuracyMeters)}m` : ''}</p>
+              <p className="mt-1 text-xs">{tx('Registrada em')} {recordedLabel}{location.accuracyMeters ? ` · ${pick({ pt: 'precisão de', en: 'accuracy', es: 'precisión de' })} ~${Math.round(location.accuracyMeters)}m` : ''}</p>
             </div>
           )}
         </section>
         <section className="relative min-h-[430px] overflow-hidden rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(191_25%_25%)] text-[hsl(var(--card))]">
           {bbox ? (
             <iframe
-              title="Mapa de localização"
+              title={tx('Mapa de localização')}
               className="size-full min-h-[430px] border-0"
               src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&marker=${location!.latitude},${location!.longitude}`}
               data-testid="iframe-location-map"
@@ -3137,7 +3266,7 @@ function ScreenTimePage() {
         setChildren(kids);
         setSelectedChildId((current) => current ?? kids[0]?.id ?? null);
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar tempo de uso.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar tempo de uso.'));
       }
     }
     load();
@@ -3158,7 +3287,7 @@ function ScreenTimePage() {
           setLimitInput(data.dailyLimitMinutes !== null ? String(data.dailyLimitMinutes) : '');
         }
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Erro ao carregar tempo de uso.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tx('Erro ao carregar tempo de uso.'));
       }
     }
     loadStatus();
@@ -3177,12 +3306,12 @@ function ScreenTimePage() {
       const trimmed = limitInput.trim();
       const minutes = trimmed === '' ? null : Number(trimmed);
       if (minutes !== null && (!Number.isFinite(minutes) || minutes <= 0)) {
-        throw new Error('Informe um número de minutos válido.');
+        throw new Error(tx('Informe um número de minutos válido.'));
       }
       await setDailyLimit(selectedChildId, minutes, token);
       setStatus((current) => (current ? { ...current, dailyLimitMinutes: minutes } : current));
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Erro ao salvar o limite.');
+      setActionError(err instanceof Error ? err.message : tx('Erro ao salvar o limite.'));
     } finally {
       setBusy(false);
     }
@@ -3210,7 +3339,7 @@ function ScreenTimePage() {
           : current,
       );
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Erro ao bloquear/desbloquear.');
+      setActionError(err instanceof Error ? err.message : tx('Erro ao bloquear/desbloquear.'));
     } finally {
       setBusy(false);
     }
@@ -3222,7 +3351,7 @@ function ScreenTimePage() {
 
   return (
     <>
-      <PageIntro eyebrow={t.nav.screenTime} title={t.nav.screenTime} description="Defina um limite diário de uso do chat e bloqueie o acesso quando precisar." />
+      <PageIntro eyebrow={t.nav.screenTime} title={t.nav.screenTime} description={tx('Defina um limite diário de uso do chat e bloqueie o acesso quando precisar.')} />
       {children && children.length > 1 && (
         <div className="mb-6 flex flex-wrap items-center gap-1 rounded-2xl bg-[hsl(var(--muted)/.65)] p-1 sm:w-fit" data-testid="selector-screen-time-child">
           {children.map((child) => (
@@ -3244,18 +3373,18 @@ function ScreenTimePage() {
       {loadError ? (
         <p className="rounded-2xl bg-[hsl(var(--destructive)/.08)] p-5 text-sm text-[hsl(var(--destructive))]" data-testid="status-screen-time-error">{loadError}</p>
       ) : !hasChild ? (
-        <EmptyState icon={Hourglass} eyebrow={t.nav.screenTime} title="Nenhuma criança vinculada" text="Vá em 'Vincular criança' para gerar o QR code de pareamento." actionLabel="Vincular criança" onAction={() => { window.location.href = '/pair'; }} testId="button-empty-screen-time" />
+        <EmptyState icon={Hourglass} eyebrow={t.nav.screenTime} title={tx('Nenhuma criança vinculada')} text={tx("Vá em 'Vincular criança' para gerar o QR code de pareamento.")} actionLabel={tx('Vincular criança')} onAction={() => { window.location.href = '/pair'; }} testId="button-empty-screen-time" />
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
-            <div className="flex items-start gap-4"><IconBox icon={Hourglass} tone="gold" /><div><h2 className="text-lg font-extrabold">Uso de hoje{selectedChild ? ` — ${selectedChild.name}` : ''}</h2></div></div>
+            <div className="flex items-start gap-4"><IconBox icon={Hourglass} tone="gold" /><div><h2 className="text-lg font-extrabold">{tx('Uso de hoje')}{selectedChild ? ` — ${selectedChild.name}` : ''}</h2></div></div>
             <p className="mt-5 font-display text-4xl tracking-[-.05em]" data-testid="text-minutes-used-today">{status ? `${status.minutesUsedToday} min` : '—'}</p>
             <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
-              {status?.dailyLimitMinutes != null ? `Limite diário: ${status.dailyLimitMinutes} min` : 'Sem limite diário definido'}
+              {status?.dailyLimitMinutes != null ? `${tx('Limite diário')}: ${status.dailyLimitMinutes} min` : tx('Sem limite diário definido')}
             </p>
             {status?.locked && (
               <p className="mt-4 rounded-xl bg-[hsl(var(--destructive)/.08)] px-3 py-2 text-xs font-bold text-[hsl(var(--destructive))]" data-testid="status-child-locked">
-                {status.lockReason === 'manual' ? 'Bloqueado manualmente agora.' : 'Bloqueado — estourou o limite diário de hoje.'}
+                {status.lockReason === 'manual' ? tx('Bloqueado manualmente agora.') : tx('Bloqueado — estourou o limite diário de hoje.')}
               </p>
             )}
             <button
@@ -3265,13 +3394,13 @@ function ScreenTimePage() {
               data-testid="button-toggle-child-lock"
               className={`mt-5 inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-xs font-bold text-white transition-colors disabled:opacity-60 ${manuallyLocked ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--destructive))]'}`}
             >
-              {manuallyLocked ? <><Unlock size={14} /> Desbloquear agora</> : <><Lock size={14} /> Bloquear agora</>}
+              {manuallyLocked ? <><Unlock size={14} /> {tx('Desbloquear agora')}</> : <><Lock size={14} /> {tx('Bloquear agora')}</>}
             </button>
             {actionError && <p className="mt-3 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{actionError}</p>}
           </section>
           <form onSubmit={saveLimit} className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
-            <h2 className="text-lg font-extrabold">Limite diário</h2>
-            <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Em minutos por dia. Deixe em branco para não ter limite — ex: 90 para uma hora e meia.</p>
+            <h2 className="text-lg font-extrabold">{tx('Limite diário')}</h2>
+            <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{tx('Em minutos por dia. Deixe em branco para não ter limite — ex: 90 para uma hora e meia.')}</p>
             <input
               type="number"
               min={1}
@@ -3283,7 +3412,7 @@ function ScreenTimePage() {
               className="mt-4 h-11 w-full rounded-md border border-[hsl(var(--border))] bg-transparent px-3 text-sm outline-none focus:border-[hsl(var(--primary))]"
             />
             <div className="mt-5">
-              <Button type="submit" disabled={busy} testId="button-save-daily-limit">Salvar limite</Button>
+              <Button type="submit" disabled={busy} testId="button-save-daily-limit">{tx('Salvar limite')}</Button>
             </div>
           </form>
         </div>
@@ -3322,13 +3451,13 @@ function GuardiansSection() {
   }, []);
 
   async function handleRemove(parentId: string) {
-    if (!window.confirm('Remover o acesso deste Responsável ao espaço da família?')) return;
+    if (!window.confirm(tx('Remover o acesso deste Responsável ao espaço da família?'))) return;
     try {
       const token = await getToken();
       await removeGuardian(parentId, token);
       await loadGuardians();
     } catch {
-      setError('Não foi possível remover agora. Tente de novo.');
+      setError(tx('Não foi possível remover agora. Tente de novo.'));
     }
   }
 
@@ -3337,10 +3466,9 @@ function GuardiansSection() {
       <div className="flex items-start gap-4">
         <IconBox icon={Users} tone="teal" />
         <div className="flex-1">
-          <h2 className="text-lg font-extrabold">Responsáveis</h2>
+          <h2 className="text-lg font-extrabold">{tx('Responsáveis')}</h2>
           <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
-            Quem já tem acesso ao mesmo espaço — as mesmas crianças, conversas, localização e tempo de uso. Para
-            convidar outro adulto responsável, escolha "Responsável" na função ao convidar, logo acima.
+            {tx('Quem já tem acesso ao mesmo espaço — as mesmas crianças, conversas, localização e tempo de uso. Para convidar outro adulto responsável, escolha "Responsável" na função ao convidar, logo acima.')}
           </p>
 
           {guardians && guardians.length > 0 && (
@@ -3353,7 +3481,7 @@ function GuardiansSection() {
                 >
                   <div className="flex items-center gap-2 text-xs font-bold">
                     <span>{g.name}</span>
-                    {g.id === userId && <span className="text-[hsl(var(--muted-foreground))]">(você)</span>}
+                    {g.id === userId && <span className="text-[hsl(var(--muted-foreground))]">{tx('(você)')}</span>}
                     {g.role === 'owner' && (
                       <span className="rounded-full bg-[hsl(var(--muted))] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
                         dono original
@@ -3378,7 +3506,7 @@ function GuardiansSection() {
           {error && <p className="mt-3 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{error}</p>}
 
           {guardians && guardians.length <= 1 && (
-            <p className="mt-4 text-xs text-[hsl(var(--muted-foreground))]">Nenhum outro Responsável ainda.</p>
+            <p className="mt-4 text-xs text-[hsl(var(--muted-foreground))]">{tx('Nenhum outro Responsável ainda.')}</p>
           )}
         </div>
       </div>
@@ -3442,7 +3570,7 @@ function SettingsPage() {
       } catch {
         if (!cancelled) {
           setDeviceChildren([]);
-          setDevicesError('Não foi possível carregar as crianças vinculadas. Tente novamente.');
+          setDevicesError(tx('Não foi possível carregar as crianças vinculadas. Tente novamente.'));
         }
       }
     }
@@ -3482,10 +3610,10 @@ function SettingsPage() {
 
           setDevicesError(
             message.includes('_401')
-              ? 'Sua sessão expirou. Entre novamente e tente outra vez.'
+              ? tx('Sua sessão expirou. Entre novamente e tente outra vez.')
               : message.includes('_403')
-                ? 'Você não tem autorização para consultar os dispositivos desta criança.'
-                : 'Não foi possível carregar os dispositivos. Tente novamente.',
+                ? tx('Você não tem autorização para consultar os dispositivos desta criança.')
+                : tx('Não foi possível carregar os dispositivos. Tente novamente.'),
           );
         }
       } finally {
@@ -3505,10 +3633,10 @@ function SettingsPage() {
 
     const childName =
       deviceChildren?.find((child) => child.id === selectedDeviceChildId)?.name ??
-      'esta criança';
+      tx('esta criança');
 
     const confirmed = window.confirm(
-      `Deseja revogar o acesso deste dispositivo de ${childName}? O dispositivo deixará de conseguir acessar a conta da criança com este vínculo. Esta ação não pode ser desfeita para este dispositivo.`,
+      pick({ pt: `Deseja revogar o acesso deste dispositivo de ${childName}? O dispositivo deixará de conseguir acessar a conta da criança com este vínculo. Esta ação não pode ser desfeita para este dispositivo.`, en: `Revoke this device's access for ${childName}? The device will no longer be able to access the child's account with this pairing. This cannot be undone for this device.`, es: `¿Revocar el acceso de este dispositivo de ${childName}? El dispositivo ya no podrá acceder a la cuenta del niño con esta vinculación. Esta acción no se puede deshacer para este dispositivo.` }),
     );
 
     if (!confirmed) return;
@@ -3527,12 +3655,12 @@ function SettingsPage() {
 
       setDevicesError(
         message.includes('_401')
-          ? 'Sua sessão expirou. Entre novamente e tente outra vez.'
+          ? tx('Sua sessão expirou. Entre novamente e tente outra vez.')
           : message.includes('_403')
-            ? 'Você não tem autorização para revogar este dispositivo.'
+            ? tx('Você não tem autorização para revogar este dispositivo.')
             : message.includes('_404')
-              ? 'Este dispositivo não foi encontrado. Atualize a lista e tente novamente.'
-              : 'Não foi possível revogar o dispositivo. Tente novamente.',
+              ? tx('Este dispositivo não foi encontrado. Atualize a lista e tente novamente.')
+              : tx('Não foi possível revogar o dispositivo. Tente novamente.'),
       );
     } finally {
       setRevokingDeviceId(null);
@@ -3611,10 +3739,10 @@ function SettingsPage() {
       const message = err instanceof Error ? err.message : '';
       setNotificationsError(
         message === 'permission_denied'
-          ? 'Você negou a permissão de notificação — libere nas configurações do aparelho pra ativar.'
+          ? tx('Você negou a permissão de notificação — libere nas configurações do aparelho pra ativar.')
           : message === 'push_not_supported' || message === 'native_bridge_not_available'
-            ? 'Este app não suporta notificações push.'
-            : 'Não foi possível ativar as notificações agora.',
+            ? tx('Este app não suporta notificações push.')
+            : tx('Não foi possível ativar as notificações agora.'),
       );
     } finally {
       setNotificationsBusy(false);
@@ -3653,10 +3781,10 @@ function SettingsPage() {
                de Convites, não fica mais aqui em Configurações -- ver
                GuardiansSection dentro de Invites(). */}
            <Link href="/invites" data-testid="link-settings-invites" className="flex items-center justify-between gap-4 rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card transition-colors hover:border-[hsl(var(--primary))] sm:p-7">
-             <div className="flex items-start gap-4"><IconBox icon={UserPlus} tone="gold" /><div><h2 className="text-lg font-extrabold">Convites</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">Convidar contatos e outros Responsáveis agora mora junto, em Convites.</p></div></div>
+             <div className="flex items-start gap-4"><IconBox icon={UserPlus} tone="gold" /><div><h2 className="text-lg font-extrabold">{tx('Convites')}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{tx('Convidar contatos e outros Responsáveis agora mora junto, em Convites.')}</p></div></div>
              <ArrowRight size={18} className="shrink-0 text-[hsl(var(--muted-foreground))]" />
            </Link>
-           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Users} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.relationshipTitle}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.relationshipText}</p><div className="mt-4 flex flex-wrap gap-2">{RELATIONSHIP_OPTIONS.filter((opt) => opt.value !== 'responsavel').map((opt) => (<button key={opt.value} type="button" disabled={relationshipBusy} onClick={() => { void chooseRelationship(opt.value); }} data-testid={`button-relationship-${opt.value}`} className={`min-h-9 rounded-full border px-4 text-xs font-bold transition-colors disabled:opacity-60 ${relationship === opt.value ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'border-[hsl(var(--card-border))] bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]'}`}>{opt.label}</button>))}</div>{relationshipSaved && <span className="mt-3 block text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-relationship-saved">{t.settings.relationshipSaved}</span>}</div></div></section>
+           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Users} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.relationshipTitle}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.relationshipText}</p><div className="mt-4 flex flex-wrap gap-2">{RELATIONSHIP_OPTIONS.filter((opt) => opt.value !== 'responsavel').map((opt) => (<button key={opt.value} type="button" disabled={relationshipBusy} onClick={() => { void chooseRelationship(opt.value); }} data-testid={`button-relationship-${opt.value}`} className={`min-h-9 rounded-full border px-4 text-xs font-bold transition-colors disabled:opacity-60 ${relationship === opt.value ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'border-[hsl(var(--card-border))] bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]'}`}>{tx(opt.label)}</button>))}</div>{relationshipSaved && <span className="mt-3 block text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-relationship-saved">{t.settings.relationshipSaved}</span>}</div></div></section>
            <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={CircleHelp} tone="teal" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.tutorialTitle}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.tutorialText}</p><button type="button" onClick={() => { window.dispatchEvent(new Event('amparo:start-tour')); }} data-testid="button-restart-tour" className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full bg-[hsl(var(--primary))] px-4 text-xs font-bold text-[hsl(var(--primary-foreground))]">{t.settings.tutorialAction} <ArrowRight size={14} /></button></div></div></section>
           <section className="rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-7"><div className="flex items-start gap-4"><IconBox icon={Bell} tone="gold" /><div className="flex-1"><h2 className="text-lg font-extrabold">{t.settings.notifications}</h2><p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">{t.settings.notificationsText}</p>{notificationsError && <p className="mt-2 text-xs font-semibold text-[hsl(var(--destructive))]" role="alert">{notificationsError}</p>}</div><button role="switch" aria-checked={notifications} disabled={notificationsBusy} onClick={() => { void toggleNotifications(); }} data-testid="switch-notifications" className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60 ${notifications ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted))]'}`}><span className={`absolute top-1 size-5 rounded-full bg-[hsl(var(--card))] shadow-sm transition-transform ${notifications ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></section>
           <section
@@ -3666,22 +3794,22 @@ function SettingsPage() {
             <div className="flex items-start gap-4">
               <IconBox icon={Smartphone} tone="teal" />
               <div className="min-w-0 flex-1">
-                <h2 className="text-lg font-extrabold">Dispositivos das crianças</h2>
+                <h2 className="text-lg font-extrabold">{tx('Dispositivos das crianças')}</h2>
                 <p className="mt-1 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
-                  Consulte os dispositivos vinculados e revogue individualmente os acessos que não devem mais ser utilizados.
+                  {tx('Consulte os dispositivos vinculados e revogue individualmente os acessos que não devem mais ser utilizados.')}
                 </p>
               </div>
             </div>
 
             {deviceChildren === null && (
               <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]" role="status">
-                Carregando crianças…
+                {tx('Carregando crianças…')}
               </p>
             )}
 
             {deviceChildren !== null && deviceChildren.length === 0 && !devicesError && (
               <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">
-                Nenhuma criança vinculada foi encontrada.
+                {tx('Nenhuma criança vinculada foi encontrada.')}
               </p>
             )}
 
@@ -3691,7 +3819,7 @@ function SettingsPage() {
                   htmlFor="settings-device-child"
                   className="mb-2 block text-xs font-bold"
                 >
-                  Criança
+                  {tx('Criança')}
                 </label>
                 <select
                   id="settings-device-child"
@@ -3718,14 +3846,14 @@ function SettingsPage() {
                   data-testid="button-retry-child-devices"
                   className="mt-2 text-xs font-bold text-[hsl(var(--primary))] underline"
                 >
-                  Tentar novamente
+                  {tx('Tentar novamente')}
                 </button>
               </div>
             )}
 
             {devicesLoading && selectedDeviceChildId && (
               <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]" role="status">
-                Carregando dispositivos…
+                {tx('Carregando dispositivos…')}
               </p>
             )}
 
@@ -3734,7 +3862,7 @@ function SettingsPage() {
               selectedDeviceChildId &&
               childDevices.length === 0 && (
                 <p className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">
-                  Nenhum dispositivo foi encontrado para esta criança.
+                  {tx('Nenhum dispositivo foi encontrado para esta criança.')}
                 </p>
               )}
 
@@ -3757,7 +3885,7 @@ function SettingsPage() {
                             : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]'
                         }`}
                       >
-                        {device.status === 'active' ? 'Ativo' : 'Revogado'}
+                        {device.status === 'active' ? tx('Ativo') : tx('Revogado')}
                       </span>
                     </div>
 
@@ -3769,16 +3897,16 @@ function SettingsPage() {
                         </dd>
                       </div>
                       <div>
-                        <dt className="inline font-semibold">Último uso: </dt>
+                        <dt className="inline font-semibold">{tx('Último uso:')} </dt>
                         <dd className="inline">
                           {device.lastUsedAt
                             ? new Date(device.lastUsedAt).toLocaleString('pt-BR')
-                            : 'Ainda não registrado'}
+                            : tx('Ainda não registrado')}
                         </dd>
                       </div>
                       {device.revokedAt && (
                         <div>
-                          <dt className="inline font-semibold">Revogado em: </dt>
+                          <dt className="inline font-semibold">{tx('Revogado em:')} </dt>
                           <dd className="inline">
                             {new Date(device.revokedAt).toLocaleString('pt-BR')}
                           </dd>
@@ -3794,7 +3922,7 @@ function SettingsPage() {
                         data-testid={`button-revoke-device-${device.id}`}
                         className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-full border border-[hsl(var(--destructive)/.3)] px-4 text-xs font-bold text-[hsl(var(--destructive))] transition-colors hover:bg-[hsl(var(--destructive)/.08)] disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {revokingDeviceId === device.id ? 'Revogando…' : 'Revogar acesso'}
+                        {revokingDeviceId === device.id ? tx('Revogando…') : 'Revogar acesso'}
                       </button>
                     )}
                   </article>
@@ -3840,7 +3968,7 @@ function ParentBio() {
         const data = await fetchParentBio(token);
         if (!cancelled) setBio(data);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Erro ao carregar seu perfil.');
+        if (!cancelled) setError(err instanceof Error ? err.message : tx('Erro ao carregar seu perfil.'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -3860,7 +3988,7 @@ function ParentBio() {
       setSaved(true);
       window.setTimeout(() => setSaved(false), 2200);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao salvar.');
+      setError(err instanceof Error ? err.message : tx('Erro ao salvar.'));
     } finally {
       setSaving(false);
     }
@@ -3874,7 +4002,7 @@ function ParentBio() {
       const { photoUrl } = await uploadParentBioPhoto(file, token);
       setBio((current) => (current ? { ...current, photoUrl } : current));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao enviar foto.');
+      setError(err instanceof Error ? err.message : tx('Erro ao enviar foto.'));
     } finally {
       setUploadingPhoto(false);
     }
@@ -3882,9 +4010,9 @@ function ParentBio() {
 
   return (
     <>
-      <PageIntro eyebrow="sua bio" title="Sua BIO" description="Sua foto e informações de contato — opcional, só se você quiser deixar preenchido." />
+      <PageIntro eyebrow={tx('sua bio')} title={tx('Sua BIO')} description={tx('Sua foto e informações de contato — opcional, só se você quiser deixar preenchido.')} />
       <div className="max-w-lg rounded-[26px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-6 shadow-card sm:p-8">
-        {loading && <p className="text-sm text-[hsl(var(--muted-foreground))]">Carregando…</p>}
+        {loading && <p className="text-sm text-[hsl(var(--muted-foreground))]">{tx('Carregando…')}</p>}
         {!loading && bio && (
           <>
             <BioEditor
@@ -3903,9 +4031,9 @@ function ParentBio() {
               error={error}
             />
             <p className="mt-4 text-xs leading-5 text-[hsl(var(--muted-foreground))]">
-              Seu nome ({bio.name}) vem da sua conta — pra trocar, é direto lá, não aqui.
+              {pick({ pt: `Seu nome (${bio.name}) vem da sua conta — pra trocar, é direto lá, não aqui.`, en: `Your name (${bio.name}) comes from your account — change it there, not here.`, es: `Tu nombre (${bio.name}) viene de tu cuenta: para cambiarlo, hazlo allí, no aquí.` })}
             </p>
-            {saved && <span className="mt-2 block text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-bio-saved">Salvo.</span>}
+            {saved && <span className="mt-2 block text-xs font-bold text-[hsl(var(--primary))]" role="status" data-testid="status-bio-saved">{tx('Salvo.')}</span>}
           </>
         )}
       </div>
@@ -3986,7 +4114,12 @@ function SignUpPage() {
 
 function Router() {
   const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Switch><Route path="/" component={Onboarding} /><Route path="/baixar/crianca" component={ChildAppDownload} /><Route path="/superadmin" component={SuperadminRoute} /><Route path="/billing" component={BillingRoute} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/invites" component={InvitesRoute} /><Route path="/groups/new" component={CreateGroupRoute} /><Route path="/meu-chat" component={MyChatRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route path="/join-contact" component={ContactJoin} /><Route path="/aceitar-responsavel" component={GuardianJoin} /><Route path="/contact" component={ContactChat} /><Route path="/contact/bio" component={ContactBio} /><Route path="/perfil" component={ParentBioRoute} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  // key={language} abaixo: ao trocar o idioma, as telas renderizam de novo,
+  // inclusive textos que usam tx() fora do contexto (lib/i18n).
+  const { language } = useLanguage();
+  const { userId } = useAuth();
+  setProfileOwner(userId);
+  return <ErrorBoundary resetKey={location}><Fragment key={language}><Switch><Route path="/" component={Onboarding} /><Route path="/baixar/crianca" component={ChildAppDownload} /><Route path="/superadmin" component={SuperadminRoute} /><Route path="/billing" component={BillingRoute} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/invites" component={InvitesRoute} /><Route path="/groups/new" component={CreateGroupRoute} /><Route path="/meu-chat" component={MyChatRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route path="/join-contact" component={ContactJoin} /><Route path="/aceitar-responsavel" component={GuardianJoin} /><Route path="/contact" component={ContactChat} /><Route path="/contact/bio" component={ContactBio} /><Route path="/perfil" component={ParentBioRoute} /><Route component={NotFound} /></Switch></Fragment></ErrorBoundary>;
 }
 // /join não exige o Responsável logado — é a rota que o QR code abre no
 // aparelho da Criança, que ainda não tem conta. /pair é o gerador do QR,
@@ -4045,7 +4178,7 @@ function ClerkApp() {
       signUpUrl={`${basePath}/sign-up`}
       routerPush={(to) => setLocation(stripBase(to))}
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-      localization={{ signIn: { start: { title: 'Entre no Ampara', subtitle: 'Acesse seu espaço da família' } }, signUp: { start: { title: 'Crie sua conta', subtitle: 'Comece seu espaço de cuidado' } } }}
+      localization={{ signIn: { start: { title: tx('Entre no Ampara'), subtitle: tx('Acesse seu espaço da família') } }, signUp: { start: { title: tx('Crie sua conta'), subtitle: tx('Comece seu espaço de cuidado') } } }}
     >
       <Switch>
         <Route path="/sign-in/*?" component={SignInPage} />

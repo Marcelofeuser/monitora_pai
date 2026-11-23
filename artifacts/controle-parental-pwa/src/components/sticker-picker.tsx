@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Sticker as StickerIcon } from 'lucide-react';
 import { ALLOWED_STICKERS } from '@/lib/stickers';
+import { tx } from '@/lib/i18n';
 
 // Mesmo padrão do EmojiPicker (components/emoji-picker.tsx), só que com
 // botões maiores e uma lista fechada — uma figurinha é, hoje, um emoji
@@ -13,7 +14,7 @@ export function StickerPicker({ onSelect }: { onSelect: (emoji: string) => void 
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        aria-label="Figurinhas"
+        aria-label={tx('Figurinhas')}
         data-testid="button-sticker-picker"
         className="grid size-11 shrink-0 place-items-center rounded-md border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
       >

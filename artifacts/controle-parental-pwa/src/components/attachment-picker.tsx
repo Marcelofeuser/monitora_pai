@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { Paperclip } from 'lucide-react';
+import { tx } from '@/lib/i18n';
 
 // Mesmos limites do backend (ver PHOTO_MAX_BYTES/VIDEO_MAX_BYTES em
 // artifacts/api-server/src/lib/mediaStorage.ts) — checar aqui evita
@@ -34,8 +35,8 @@ export function AttachmentPicker({
           if (file.size > limit) {
             onError(
               isVideo
-                ? 'Esse vídeo passa de 60MB — escolha um menor.'
-                : 'Essa foto passa de 12MB — escolha uma menor.',
+                ? tx('Esse vídeo passa de 60MB — escolha um menor.')
+                : tx('Essa foto passa de 12MB — escolha uma menor.'),
             );
             return;
           }
@@ -45,7 +46,7 @@ export function AttachmentPicker({
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        aria-label="Anexar foto ou vídeo"
+        aria-label={tx('Anexar foto ou vídeo')}
         data-testid="button-attachment-picker"
         className="grid size-11 shrink-0 place-items-center rounded-md border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))]"
       >
