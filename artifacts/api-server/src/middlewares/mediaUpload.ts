@@ -1,15 +1,19 @@
 import multer from "multer";
 import type { RequestHandler } from "express";
-import { isAllowedMime, UPLOAD_MAX_BYTES } from "../lib/mediaStorage";
+import { isAllowedMime, normalizeMime, UPLOAD_MAX_BYTES } from "../lib/mediaStorage";
+import { logger } from "../lib/logger";
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: UPLOAD_MAX_BYTES, files: 1 },
   fileFilter: (_req, file, cb) => {
     if (!isAllowedMime(file.mimetype)) {
+      logger.warn({ mimetype: file.mimetype, originalname: file.originalname }, "upload rejected: unsupported media type");
       cb(new Error("unsupported_media_type"));
       return;
     }
+    // Daqui pra frente todas as rotas veem só o tipo canônico (ex.: audio/mp4).
+    file.mimetype = normalizeMime(file.mimetype);
     cb(null, true);
   },
 });
