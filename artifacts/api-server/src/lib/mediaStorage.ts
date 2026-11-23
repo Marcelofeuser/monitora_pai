@@ -41,8 +41,25 @@ export const AUDIO_MAX_BYTES = 15 * 1024 * 1024; // 15MB
 // tipo é conferido depois, na rota.
 export const UPLOAD_MAX_BYTES = VIDEO_MAX_BYTES;
 
+// Variações que os sistemas mandam para o mesmo formato. O iOS (React Native)
+// costuma enviar o .m4a gravado pelo app como audio/x-m4a ou audio/m4a, mesmo
+// quando o app declara audio/mp4. Normalizamos para o tipo canônico da tabela.
+const MIME_ALIASES: Record<string, string> = {
+  "audio/x-m4a": "audio/mp4",
+  "audio/m4a": "audio/mp4",
+  "audio/mp4a-latm": "audio/mp4",
+  "audio/aac": "audio/mp4",
+  "audio/x-aac": "audio/mp4",
+  "image/jpg": "image/jpeg",
+};
+
+export function normalizeMime(mime: string): string {
+  const base = (mime ?? "").split(";")[0].trim().toLowerCase();
+  return MIME_ALIASES[base] ?? base;
+}
+
 export function isAllowedMime(mime: string): boolean {
-  return mime in EXTENSION_BY_MIME;
+  return normalizeMime(mime) in EXTENSION_BY_MIME;
 }
 
 export function kindForMime(mime: string): "photo" | "video" | "audio" | null {
@@ -79,7 +96,7 @@ export async function saveMedia(
   buffer: Buffer,
   mimeType: string,
 ): Promise<{ filename: string; url: string }> {
-  const ext = EXTENSION_BY_MIME[mimeType];
+  const ext = EXTENSION_BY_MIME[normalizeMime(mimeType)];
   if (!ext) throw new Error("unsupported_media_type");
   await ensureDir();
   const filename = `${randomUUID()}.${ext}`;
