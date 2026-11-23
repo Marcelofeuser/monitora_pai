@@ -106,7 +106,7 @@ module.exports = ({ config }) => {
     ios: {
       ...config.ios,
       bundleIdentifier: variant.package,
-      ...(variant.role === 'parent' ? { buildNumber: '17', usesAppleSignIn: true } : {}),
+      ...(variant.role === 'parent' ? { buildNumber: '18', usesAppleSignIn: true } : {}),
       // Clerk's native iOS SDK requires iOS 17; keep the child app on its
       // existing lower deployment target because it does not include Clerk.
       deploymentTarget: variant.role === 'parent' ? '17.0' : '15.1',
