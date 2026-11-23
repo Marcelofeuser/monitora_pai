@@ -8,7 +8,7 @@ const upload = multer({
   limits: { fileSize: UPLOAD_MAX_BYTES, files: 1 },
   fileFilter: (_req, file, cb) => {
     if (!isAllowedMime(file.mimetype)) {
-      logger.warn({ mimetype: file.mimetype, originalname: file.originalname }, "upload rejected: unsupported media type");
+      logger.warn(`upload rejected: unsupported media type mimetype=${file.mimetype} name=${file.originalname}`);
       cb(new Error("unsupported_media_type"));
       return;
     }

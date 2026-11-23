@@ -18,6 +18,10 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
   "image/gif": "gif",
+  // Fotos do iPhone (formato nativo). O app novo já exporta JPEG, mas
+  // builds antigos e o PWA no Safari ainda podem mandar HEIC.
+  "image/heic": "heic",
+  "image/heif": "heif",
   "video/mp4": "mp4",
   "video/webm": "webm",
   "video/quicktime": "mov",
@@ -51,6 +55,8 @@ const MIME_ALIASES: Record<string, string> = {
   "audio/aac": "audio/mp4",
   "audio/x-aac": "audio/mp4",
   "image/jpg": "image/jpeg",
+  "image/heic-sequence": "image/heic",
+  "image/heif-sequence": "image/heif",
 };
 
 export function normalizeMime(mime: string): string {
@@ -86,7 +92,7 @@ async function ensureDir(): Promise<void> {
 // Nome de arquivo é sempre um UUID gerado por nós + extensão conhecida —
 // nunca deriva de nada que o cliente mande, pra não abrir brecha de path
 // traversal (../../etc) nem de sobrescrever arquivo de outra mensagem.
-const FILENAME_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp|gif|mp4|webm|mov|weba|m4a|mp3|ogg)$/;
+const FILENAME_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp|gif|heic|heif|mp4|webm|mov|weba|m4a|mp3|ogg)$/;
 
 export function isValidMediaFilename(filename: string): boolean {
   return FILENAME_PATTERN.test(filename);
