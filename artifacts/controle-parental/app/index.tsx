@@ -23,6 +23,14 @@ import { ChildApp } from '@/native/ChildApp';
 import { ParentApp } from '@/native/ParentApp';
 
 type Role = 'parent' | 'child';
+
+function getEmbeddedRole(): Role | undefined {
+  const identifier = Constants.platform?.ios?.bundleIdentifier ?? Constants.expoConfig?.ios?.bundleIdentifier;
+  if (identifier === 'com.amparakids.responsavel') return 'parent';
+  if (identifier === 'com.amparakids.crianca') return 'child';
+  const configuredRole = Constants.expoConfig?.extra?.appRole;
+  return configuredRole === 'parent' || configuredRole === 'child' ? configuredRole : undefined;
+}
 type Section = 'home' | 'conversations' | 'location' | 'settings';
 type Profile = { role: Role; responsibleName: string; childName: string };
 
@@ -293,7 +301,7 @@ function PrivateLink({ colors, onPress }: { colors: ReturnType<typeof useColors>
 function PrototypeHomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const fixedRole = Constants.expoConfig?.extra?.appRole as Role | undefined;
+  const fixedRole = getEmbeddedRole();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [contacts, setContacts] = useState<string[]>([]);
   const [section, setSection] = useState<Section>('home');
@@ -356,7 +364,7 @@ function PrototypeHomeScreen() {
 }
 
 export default function HomeScreen() {
-  const role = Constants.expoConfig?.extra?.appRole as Role | undefined;
+  const role = getEmbeddedRole();
   if (role === 'parent') return <ParentApp />;
   if (role === 'child') return <ChildApp />;
   return <PrototypeHomeScreen />;

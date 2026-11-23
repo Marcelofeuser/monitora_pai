@@ -33,7 +33,7 @@ router.get("/guardians", async (req, res) => {
   if (!auth.userId) return res.status(401).json({ error: "not_authenticated" });
 
   const childIds = await getGuardianChildIds(auth.userId);
-  const byId = new Map<string, { id: string; name: string; role: "owner" | "guardian" }>();
+  const byId = new Map<string, { id: string; name: string; role: "owner" | "guardian"; relationship: string | null }>();
   for (const childId of childIds) {
     const guardians = await getGuardiansOfChild(childId);
     for (const g of guardians) byId.set(g.id, g);
@@ -158,12 +158,12 @@ router.post("/guardians/invite/:token/accept", async (req, res) => {
   const newParent = await ensureParentUser(auth.userId);
 
   const childIds = await getGuardianChildIds(invite.invitedByParentId);
-  const familyGuardians = new Map<string, { id: string; role: "owner" | "guardian" }>();
+  const familyGuardians = new Map<string, { id: string; role: "owner" | "guardian"; relationship: string | null }>();
   for (const childId of childIds) {
     for (const guardian of await getGuardiansOfChild(childId)) familyGuardians.set(guardian.id, guardian);
   }
   if (!familyGuardians.has(invite.invitedByParentId)) {
-    familyGuardians.set(invite.invitedByParentId, { id: invite.invitedByParentId, role: "guardian" });
+    familyGuardians.set(invite.invitedByParentId, { id: invite.invitedByParentId, role: "guardian", relationship: null });
   }
   const ownerId = [...familyGuardians.values()].find((guardian) => guardian.role === "owner")?.id ?? invite.invitedByParentId;
   const subscriptions = ownerId

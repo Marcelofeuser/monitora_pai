@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useColors } from '@/hooks/useColors';
-import type { PrivateMessage, PrivateMessageInput } from './api';
+import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { mediaSource, type PrivateMessage, type PrivateMessageInput } from './api';
 import { ALLOWED_STICKERS } from './stickers';
+import { Avatar, CHAT_DARK, KIDS } from './theme';
 
 type Props = {
   title: string;
@@ -15,20 +17,279 @@ type Props = {
   onBack?: () => void;
   headerAction?: React.ReactNode;
   readOnly?: boolean;
+  variant?: 'default' | 'kids';
+  /** Use quando o chat não está dentro de um container que já respeita a área segura superior. */
+  safeTop?: boolean;
+  /** Cabeçalhos de autenticação para baixar fotos, áudios e vídeos (a mídia é privada). */
+  getMediaHeaders?: () => Promise<Record<string, string>>;
 };
 
-function AudioMessage({ uri, mine, colors }: { uri: string; mine: boolean; colors: ReturnType<typeof useColors> }) {
-  const player = useAudioPlayer(uri);
-  const status = useAudioPlayerStatus(player);
+type ChatTheme = {
+  kids: boolean;
+  background: string;
+  header: string;
+  headerForeground: string;
+  headerMuted: string;
+  mineBg: string;
+  mineText: string;
+  mineTime: string;
+  otherBg: string;
+  otherText: string;
+  otherTime: string;
+  otherBorder: string;
+  border: string;
+  composerBg: string;
+  inputBg: string;
+  inputText: string;
+  placeholder: string;
+  accent: string;
+  accentText: string;
+  danger: string;
+  dayChip: string;
+  dayText: string;
+  sheetBg: string;
+  sheetText: string;
+  toolPlus: string;
+  toolMic: string;
+  toolSticker: string;
+  toolIcon: string;
+  senderColors: string[];
+};
+
+const ADULT_THEME: ChatTheme = {
+  kids: false,
+  background: CHAT_DARK.background,
+  header: CHAT_DARK.header,
+  headerForeground: CHAT_DARK.headerForeground,
+  headerMuted: CHAT_DARK.headerMuted,
+  mineBg: CHAT_DARK.bubbleMine,
+  mineText: CHAT_DARK.bubbleMineText,
+  mineTime: '#D6ECEA',
+  otherBg: CHAT_DARK.bubbleOther,
+  otherText: CHAT_DARK.bubbleOtherText,
+  otherTime: CHAT_DARK.headerMuted,
+  otherBorder: CHAT_DARK.border,
+  border: CHAT_DARK.border,
+  composerBg: CHAT_DARK.composer,
+  inputBg: CHAT_DARK.input,
+  inputText: CHAT_DARK.inputText,
+  placeholder: CHAT_DARK.placeholder,
+  accent: CHAT_DARK.accent,
+  accentText: '#263345',
+  danger: CHAT_DARK.danger,
+  dayChip: CHAT_DARK.dayChip,
+  dayText: CHAT_DARK.headerMuted,
+  sheetBg: '#112321',
+  sheetText: '#EAF4F1',
+  toolPlus: CHAT_DARK.input,
+  toolMic: CHAT_DARK.input,
+  toolSticker: CHAT_DARK.input,
+  toolIcon: CHAT_DARK.accent,
+  senderColors: ['#7FE3D2', '#FFD36B', '#FF9E8F', '#A9B8FF', '#B8E986'],
+};
+
+const KIDS_THEME: ChatTheme = {
+  kids: true,
+  background: KIDS.background,
+  header: KIDS.primary,
+  headerForeground: '#FFFFFF',
+  headerMuted: '#DDF7F3',
+  mineBg: KIDS.primary,
+  mineText: '#FFFFFF',
+  mineTime: '#E3D7FF',
+  otherBg: '#FFFFFF',
+  otherText: KIDS.foreground,
+  otherTime: '#7C8D89',
+  otherBorder: KIDS.aqua,
+  border: KIDS.border,
+  composerBg: '#FFFFFF',
+  inputBg: KIDS.background,
+  inputText: KIDS.foreground,
+  placeholder: '#9AA9A5',
+  accent: KIDS.yellow,
+  accentText: '#3F2C00',
+  danger: KIDS.destructive,
+  dayChip: '#FFF1C2',
+  dayText: '#7A5A00',
+  sheetBg: KIDS.background,
+  sheetText: KIDS.foreground,
+  toolPlus: KIDS.aqua,
+  toolMic: KIDS.coral,
+  toolSticker: KIDS.yellow,
+  toolIcon: '#FFFFFF',
+  senderColors: [KIDS.coral, KIDS.lilac, KIDS.aqua, '#E39A00', KIDS.primary],
+};
+
+type Row =
+  | { kind: 'day'; key: string; label: string }
+  | { kind: 'message'; key: string; message: PrivateMessage };
+
+function parseDate(value: string): Date | null {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function dayKey(date: Date) {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function dayLabel(date: Date) {
+  const now = new Date();
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  if (dayKey(date) === dayKey(now)) return 'Hoje';
+  if (dayKey(date) === dayKey(yesterday)) return 'Ontem';
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
+}
+
+function clock(value: string) {
+  const date = parseDate(value);
+  return date ? date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+}
+
+function buildRows(messages: PrivateMessage[]): Row[] {
+  const rows: Row[] = [];
+  let lastDay = '';
+  for (const message of messages) {
+    const date = parseDate(message.createdAt);
+    if (date) {
+      const key = dayKey(date);
+      if (key !== lastDay) {
+        rows.push({ kind: 'day', key: `day-${key}`, label: dayLabel(date) });
+        lastDay = key;
+      }
+    }
+    rows.push({ kind: 'message', key: message.id, message });
+  }
+  return rows;
+}
+
+function senderColor(theme: ChatTheme, name: string) {
+  let hash = 0;
+  for (let index = 0; index < name.length; index += 1) hash = (hash * 31 + name.charCodeAt(index)) | 0;
+  return theme.senderColors[Math.abs(hash) % theme.senderColors.length];
+}
+
+/**
+ * Botão de ação do cabeçalho do chat (Ligar, Grupos, Perfil...).
+ * No chat adulto é uma pílula discreta; no Kids é um chip colorido com emoji.
+ */
+export function ChatChip({ label, icon, emoji, color, onPress, disabled, danger, kids, loading }: {
+  label: string;
+  icon?: React.ComponentProps<typeof Feather>['name'];
+  emoji?: string;
+  color?: string;
+  onPress: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  kids?: boolean;
+  loading?: boolean;
+}) {
+  const adultBg = danger ? 'rgba(255,122,112,0.16)' : 'rgba(255,255,255,0.12)';
+  const adultFg = danger ? CHAT_DARK.danger : '#FFFFFF';
+  const background = kids ? (danger ? KIDS.destructive : color ?? KIDS.coral) : adultBg;
+  const foreground = kids ? '#FFFFFF' : adultFg;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={status.playing ? 'Pausar mensagem de áudio' : 'Reproduzir mensagem de áudio'} onPress={() => status.playing ? player.pause() : player.play()} style={styles.mediaLink}>
-      <Text style={{ color: mine ? colors.primaryForeground : colors.primary }}>{status.playing ? 'Ⅱ Pausar áudio' : '▶ Reproduzir áudio'}</Text>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={disabled || loading}
+      onPress={onPress}
+      style={({ pressed }) => [chipStyles.chip, kids && chipStyles.chipKids, { backgroundColor: background, opacity: disabled ? 0.45 : pressed ? 0.8 : 1 }]}
+    >
+      {loading ? <ActivityIndicator size="small" color={foreground} /> : kids && emoji ? <Text style={chipStyles.emoji}>{emoji}</Text> : icon ? <Feather name={icon} size={15} color={foreground} /> : null}
+      <Text style={[chipStyles.label, kids && chipStyles.labelKids, { color: foreground }]}>{label}</Text>
     </Pressable>
   );
 }
 
-export function PrivateChat({ title, subtitle = 'Conversa privada da família', ownUserId, loadMessages, sendMessage, onBack, headerAction, readOnly = false }: Props) {
-  const colors = useColors();
+const chipStyles = StyleSheet.create({
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 36, paddingHorizontal: 13, borderRadius: 18 },
+  chipKids: { minHeight: 42, paddingHorizontal: 15, borderRadius: 21 },
+  emoji: { fontSize: 16 },
+  label: { fontSize: 13, fontWeight: '700' },
+  labelKids: { fontSize: 14, fontWeight: '800' },
+});
+
+type GetHeaders = (() => Promise<Record<string, string>>) | undefined;
+
+/** Resolve a URL completa da mídia + cabeçalho de autenticação atual. */
+function useMediaSource(contentUrl: string, getHeaders: GetHeaders) {
+  const [source, setSource] = useState<{ uri: string; headers: Record<string, string> } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      let headers: Record<string, string> = {};
+      try { headers = getHeaders ? await getHeaders() : {}; } catch { headers = {}; }
+      if (alive) setSource(mediaSource(contentUrl, headers));
+    })();
+    return () => { alive = false; };
+  }, [contentUrl]);
+  return source;
+}
+
+function MediaFailed({ text, color }: { text: string; color: string }) {
+  return <Text style={{ color, fontSize: 13, marginBottom: 6 }}>{text}</Text>;
+}
+
+function PhotoMessage({ contentUrl, getHeaders, color }: { contentUrl: string; getHeaders: GetHeaders; color: string }) {
+  const source = useMediaSource(contentUrl, getHeaders);
+  const [failed, setFailed] = useState(false);
+  if (failed) return <MediaFailed text="Não foi possível abrir a foto." color={color} />;
+  if (!source) return <View style={[styles.photo, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={color} /></View>;
+  return <Image accessibilityLabel="Foto enviada na conversa" source={source} resizeMode="cover" style={styles.photo} onError={(event) => { console.log('[MEDIA] foto falhou', source.uri, event.nativeEvent?.error); setFailed(true); }} />;
+}
+
+function AudioMessage({ contentUrl, getHeaders, theme, mine }: { contentUrl: string; getHeaders: GetHeaders; theme: ChatTheme; mine: boolean }) {
+  const source = useMediaSource(contentUrl, getHeaders);
+  const player = useAudioPlayer(null);
+  const status = useAudioPlayerStatus(player);
+  const tint = mine ? theme.mineText : theme.otherText;
+  useEffect(() => { if (source) { try { player.replace(source); } catch (cause) { console.log('[MEDIA] áudio falhou', source.uri, String(cause)); } } }, [source?.uri]);
+  const toggle = async () => {
+    if (status.playing) { player.pause(); return; }
+    try {
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
+      player.play();
+    } catch (cause) { console.log('[MEDIA] play falhou', String(cause)); }
+  };
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={status.playing ? 'Pausar mensagem de áudio' : 'Reproduzir mensagem de áudio'} disabled={!source} onPress={() => void toggle()} style={[styles.mediaLink, !source && { opacity: 0.5 }]}>
+      <View style={[styles.audioPill, { backgroundColor: mine ? 'rgba(255,255,255,0.18)' : 'rgba(127,160,152,0.2)' }]}>
+        <Feather name={status.playing ? 'pause' : 'play'} size={16} color={tint} />
+        <Text style={{ color: tint, fontWeight: '700' }}>{status.playing ? 'Pausar áudio' : source ? 'Reproduzir áudio' : 'Carregando…'}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+// expo-video é opcional: se o pacote ainda não estiver instalado no app, cai no link simples.
+let ExpoVideo: any = null;
+try { ExpoVideo = require('expo-video'); } catch { ExpoVideo = null; }
+
+function InlineVideo({ source }: { source: { uri: string; headers: Record<string, string> } }) {
+  const player = ExpoVideo.useVideoPlayer(source, (instance: any) => { instance.loop = false; });
+  return <ExpoVideo.VideoView player={player} style={styles.video} nativeControls allowsFullscreen contentFit="contain" />;
+}
+
+function VideoMessage({ contentUrl, getHeaders, theme, mine }: { contentUrl: string; getHeaders: GetHeaders; theme: ChatTheme; mine: boolean }) {
+  const source = useMediaSource(contentUrl, getHeaders);
+  const tint = mine ? theme.mineText : theme.otherText;
+  if (!source) return <View style={[styles.video, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={tint} /></View>;
+  if (ExpoVideo) return <InlineVideo source={source} />;
+  return (
+    <Pressable accessibilityRole="button" onPress={() => void Linking.openURL(source.uri)} style={styles.mediaLink}>
+      <View style={[styles.audioPill, { backgroundColor: mine ? 'rgba(255,255,255,0.18)' : 'rgba(127,160,152,0.2)' }]}>
+        <Feather name="play-circle" size={16} color={tint} />
+        <Text style={{ color: tint, fontWeight: '700' }}>Abrir vídeo</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+export function PrivateChat({ title, subtitle = 'Conversa privada da família', ownUserId, loadMessages, sendMessage, onBack, headerAction, readOnly = false, variant = 'default', safeTop = false, getMediaHeaders }: Props) {
+  const theme = variant === 'kids' ? KIDS_THEME : ADULT_THEME;
+  const kids = theme.kids;
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<PrivateMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
@@ -43,9 +304,13 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
   const recorderState = useAudioRecorderState(recorder);
   const finishingRecording = useRef(false);
   const wasRecording = useRef(false);
-  const listRef = useRef<FlatList<PrivateMessage>>(null);
+  const refreshing = useRef(false);
+  const listRef = useRef<FlatList<Row>>(null);
+  const rows = useMemo(() => buildRows(messages), [messages]);
 
   const refresh = useCallback(async (showLoading = false) => {
+    if (refreshing.current) return;
+    refreshing.current = true;
     if (showLoading) setLoading(true);
     try {
       const latest = await loadMessages();
@@ -55,6 +320,7 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
       setError(cause instanceof Error ? cause.message : 'Não foi possível carregar a conversa.');
     } finally {
       setLoading(false);
+      refreshing.current = false;
     }
   }, [loadMessages]);
 
@@ -149,63 +415,103 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
     }
   };
 
-  return (
-    <KeyboardAvoidingView style={[styles.root, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        {onBack && <Pressable accessibilityRole="button" onPress={onBack} style={styles.back}><Text style={{ color: colors.primary }}>Voltar</Text></Pressable>}
-        <View style={styles.titleRow}><Text style={[styles.title, { color: colors.foreground }]}>{title}</Text>{headerAction}</View>
-        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>
+  const canSend = !!draft.trim() && !sending;
+  const toolSize = kids ? 46 : 42;
+
+  const renderRow = ({ item }: { item: Row }) => {
+    if (item.kind === 'day') {
+      return (
+        <View style={styles.dayRow}>
+          <View style={[styles.dayChip, { backgroundColor: theme.dayChip }]}>
+            <Text style={[styles.dayText, { color: theme.dayText }]}>{item.label}</Text>
+          </View>
+        </View>
+      );
+    }
+    const message = item.message;
+    const mine = message.senderId === ownUserId;
+    const sticker = message.contentUrl?.startsWith('emoji:') ? message.contentUrl.slice('emoji:'.length) : null;
+    const mediaUrl = message.contentUrl && !sticker ? message.contentUrl : null;
+    const time = clock(message.createdAt);
+    const senderLabel = !mine && message.senderName ? (
+      <Text style={[styles.senderName, { color: senderColor(theme, message.senderName) }]}>{message.senderName}</Text>
+    ) : null;
+    return (
+      <View style={[styles.messageRow, mine && styles.messageRowMine]}>
+        {sticker ? (
+          <View style={styles.stickerMessage}>
+            {senderLabel}
+            <Text accessibilityLabel={`Figurinha ${sticker}`} style={styles.sticker}>{sticker}</Text>
+            <Text style={[styles.time, { color: theme.otherTime }]}>{time}</Text>
+          </View>
+        ) : (
+          <View style={[
+            styles.bubble,
+            kids && styles.bubbleKids,
+            mine ? styles.bubbleMine : styles.bubbleOther,
+            {
+              backgroundColor: mine ? theme.mineBg : theme.otherBg,
+              borderColor: mine ? 'transparent' : theme.otherBorder,
+              borderWidth: mine ? 0 : kids ? 2 : StyleSheet.hairlineWidth,
+            },
+          ]}>
+            {senderLabel}
+            {message.type === 'photo' && mediaUrl ? <PhotoMessage contentUrl={mediaUrl} getHeaders={getMediaHeaders} color={mine ? theme.mineText : theme.otherText} /> : null}
+            {message.type === 'audio' && mediaUrl ? <AudioMessage contentUrl={mediaUrl} getHeaders={getMediaHeaders} theme={theme} mine={mine} /> : null}
+            {message.type === 'video' && mediaUrl ? <VideoMessage contentUrl={mediaUrl} getHeaders={getMediaHeaders} theme={theme} mine={mine} /> : null}
+            {message.textContent ? <Text style={[styles.messageText, kids && styles.messageTextKids, { color: mine ? theme.mineText : theme.otherText }]}>{message.textContent}</Text> : null}
+            {!mediaUrl && !message.textContent ? <Text style={[styles.messageText, { color: mine ? theme.mineText : theme.otherText }]}>Mensagem</Text> : null}
+            <Text style={[styles.time, { color: mine ? theme.mineTime : theme.otherTime }]}>{time}</Text>
+          </View>
+        )}
       </View>
-      {loading ? <View style={styles.center}><ActivityIndicator color={colors.primary} /></View> : (
+    );
+  };
+
+  const emptyText = readOnly
+    ? 'Ainda não há mensagens nesta conversa.'
+    : kids
+      ? 'Mande um oi para começar a conversa!'
+      : 'Esta conversa é só entre vocês. Envie a primeira mensagem.';
+
+  return (
+    <KeyboardAvoidingView style={[styles.root, { backgroundColor: theme.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={[styles.header, kids && styles.headerKids, { backgroundColor: theme.header, paddingTop: safeTop ? insets.top + 12 : 14 }]}>
+        <View style={styles.headerTop}>
+          {onBack ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Voltar" onPress={onBack} hitSlop={10} style={styles.back}>
+              <Feather name="chevron-left" size={26} color={theme.headerForeground} />
+            </Pressable>
+          ) : null}
+          <Avatar label={title} size={kids ? 46 : 42} background={kids ? KIDS.yellow : theme.accent} color={kids ? '#5A3F00' : theme.accentText} />
+          <View style={styles.titleBlock}>
+            <Text numberOfLines={1} style={[styles.title, kids && styles.titleKids, { color: theme.headerForeground }]}>{title}</Text>
+            <Text numberOfLines={1} style={[styles.subtitle, { color: theme.headerMuted }]}>{subtitle}</Text>
+          </View>
+        </View>
+        {headerAction ? <View style={styles.headerActions}>{headerAction}</View> : null}
+      </View>
+      {loading ? <View style={styles.center}><ActivityIndicator color={theme.accent} /></View> : (
         <FlatList
           ref={listRef}
           style={styles.list}
           contentContainerStyle={styles.messages}
-          data={messages}
-          keyExtractor={(message) => message.id}
+          data={rows}
+          keyExtractor={(row) => row.key}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-          ListEmptyComponent={<Text style={[styles.empty, { color: colors.mutedForeground }]}>{readOnly ? 'Ainda não há mensagens nesta conversa.' : 'Esta conversa é só entre vocês. Envie a primeira mensagem.'}</Text>}
-          renderItem={({ item }) => {
-            const mine = item.senderId === ownUserId;
-            const sticker = item.contentUrl?.startsWith('emoji:') ? item.contentUrl.slice('emoji:'.length) : null;
-            const mediaUrl = item.contentUrl && !sticker ? item.contentUrl : null;
-            return (
-              <View style={[styles.messageRow, mine && styles.messageRowMine]}>
-                {sticker ? (
-                  <View style={styles.stickerMessage}>
-                    {!mine && item.senderName ? <Text style={[styles.senderName, { color: colors.mutedForeground }]}>{item.senderName}</Text> : null}
-                    <Text accessibilityLabel={`Figurinha ${sticker}`} style={styles.sticker}>{sticker}</Text>
-                    <Text style={[styles.time, { color: colors.mutedForeground }]}>{new Date(item.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text>
-                  </View>
-                ) : (
-                  <View style={[styles.bubble, { backgroundColor: mine ? colors.primary : colors.card, borderColor: colors.border }]}>
-                    {!mine && item.senderName ? <Text style={[styles.senderName, { color: colors.mutedForeground }]}>{item.senderName}</Text> : null}
-                    {item.type === 'photo' && mediaUrl ? <Image accessibilityLabel="Foto enviada na conversa" source={{ uri: mediaUrl }} resizeMode="cover" style={styles.photo} /> : null}
-                    {item.type === 'audio' && mediaUrl ? <AudioMessage uri={mediaUrl} mine={mine} colors={colors} /> : null}
-                    {item.type === 'video' && mediaUrl ? (
-                      <Pressable accessibilityRole="button" onPress={() => void Linking.openURL(mediaUrl)} style={styles.mediaLink}>
-                        <Text style={{ color: mine ? colors.primaryForeground : colors.primary }}>▶ Abrir vídeo</Text>
-                      </Pressable>
-                    ) : null}
-                    {item.textContent ? <Text style={{ color: mine ? colors.primaryForeground : colors.foreground }}>{item.textContent}</Text> : null}
-                    {!mediaUrl && !item.textContent ? <Text style={{ color: mine ? colors.primaryForeground : colors.foreground }}>Mensagem</Text> : null}
-                    <Text style={[styles.time, { color: mine ? colors.primaryForeground : colors.mutedForeground }]}>{new Date(item.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text>
-                  </View>
-                )}
-              </View>
-            );
-          }}
+          ListEmptyComponent={<Text style={[styles.empty, { color: kids ? KIDS.mutedForeground : theme.headerMuted }]}>{kids ? '💬\n' : ''}{emptyText}</Text>}
+          renderItem={renderRow}
         />
       )}
-      {!!error && <Text accessibilityRole="alert" style={[styles.error, { color: colors.destructive }]}>{error}</Text>}
-      {!readOnly && <View style={[styles.composer, { borderTopColor: colors.border }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Anexar foto ou vídeo" disabled={sending} onPress={() => void pickMedia()} style={[styles.toolButton, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={{ color: colors.primary, fontSize: 19 }}>＋</Text>
+      {!!error && <Text accessibilityRole="alert" style={[styles.error, { color: theme.danger }]}>{error}</Text>}
+      {!readOnly && <View style={[styles.composer, { backgroundColor: theme.composerBg, borderTopColor: theme.border, paddingBottom: Math.max(12, insets.bottom + 8) }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Anexar foto ou vídeo" disabled={sending} onPress={() => void pickMedia()} style={[styles.toolButton, { width: toolSize, height: toolSize, borderRadius: toolSize / 2, backgroundColor: theme.toolPlus }]}>
+          <Feather name="plus" size={20} color={theme.toolIcon} />
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={recorderState.isRecording ? 'Parar e enviar gravação' : 'Gravar mensagem de voz'} disabled={sending} onPress={() => void toggleRecording()} style={[styles.toolButton, { backgroundColor: recorderState.isRecording ? colors.destructive : colors.card, borderColor: recorderState.isRecording ? colors.destructive : colors.border }]}>
-          <Text style={{ color: recorderState.isRecording ? colors.primaryForeground : colors.primary, fontSize: 17 }}>{recorderState.isRecording ? '■' : '🎙'}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={recorderState.isRecording ? 'Parar e enviar gravação' : 'Gravar mensagem de voz'} disabled={sending} onPress={() => void toggleRecording()} style={[styles.toolButton, { width: toolSize, height: toolSize, borderRadius: toolSize / 2, backgroundColor: recorderState.isRecording ? theme.danger : theme.toolMic }]}>
+          <Feather name={recorderState.isRecording ? 'square' : 'mic'} size={18} color={recorderState.isRecording ? '#FFFFFF' : theme.toolIcon} />
         </Pressable>
-        {recorderState.isRecording ? <Text accessibilityLiveRegion="polite" style={{ color: colors.destructive, fontSize: 11 }}>{Math.floor(recorderState.durationMillis / 1000)}s</Text> : null}
+        {recorderState.isRecording ? <Text accessibilityLiveRegion="polite" style={{ color: theme.danger, fontSize: 12, fontWeight: '700' }}>{Math.floor(recorderState.durationMillis / 1000)}s</Text> : null}
         <TextInput
           accessibilityLabel="Mensagem"
           value={draft}
@@ -213,23 +519,23 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
           onSubmitEditing={() => { const text = draft.trim(); if (text) void submit({ textContent: text }); }}
           returnKeyType="send"
           maxLength={4000}
-          placeholder="Escreva uma mensagem"
-          placeholderTextColor={colors.mutedForeground}
-          style={[styles.input, { color: colors.foreground, backgroundColor: colors.card, borderColor: colors.border }]}
+          placeholder={kids ? 'Escreva aqui…' : 'Escreva uma mensagem'}
+          placeholderTextColor={theme.placeholder}
+          style={[styles.input, kids && styles.inputKids, { color: theme.inputText, backgroundColor: theme.inputBg, borderColor: kids ? theme.border : 'transparent' }]}
         />
-        <Pressable accessibilityRole="button" accessibilityLabel="Escolher figurinha" disabled={sending} onPress={() => setStickerPickerOpen(true)} style={[styles.toolButton, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={{ fontSize: 19 }}>😊</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Escolher figurinha" disabled={sending} onPress={() => setStickerPickerOpen(true)} style={[styles.toolButton, { width: toolSize, height: toolSize, borderRadius: toolSize / 2, backgroundColor: theme.toolSticker }]}>
+          <Feather name="smile" size={20} color={kids ? '#5A3F00' : theme.toolIcon} />
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Enviar mensagem" disabled={!draft.trim() || sending} onPress={() => void submit({ textContent: draft.trim() })} style={[styles.send, { backgroundColor: colors.primary, opacity: !draft.trim() || sending ? 0.5 : 1 }]}>
-          {sending ? <ActivityIndicator color={colors.primaryForeground} size="small" /> : <Text style={{ color: colors.primaryForeground, fontWeight: '700' }}>Enviar</Text>}
+        <Pressable accessibilityRole="button" accessibilityLabel="Enviar mensagem" disabled={!canSend} onPress={() => void submit({ textContent: draft.trim() })} style={[styles.send, { width: toolSize, height: toolSize, borderRadius: toolSize / 2, backgroundColor: kids ? KIDS.green : theme.accent, opacity: canSend ? 1 : 0.45 }]}>
+          {sending ? <ActivityIndicator color={kids ? '#12362F' : theme.accentText} size="small" /> : <Feather name="send" size={19} color={kids ? '#12362F' : theme.accentText} />}
         </Pressable>
       </View>}
       {!readOnly && <Modal visible={stickerPickerOpen} transparent animationType="slide" onRequestClose={() => setStickerPickerOpen(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={[styles.stickerSheet, { backgroundColor: colors.background }]}>
+          <View style={[styles.stickerSheet, { backgroundColor: theme.sheetBg }]}>
             <View style={styles.sheetHeader}>
-              <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Escolha uma figurinha</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Fechar figurinhas" onPress={() => setStickerPickerOpen(false)}><Text style={{ color: colors.primary, fontWeight: '700' }}>Fechar</Text></Pressable>
+              <Text style={[styles.sheetTitle, { color: theme.sheetText }]}>{kids ? 'Escolha uma figurinha 🎉' : 'Escolha uma figurinha'}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fechar figurinhas" hitSlop={10} onPress={() => setStickerPickerOpen(false)}><Feather name="x" size={22} color={theme.accent} /></Pressable>
             </View>
             <FlatList
               data={ALLOWED_STICKERS}
@@ -251,33 +557,48 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { padding: 18, paddingTop: 22, borderBottomWidth: StyleSheet.hairlineWidth },
-  back: { marginBottom: 10 },
-  title: { fontSize: 22, fontWeight: '700' },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  subtitle: { fontSize: 12, marginTop: 4 },
+  header: { paddingHorizontal: 14, paddingBottom: 12, gap: 10 },
+  headerKids: { borderBottomLeftRadius: 28, borderBottomRightRadius: 28, paddingBottom: 16 },
+  headerTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  back: { width: 32, height: 40, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
+  titleBlock: { flex: 1 },
+  headerActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  title: { fontSize: 18, fontWeight: '800' },
+  titleKids: { fontSize: 20 },
+  subtitle: { fontSize: 12, marginTop: 2 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { flex: 1 },
-  messages: { padding: 16, gap: 10, flexGrow: 1, justifyContent: 'flex-end' },
-  empty: { textAlign: 'center', alignSelf: 'center', marginVertical: 24, maxWidth: 260, lineHeight: 20 },
+  messages: { padding: 14, gap: 8, flexGrow: 1, justifyContent: 'flex-end' },
+  empty: { textAlign: 'center', alignSelf: 'center', marginVertical: 24, maxWidth: 260, lineHeight: 22, fontSize: 14 },
+  dayRow: { alignItems: 'center', marginVertical: 6 },
+  dayChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
+  dayText: { fontSize: 11, fontWeight: '700' },
   messageRow: { flexDirection: 'row', justifyContent: 'flex-start' },
   messageRowMine: { justifyContent: 'flex-end' },
-  senderName: { fontSize: 10, fontWeight: '700', marginBottom: 4 },
-  bubble: { maxWidth: '82%', minWidth: 70, paddingHorizontal: 13, paddingTop: 10, paddingBottom: 7, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth },
-  time: { alignSelf: 'flex-end', fontSize: 10, marginTop: 5 },
+  senderName: { fontSize: 11, fontWeight: '800', marginBottom: 3 },
+  bubble: { maxWidth: '82%', minWidth: 70, paddingHorizontal: 13, paddingTop: 9, paddingBottom: 6, borderRadius: 18 },
+  bubbleKids: { borderRadius: 22, paddingHorizontal: 15, paddingTop: 11, paddingBottom: 8 },
+  bubbleMine: { borderBottomRightRadius: 5 },
+  bubbleOther: { borderBottomLeftRadius: 5 },
+  messageText: { fontSize: 15, lineHeight: 21 },
+  messageTextKids: { fontSize: 16, lineHeight: 23 },
+  time: { alignSelf: 'flex-end', fontSize: 10, marginTop: 4 },
   error: { paddingHorizontal: 16, paddingTop: 8, fontSize: 12 },
-  composer: { flexDirection: 'row', gap: 8, padding: 12, paddingBottom: 16, borderTopWidth: StyleSheet.hairlineWidth, alignItems: 'center' },
-  input: { flex: 1, minHeight: 46, maxHeight: 110, borderRadius: 15, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },
-  send: { minHeight: 44, minWidth: 66, borderRadius: 13, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
-  toolButton: { minHeight: 44, minWidth: 42, borderRadius: 13, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  photo: { width: 220, height: 170, borderRadius: 10, marginBottom: 4 },
+  composer: { flexDirection: 'row', gap: 8, paddingHorizontal: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, alignItems: 'center' },
+  input: { flex: 1, minHeight: 44, maxHeight: 110, borderRadius: 22, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15 },
+  inputKids: { minHeight: 48, fontSize: 16, borderWidth: 2 },
+  send: { alignItems: 'center', justifyContent: 'center' },
+  toolButton: { alignItems: 'center', justifyContent: 'center' },
+  photo: { width: 220, height: 170, borderRadius: 12, marginBottom: 6 },
+  video: { width: 240, height: 180, borderRadius: 12, marginBottom: 6, backgroundColor: '#000', overflow: 'hidden' },
   mediaLink: { minHeight: 40, justifyContent: 'center' },
+  audioPill: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14 },
   stickerMessage: { alignItems: 'center', paddingHorizontal: 8 },
   sticker: { fontSize: 54, lineHeight: 66 },
-  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
-  stickerSheet: { maxHeight: '72%', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingTop: 20, paddingBottom: 28 },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingBottom: 14 },
-  sheetTitle: { fontSize: 17, fontWeight: '700' },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+  stickerSheet: { maxHeight: '72%', borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingTop: 20, paddingBottom: 28 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 14 },
+  sheetTitle: { fontSize: 17, fontWeight: '800' },
   stickerGrid: { paddingHorizontal: 10 },
   stickerButton: { width: '14.28%', minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   stickerOption: { fontSize: 27 },

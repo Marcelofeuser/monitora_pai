@@ -1,19 +1,19 @@
 const variants = {
   responsavel: {
-    name: 'Ampara Responsáveis',
+    name: 'Ampara',
     slug: 'ampara-responsavel',
     scheme: 'ampararesponsavel',
     package: 'com.amparakids.responsavel',
     role: 'parent',
-    icon: './assets/images/icon.png',
+    icon: './assets/images/icon-ampara.png',
   },
   crianca: {
-    name: 'Ampara Criança',
+    name: 'Ampara Kids',
     slug: 'ampara-crianca',
     scheme: 'amparacrianca',
     package: 'com.amparakids.crianca',
     role: 'child',
-    icon: './assets/images/icon-child.png',
+    icon: './assets/images/icon-ampara-kids.png',
   },
 };
 
@@ -35,7 +35,9 @@ module.exports = ({ config }) => {
       && name !== 'expo-secure-store';
   });
   if (variant.role === 'parent') {
-    plugins.push('@clerk/expo');
+    // Parent app offers native Sign in with Apple (iOS) next to Google and email.
+    plugins.push(['@clerk/expo', { appleSignIn: true }]);
+    plugins.push('expo-apple-authentication');
   } else {
     plugins.push([
       'expo-location',
@@ -76,6 +78,7 @@ module.exports = ({ config }) => {
   ]);
   plugins.push('./plugins/with-android-packaging');
   plugins.push('./plugins/with-ios-deployment-target');
+  plugins.push('./plugins/with-ios-scene-lifecycle');
   if (variant.role === 'child') {
     plugins.push('./plugins/with-child-ios-pods');
   }
@@ -103,7 +106,15 @@ module.exports = ({ config }) => {
     ios: {
       ...config.ios,
       bundleIdentifier: variant.package,
-      deploymentTarget: '15.1',
+      ...(variant.role === 'parent' ? { buildNumber: '17', usesAppleSignIn: true } : {}),
+      // Clerk's native iOS SDK requires iOS 17; keep the child app on its
+      // existing lower deployment target because it does not include Clerk.
+      deploymentTarget: variant.role === 'parent' ? '17.0' : '15.1',
+      infoPlist: {
+        ...config.ios?.infoPlist,
+        NSLocalNetworkUsageDescription:
+          'Permita o acesso à rede local para conectar o Ampara ao servidor de desenvolvimento durante os testes.',
+      },
     },
     web: { ...config.web, favicon: variant.icon },
     plugins,

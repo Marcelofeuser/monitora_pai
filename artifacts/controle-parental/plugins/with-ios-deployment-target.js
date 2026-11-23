@@ -1,9 +1,35 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { withFinalizedMod } = require('expo/config-plugins');
+const { withPodfile, withFinalizedMod } = require('expo/config-plugins');
 
 module.exports = function withIosDeploymentTarget(config) {
   const deploymentTarget = config.ios?.deploymentTarget ?? '15.1';
+
+  config = withPodfile(config, (podfileConfig) => {
+    const contents = podfileConfig.modResults.contents;
+    const setting = "installer.pods_project.targets.each do |target|";
+    const deploymentBlock = `\n    ${setting}\n      target.build_configurations.each do |build_config|\n        build_config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '${deploymentTarget}'\n      end\n    end\n`;
+
+    if (contents.includes(setting)) {
+      podfileConfig.modResults.contents = contents.replace(
+        /build_config\.build_settings\['IPHONEOS_DEPLOYMENT_TARGET'\] = '[^']+'/,
+        `build_config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '${deploymentTarget}'`,
+      );
+      return podfileConfig;
+    }
+
+    const closingPostInstall = '\n  end\nend';
+    const insertionPoint = contents.lastIndexOf(closingPostInstall);
+    if (insertionPoint === -1) {
+      throw new Error('Não foi possível localizar o fim do bloco post_install no Podfile.');
+    }
+
+    podfileConfig.modResults.contents =
+      contents.slice(0, insertionPoint) +
+      deploymentBlock +
+      contents.slice(insertionPoint);
+    return podfileConfig;
+  });
 
   return withFinalizedMod(config, [
     'ios',

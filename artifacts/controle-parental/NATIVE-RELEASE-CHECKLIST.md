@@ -33,9 +33,9 @@
 - [ ] Validar o contador e o bloqueio de tempo de uso em aparelhos reais; a contagem nativa ocorre enquanto o app está em primeiro plano e não impõe limites ao sistema operacional inteiro.
 - [x] Recompilar APKs Android de debug com os grupos e a gestão nativa de contatos; ambos foram compilados e tiveram assinatura e identificador verificados.
 - [ ] Configurar os projetos nativos no Clerk com os dois bundle/application IDs.
-- [ ] Confirmar e preservar a chave Android de assinatura de lançamento. O script solicita os quatro valores localmente e o Gradle bloqueia builds `release` sem assinatura.
+- [ ] Confirmar as senhas e preservar a chave Android de assinatura de lançamento. O script verifica as duas senhas antes da compilação; o Gradle bloqueia builds `release` sem assinatura.
 - [ ] Instalar e testar os APKs Android em aparelhos reais; não havia aparelho/emulador conectado neste Mac.
-- [ ] Gerar os APKs assinados de lançamento com `scripts/build-android-release.sh responsavel` e `scripts/build-android-release.sh crianca`.
+- [ ] Gerar os dois APKs assinados de lançamento com `scripts/build-android-release.sh ambos`.
 - [ ] Hospedar os APKs finais em HTTPS no domínio do Ampara Kids e configurar `PARENT_ANDROID_APK_URL` e `CHILD_ANDROID_APK_URL` no serviço Railway `landing page apps`.
 - [ ] Testar o fluxo de download, autorização de instalação e atualização dos dois APKs em aparelhos Android reais.
 - [ ] Definir com a Apple uma rota para iOS no Brasil. A instalação pública pelo site depende de marketplace alternativo autorizado pela Apple; conta pessoal e link direto para `.ipa` não bastam.
@@ -43,7 +43,7 @@
 
 ## Bloqueios externos conhecidos
 
-- A criação e a preservação da chave Android de assinatura dependem de uma ação local do responsável; não há confirmação de que exista keystore pronto.
+- Existe um keystore Android local, mas suas senhas ainda precisam ser validadas pelo responsável; nenhum APK de lançamento assinado foi confirmado.
 - Os APKs atuais são de debug, assinados com a chave de depuração, e não devem ser hospedados como lançamento.
 - As compilações iOS atuais são de simulador e não instalam em iPhones.
 - Para distribuição pública de iOS pelo site no Brasil, a Apple exige operação de marketplace alternativo autorizada. O requisito inclui conta Apple Developer de organização e critérios de elegibilidade (histórico de dois anos e mais de um milhão de instalações anuais, ou carta de crédito standby de US$ 1 milhão), além de obrigações operacionais.

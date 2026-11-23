@@ -54,3 +54,8 @@ Thumbs.db
 .env
 .env.railway-staging
 railway-staging-stripe-prices.json
+
+# repo clonado / saídas locais
+artifacts/controle-parental/monitora_pai/
+outputs/
+artifacts/controle-parental/assets/images/*-opaque-backup.png
