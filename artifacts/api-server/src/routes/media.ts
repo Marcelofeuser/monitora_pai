@@ -1,7 +1,6 @@
 import { Router, type IRouter, type Request } from "express";
 import { getAuth } from "@clerk/express";
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
 import { and, eq } from "drizzle-orm";
 import {
   childDeviceTokensTable,
@@ -205,9 +204,17 @@ router.get("/media/:filename", async (req, res) => {
   if (!authorized) return res.status(404).json({ error: "not_found" });
   if (!(await mediaFileExists(filename))) return res.status(404).json({ error: "not_found" });
 
+  // sendFile (via `send`) responde Range com 206 + Content-Range/Accept-Ranges.
+  // O AVPlayer do iOS EXIGE isso para tocar áudio/vídeo (.m4a/.mp4/.mov):
+  // com o stream inteiro em 200, ele baixa e não reproduz.
   res.setHeader("Content-Type", contentTypeForFilename(filename));
-  res.setHeader("Cache-Control", "private, max-age=86400, immutable");
-  createReadStream(mediaFilePath(filename)).pipe(res);
+  res.sendFile(
+    mediaFilePath(filename),
+    { acceptRanges: true, cacheControl: false, headers: { "Cache-Control": "private, max-age=86400, immutable" } },
+    (err) => {
+      if (err && !res.headersSent) res.status(404).json({ error: "not_found" });
+    },
+  );
   return undefined;
 });
 
