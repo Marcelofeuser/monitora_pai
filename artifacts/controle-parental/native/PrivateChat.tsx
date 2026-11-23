@@ -353,7 +353,13 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
       setError('Permita o acesso às fotos e vídeos para anexar uma mídia.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.85 });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      quality: 0.85,
+      // iPhone guarda fotos em HEIC e vídeos em HEVC; "compatible" exporta JPEG/H.264,
+      // que abrem em qualquer aparelho (Android, PWA) e passam na API.
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+    });
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
     if (asset.fileSize && asset.fileSize > 60 * 1024 * 1024) {
