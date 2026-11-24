@@ -102,7 +102,7 @@ router.post("/pairing", async (req, res) => {
     token: pairing.token,
     pairingCode: pairing.pairingCode,
     // URL que vai virar o QR code no frontend do Responsável.
-    joinUrl: `${process.env.APP_URL ?? ""}/join?token=${pairing.token}`,
+    joinUrl: `${process.env.CHILD_APP_URL ?? process.env.APP_URL ?? ""}/join?token=${pairing.token}`,
     expiresAt: pairing.expiresAt,
   });
 });
@@ -158,7 +158,7 @@ router.post("/pairing/reconnect", async (req, res) => {
   return res.status(201).json({
     token: pairing.token,
     pairingCode: pairing.pairingCode,
-    joinUrl: `${process.env.APP_URL ?? ""}/join?token=${pairing.token}`,
+    joinUrl: `${process.env.CHILD_APP_URL ?? process.env.APP_URL ?? ""}/join?token=${pairing.token}`,
     expiresAt: pairing.expiresAt,
     childName: child.name,
   });

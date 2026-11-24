@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { confirmPairing } from '@/lib/pairing-api';
+import { confirmPairing, confirmPairingWithCode } from '@/lib/pairing-api';
 import { reportLocation } from '@/lib/location-api';
 import { fetchChildPrivateConversation, sendChildPrivateMessage } from '@/lib/child-conversations-api';
 import type { PrivateMessage } from '@/lib/child-conversations-api';
@@ -152,6 +152,21 @@ export function PairingJoin() {
     if (el && groupStickToBottomRef.current) el.scrollTop = el.scrollHeight;
   }, [groupChatMessages]);
 
+  function applyPairingResult(result: { childName: string; childUserId: string; deviceToken: string }) {
+    setChildName(result.childName);
+    setChildId(result.childUserId);
+    setDeviceToken(result.deviceToken);
+    try {
+      localStorage.setItem(DEVICE_TOKEN_KEY, result.deviceToken);
+      localStorage.setItem(CHILD_NAME_KEY, result.childName);
+      localStorage.setItem(CHILD_ID_KEY, result.childUserId);
+    } catch {
+      // localStorage pode falhar (modo privado, etc.) — não bloqueia o fluxo.
+    }
+    try { window.history.replaceState(null, '', window.location.pathname); } catch { /* sem efeito */ }
+    setStatus('success');
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
@@ -184,24 +199,32 @@ export function PairingJoin() {
     }
 
     confirmPairing(token)
-      .then((result) => {
-        setChildName(result.childName);
-        setChildId(result.childUserId);
-        setDeviceToken(result.deviceToken);
-        try {
-          localStorage.setItem(DEVICE_TOKEN_KEY, result.deviceToken);
-          localStorage.setItem(CHILD_NAME_KEY, result.childName);
-          localStorage.setItem(CHILD_ID_KEY, result.childUserId);
-        } catch {
-          // localStorage pode falhar (modo privado, etc.) — não bloqueia o fluxo.
-        }
-        setStatus('success');
-      })
+      .then(applyPairingResult)
       .catch((err) => {
         setStatus('error');
         setErrorMessage(err instanceof Error ? err.message : tx('Erro desconhecido.'));
       });
   }, []);
+
+  // Criança digita o código de 8 dígitos em crianca.amparakids.com
+  // (o celular dela não recebe o link do Responsável).
+  const [pairCode, setPairCode] = useState('');
+  const [pairCodeBusy, setPairCodeBusy] = useState(false);
+  const [pairCodeError, setPairCodeError] = useState<string | null>(null);
+  async function submitPairCode(event: FormEvent) {
+    event.preventDefault();
+    const digits = pairCode.replace(/\D/g, '');
+    if (digits.length !== 8) { setPairCodeError(tx('O código tem 8 números.')); return; }
+    setPairCodeBusy(true);
+    setPairCodeError(null);
+    try {
+      applyPairingResult(await confirmPairingWithCode(digits));
+    } catch {
+      setPairCodeError(tx('Código inválido ou expirado. Peça um novo para o seu responsável.'));
+    } finally {
+      setPairCodeBusy(false);
+    }
+  }
 
   // Canal privado com o Responsável — carrega assim que o pareamento (ou a
   // restauração da credencial salva) termina com sucesso, e depois fica
@@ -843,11 +866,27 @@ export function PairingJoin() {
 
         {status === 'no_token' && (
           <div className="mt-10 flex flex-col items-center gap-3 rounded-[28px] border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-7 shadow-card">
-            <span className="text-5xl" aria-hidden="true">🧩</span>
-            <h1 className="font-kid text-xl font-extrabold">{tx('Link incompleto')}</h1>
-            <p className="text-sm leading-6 text-[hsl(var(--muted-foreground))]">
-              {tx('Este link não tem um código de pareamento válido. Peça para o Responsável gerar um novo QR code.')}
+            <span className="text-5xl" aria-hidden="true">🔑</span>
+            <h1 className="font-kid text-xl font-extrabold">{tx('Digite o código')}</h1>
+            <p className="text-center text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+              {tx('Peça para o seu responsável abrir o Ampara, tocar em "Vincular criança" e te passar o código de 8 números.')}
             </p>
+            <form onSubmit={(event) => { void submitPairCode(event); }} className="mt-2 flex w-full flex-col gap-3">
+              <input
+                value={pairCode}
+                onChange={(event) => setPairCode(event.target.value.replace(/[^\d ]/g, '').slice(0, 9))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="1234 5678"
+                aria-label={tx('Código de 8 números')}
+                data-testid="input-child-pair-code"
+                className="h-14 rounded-2xl border border-[hsl(var(--border))] bg-transparent text-center font-mono text-2xl font-extrabold tracking-[.25em] outline-none focus:border-[hsl(var(--primary))]"
+              />
+              {pairCodeError && <p role="alert" className="text-center text-sm font-semibold text-[hsl(var(--destructive))]">{pairCodeError}</p>}
+              <button type="submit" disabled={pairCodeBusy} data-testid="button-child-pair-code" className="min-h-12 rounded-full bg-[hsl(var(--primary))] font-extrabold text-[hsl(var(--primary-foreground))] disabled:opacity-60">
+                {pairCodeBusy ? tx('Confirmando…') : tx('Entrar')}
+              </button>
+            </form>
           </div>
         )}
 
@@ -861,6 +900,9 @@ export function PairingJoin() {
             {errorMessage && (
               <p className="text-xs text-[hsl(var(--muted-foreground))]">{tx('Detalhe técnico:')} {errorMessage}</p>
             )}
+            <button type="button" onClick={() => { setErrorMessage(null); setStatus('no_token'); }} className="mt-2 min-h-11 rounded-full bg-[hsl(var(--primary))] px-6 font-extrabold text-[hsl(var(--primary-foreground))]">
+              {tx('Digitar um código')}
+            </button>
           </div>
         )}
 
