@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Excluir conta e dados — Ampara</title>
+<meta name="description" content="Como excluir sua conta do Ampara e do Ampara Kids, quais dados são apagados e quais são mantidos." />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="canonical" href="https://amparakids.com/excluir-conta" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --cream: #F7F2E8;
+    --cream-2: #FBF7EF;
+    --ink: #24343A;
+    --ink-soft: #55636A;
+    --teal: #1F4C4A;
+    --teal-2: #2A615E;
+    --gold: #E7B867;
+    --gold-2: #D9A63F;
+    --line: #E4D9C4;
+    --radius-lg: 26px;
+    --radius-md: 16px;
+    --shadow: 0 18px 40px -18px rgba(31, 76, 74, 0.28);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Manrope', system-ui, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--teal); }
+  .serif { font-family: 'Newsreader', Georgia, serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  header.site {
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(247, 242, 232, 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; max-width: 1120px; margin: 0 auto; padding-left: 24px; padding-right: 24px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); }
+  .brand svg { flex: none; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; font-weight: 700; font-size: 14px; padding: 10px 18px; text-decoration: none; background: var(--teal); color: var(--cream-2); }
+
+  main { padding: 56px 0 96px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(231, 184, 103, 0.28); color: #8A5A16;
+    font-weight: 700; font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase;
+    padding: 7px 14px; border-radius: 999px; margin-bottom: 18px;
+  }
+  h1 { font-family: 'Newsreader', Georgia, serif; font-size: 40px; line-height: 1.12; margin: 0 0 12px; letter-spacing: -0.01em; }
+  .updated { color: var(--ink-soft); font-size: 14px; margin: 0 0 40px; }
+
+  .doc-card {
+    background: var(--cream-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: 40px clamp(20px, 5vw, 56px);
+  }
+
+  section.part { margin-top: 44px; }
+  section.part:first-of-type { margin-top: 0; }
+  h2 { font-family: 'Newsreader', Georgia, serif; font-size: 26px; color: var(--teal); margin: 0 0 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+  section.part:first-of-type h2 { border-top: none; padding-top: 0; }
+  h3 { font-size: 16px; font-weight: 800; margin: 24px 0 8px; }
+  p { margin: 0 0 14px; font-size: 15.5px; }
+  ul, ol.items { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 6px; font-size: 15.5px; }
+  strong { font-weight: 800; }
+
+  .faq-item {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    background: var(--cream);
+  }
+  .faq-item summary { font-weight: 700; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item summary .plus { color: var(--teal); font-size: 20px; font-weight: 800; }
+  .faq-item[open] summary .plus { transform: rotate(45deg); }
+  .faq-item p { margin-top: 10px; margin-bottom: 0; color: var(--ink-soft); }
+
+  .contact-card {
+    display: flex; flex-wrap: wrap; gap: 24px; justify-content: space-between;
+    background: var(--teal); color: var(--cream-2);
+    border-radius: var(--radius-md); padding: 24px 28px; margin-top: 8px;
+  }
+  .contact-card h3 { color: var(--cream-2); margin-top: 0; }
+  .contact-card a { color: var(--gold); font-weight: 700; }
+  .contact-card p { margin: 0; font-size: 14px; opacity: 0.9; }
+
+  footer.site { border-top: 1px solid var(--line); padding: 32px 0; }
+  .footer-bottom { max-width: 1120px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--ink-soft); font-size: 13px; }
+
+  @media (max-width: 640px) {
+    h1 { font-size: 30px; }
+    .doc-card { padding: 28px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="nav">
+    <a class="brand" href="/">
+      <svg width="30" height="30" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="180" height="180" rx="42" fill="#E7B867"/>
+        <path d="M90 35L133 51V84C133 112 114 132 90 144C66 132 47 112 47 84V51L90 35Z" fill="#1F4C4A"/>
+        <path d="M70 88L83 101L111 72" stroke="#F7F2E8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Ampara
+    </a>
+    <a class="btn" href="/">Voltar ao site</a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="eyebrow">Privacidade</div>
+    <h1>Excluir sua conta e seus dados</h1>
+    <p class="updated">Vale para os apps <strong>Ampara</strong> (responsável) e <strong>Ampara Kids</strong> (criança), desenvolvidos pela SevenGo Smart Technology. Atualizado em 24/11/2026.</p>
+
+    <div class="doc-card">
+
+      <section class="part" id="pelo-app">
+        <h2>1. Pelo app Ampara (mais rápido)</h2>
+        <ol class="items">
+          <li>Abra o app <strong>Ampara</strong> e entre na sua conta.</li>
+          <li>Toque no <strong>Menu</strong> (☰) e depois em <strong>Minha conta</strong>.</li>
+          <li>Toque em <strong>Excluir conta</strong> e confirme as duas vezes.</li>
+        </ol>
+        <p>A exclusão é imediata e não pode ser desfeita. Se houver assinatura ativa, ela é cancelada junto.</p>
+      </section>
+
+      <section class="part" id="por-email">
+        <h2>2. Sem acesso ao app</h2>
+        <p>Envie um e-mail para <a href="mailto:contato@amparakids.com?subject=Excluir%20minha%20conta">contato@amparakids.com</a> com o assunto <strong>"Excluir minha conta"</strong>, a partir do e-mail cadastrado. Confirmamos a identidade e concluímos a exclusão em até <strong>15 dias</strong>.</p>
+      </section>
+
+      <section class="part" id="crianca">
+        <h2>3. Dados da criança (Ampara Kids)</h2>
+        <p>A criança não tem conta própria: o aparelho dela é pareado por um responsável. Os dados da criança são apagados quando:</p>
+        <ul>
+          <li>o responsável remove a criança no Ampara (app ou site responsavel.amparakids.com); ou</li>
+          <li>o responsável exclui a própria conta e é o <strong>único</strong> responsável daquela criança.</li>
+        </ul>
+        <p>Se a criança tiver outro responsável cadastrado, ela e os dados dela continuam com esse outro responsável. No Ampara Kids, o botão <strong>Sair</strong> desconecta o aparelho na hora.</p>
+      </section>
+
+      <section class="part" id="o-que-e-apagado">
+        <h2>4. O que é apagado</h2>
+        <ul>
+          <li>Conta de login (e-mail, senha e vínculos com Google ou Apple) e perfil (nome, telefone, foto, redes sociais).</li>
+          <li>Conversas e mensagens das quais você participa, incluindo fotos, áudios e vídeos enviados.</li>
+          <li>Grupos que você criou e as mensagens deles.</li>
+          <li>Crianças das quais você é o único responsável, com localizações, tempo de uso, bloqueios, contatos e aparelhos pareados.</li>
+          <li>Tokens de aparelho e de notificação.</li>
+        </ul>
+      </section>
+
+      <section class="part" id="o-que-e-mantido">
+        <h2>5. O que é mantido e por quanto tempo</h2>
+        <ul>
+          <li><strong>Registros de pagamento</strong>: ficam com o processador de pagamentos (Stripe) pelo prazo exigido pela legislação fiscal.</li>
+          <li><strong>Registros técnicos do servidor</strong> (logs de acesso, sem conteúdo de mensagens): apagados automaticamente em até 30 dias.</li>
+          <li><strong>Crianças com outro responsável</strong>: permanecem na conta desse responsável, como explicado acima.</li>
+        </ul>
+        <p>Mais detalhes na nossa <a href="/privacidade.html">Política de Privacidade</a>.</p>
+      </section>
+
+      <section class="part" id="contato">
+        <h2>Fale com a gente</h2>
+        <div class="contact-card">
+          <div>
+            <h3>Atendimento Ampara</h3>
+            <p>Dúvidas sobre exclusão de dados:</p>
+          </div>
+          <div>
+            <a href="mailto:contato@amparakids.com">contato@amparakids.com</a>
+            <p style="margin-top:6px;">SEVENGO SMART TECNOLOGY INOVA SIMPLES (I.S.) — CNPJ 65.280.576/0001-03</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="footer-bottom">
+    <span>&copy; <span id="year"></span> Ampara. Todos os direitos reservados.</span>
+    <span>Goiânia, Brasil</span>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+
+</body>
+</html>

@@ -19,6 +19,7 @@ import {
 } from "@workspace/db";
 import { getGuardianChildIds } from "./guardians";
 import { logger } from "./logger";
+import { deleteMediaFile, isValidMediaFilename } from "./mediaStorage";
 
 const STRIPE_VERSION = "2026-03-25.dahlia";
 
@@ -28,6 +29,7 @@ export type AccountDeletionResult = {
   deletedChildIds: string[];
   keptChildIds: string[];
   canceledStripeSubscriptions: number;
+  deletedMediaFiles?: number;
 };
 
 /**
@@ -89,6 +91,11 @@ export async function deleteParentAccount(parentId: string): Promise<AccountDele
     }
     const doomed = [parentId, ...deleteChildIds];
 
+    // 2b) Arquivos de mídia (fotos, áudios, vídeos, fotos de perfil/grupo) que
+    //     somem junto com as linhas abaixo. Coletados ANTES do delete; o disco
+    //     só é limpo depois do commit (se a transação falhar, nada é apagado).
+    const mediaFiles = await collectDoomedMedia(doomed, deleteChildIds);
+
     await db.transaction(async (tx) => {
       // 3) Crianças mantidas: passa posse e autoria para outro responsável.
       for (const { childId, heirId } of keepChildren) {
@@ -116,7 +123,9 @@ export async function deleteParentAccount(parentId: string): Promise<AccountDele
       await tx.delete(usersTable).where(inArray(usersTable.id, doomed));
     });
 
-    result = { ...result, deletedChildIds: deleteChildIds, keptChildIds: keepChildren.map((k) => k.childId) };
+    for (const filename of mediaFiles) await deleteMediaFile(filename);
+
+    result = { ...result, deletedChildIds: deleteChildIds, keptChildIds: keepChildren.map((k) => k.childId), deletedMediaFiles: mediaFiles.length };
   }
 
   // 6) Conta de login. 404 = já apagada.
@@ -129,4 +138,44 @@ export async function deleteParentAccount(parentId: string): Promise<AccountDele
 
   logger.info({ parentId, ...result }, "parent account deleted");
   return result;
+}
+
+/** "/api/media/<arquivo>" -> "<arquivo>" (só nomes gerados por saveMedia). */
+function mediaFilename(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const name = url.split("/").pop() ?? "";
+  return isValidMediaFilename(name) ? name : null;
+}
+
+async function collectDoomedMedia(doomed: string[], deletedChildIds: string[]): Promise<string[]> {
+  const files = new Set<string>();
+  const add = (url: string | null | undefined) => { const f = mediaFilename(url); if (f) files.add(f); };
+
+  const convs = await db
+    .select({ id: conversationsTable.id })
+    .from(conversationsTable)
+    .where(or(inArray(conversationsTable.participantAId, doomed), inArray(conversationsTable.participantBId, doomed)));
+  const convIds = convs.map((c) => c.id);
+  const msgs = await db
+    .select({ url: messagesTable.contentUrl })
+    .from(messagesTable)
+    .where(convIds.length ? or(inArray(messagesTable.conversationId, convIds), inArray(messagesTable.senderId, doomed)) : inArray(messagesTable.senderId, doomed));
+  msgs.forEach((m) => add(m.url));
+
+  const groupFilter = deletedChildIds.length
+    ? or(inArray(groupsTable.createdByParentId, doomed), inArray(groupsTable.childId, deletedChildIds))
+    : inArray(groupsTable.createdByParentId, doomed);
+  const groups = await db.select({ id: groupsTable.id, photoUrl: groupsTable.photoUrl }).from(groupsTable).where(groupFilter);
+  groups.forEach((g) => add(g.photoUrl));
+  const groupIds = groups.map((g) => g.id);
+  const gmsgs = await db
+    .select({ url: groupMessagesTable.contentUrl })
+    .from(groupMessagesTable)
+    .where(groupIds.length ? or(inArray(groupMessagesTable.groupId, groupIds), inArray(groupMessagesTable.senderId, doomed)) : inArray(groupMessagesTable.senderId, doomed));
+  gmsgs.forEach((m) => add(m.url));
+
+  const people = await db.select({ photoUrl: usersTable.photoUrl }).from(usersTable).where(inArray(usersTable.id, doomed));
+  people.forEach((u) => add(u.photoUrl));
+
+  return [...files];
 }
