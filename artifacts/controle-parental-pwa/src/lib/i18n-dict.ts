@@ -378,4 +378,8 @@ export const DICT: Record<string, { en: string; es: string }> = {
   'Abrir foto em tela cheia': { en: 'Open photo full screen', es: 'Abrir foto en pantalla completa' },
   'Foto em tela cheia': { en: 'Full-screen photo', es: 'Foto en pantalla completa' },
   'Fechar foto': { en: 'Close photo', es: 'Cerrar foto' },
+  'Foto': { en: 'Photo', es: 'Foto' },
+  'Mensagem de voz': { en: 'Voice message', es: 'Mensaje de voz' },
+  'Vídeo': { en: 'Video', es: 'Video' },
+  'Mensagem': { en: 'Message', es: 'Mensaje' },
 };

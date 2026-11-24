@@ -8,7 +8,7 @@ import { Feather, FontAwesome } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import { Avatar, ParentThemeProvider, useParentColors as useColors, useParentTheme } from './theme';
-import { createChildPairing, createChildReconnectPairing, createParentContact, createParentContactInvite, createParentGroup, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentContacts, fetchParentGroupMessages, fetchParentGroups, fetchParentMirroredConversation, fetchParentPrivateMessages, fetchParentScreenTime, fetchParentBio, updateParentBio, deleteParentAccount, fetchParentChildBio, updateParentChildBio, fetchParentGuardians, uploadParentPhoto, sendParentGroupMessage, sendParentPrivateMessage, setParentChildLock, setParentContactStatus, setParentDailyLimit, type BioProfile, type ChildProfile, type NativeUploadFile, type GuardianProfile, type GroupProfile, type MirroredContact, type PairingResult, type PrivateMessageInput, type ScreenTimeStatus, setParentUnauthorizedHandler } from './api';
+import { createChildPairing, createChildReconnectPairing, createParentContact, createParentContactInvite, createParentGroup, fetchParentApprovedContacts, fetchParentChildLocation, fetchParentChildren, fetchParentContacts, fetchParentGroupMessages, fetchParentGroups, fetchParentMirroredConversation, fetchParentPrivateMessages, fetchParentScreenTime, fetchParentBio, updateParentBio, deleteParentAccount, fetchParentChildBio, updateParentChildBio, fetchParentGuardians, uploadParentPhoto, sendParentGroupMessage, sendParentPrivateMessage, reactAsParent, setParentChildLock, setParentContactStatus, setParentDailyLimit, type BioProfile, type ChildProfile, type NativeUploadFile, type GuardianProfile, type GroupProfile, type MirroredContact, type PairingResult, type PrivateMessageInput, type ScreenTimeStatus, setParentUnauthorizedHandler } from './api';
 import { ChatChip, PrivateChat } from './PrivateChat';
 import { ProfilePhoto } from './ProfilePhoto';
 import { ParentLocation } from './ParentLocation';
@@ -83,6 +83,17 @@ function ParentSession() {
   const parentMediaHeaders = useCallback(async (): Promise<Record<string, string>> => {
     const token = await stableGetToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
+  }, [stableGetToken]);
+  // 1.1: reações (conversa privada e grupo).
+  const reactDirect = useCallback(async (messageId: string, emoji: string | null) => {
+    const token = await stableGetToken();
+    if (!token) throw new Error('Sua sessão expirou. Entre novamente.');
+    await reactAsParent('direct', messageId, emoji, token);
+  }, [stableGetToken]);
+  const reactGroup = useCallback(async (messageId: string, emoji: string | null) => {
+    const token = await stableGetToken();
+    if (!token) throw new Error('Sua sessão expirou. Entre novamente.');
+    await reactAsParent('group', messageId, emoji, token);
   }, [stableGetToken]);
   const signOutRef = useRef(signOut);
   signOutRef.current = signOut;
@@ -325,13 +336,13 @@ function ParentSession() {
     return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><MirroredContacts child={mirrorChild} loadContacts={loadMirroredContacts} onSelect={setMirrorContact} onBack={() => setMirrorChild(null)} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
   if (selectedGroup && groupChild && userId) {
-    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><PrivateChat getMediaHeaders={parentMediaHeaders} title={selectedGroup.name} subtitle={`Grupo · ${selectedGroup.members.map((member) => member.contactName).join(', ') || groupChild.name}`} ownUserId={userId} loadMessages={loadSelectedGroupMessages} sendMessage={sendSelectedGroupMessage} onBack={() => setSelectedGroup(null)} headerAction={<ChatChip label="Chamada de vídeo" icon="video" disabled={call.phase !== 'idle'} onPress={() => void call.startCall(groupChild.id, groupChild.name)} />} /><NativeCallOverlay call={call} /></ParentMenuShell>;
+    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><PrivateChat getMediaHeaders={parentMediaHeaders} title={selectedGroup.name} subtitle={`Grupo · ${selectedGroup.members.map((member) => member.contactName).join(', ') || groupChild.name}`} ownUserId={userId} loadMessages={loadSelectedGroupMessages} sendMessage={sendSelectedGroupMessage} onReact={reactGroup} onBack={() => setSelectedGroup(null)} headerAction={<ChatChip label="Chamada de vídeo" icon="video" disabled={call.phase !== 'idle'} onPress={() => void call.startCall(groupChild.id, groupChild.name)} />} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
   if (groupChild && userId) {
     return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><ParentGroups child={groupChild} getToken={stableGetToken} onSelect={setSelectedGroup} onBack={() => setGroupChild(null)} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
   if (selectedChild && userId) {
-    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><PrivateChat getMediaHeaders={parentMediaHeaders} title={selectedChild.name} ownUserId={userId} loadMessages={loadSelectedMessages} sendMessage={sendSelectedMessage} onBack={() => setSelectedChild(null)} headerAction={<ChatChip label="Chamada de vídeo" icon="video" disabled={call.phase !== 'idle'} onPress={() => void call.startCall(selectedChild.id, selectedChild.name)} />} /><NativeCallOverlay call={call} /></ParentMenuShell>;
+    return <ParentMenuShell colors={colors} menuVisible={menuVisible} setMenuVisible={setMenuVisible} onSelect={chooseMenu}><PrivateChat getMediaHeaders={parentMediaHeaders} title={selectedChild.name} ownUserId={userId} loadMessages={loadSelectedMessages} sendMessage={sendSelectedMessage} onReact={reactDirect} onBack={() => setSelectedChild(null)} headerAction={<ChatChip label="Chamada de vídeo" icon="video" disabled={call.phase !== 'idle'} onPress={() => void call.startCall(selectedChild.id, selectedChild.name)} />} /><NativeCallOverlay call={call} /></ParentMenuShell>;
   }
 
   const issuePairing = async (childName: string, childAge: string, consent: boolean) => {

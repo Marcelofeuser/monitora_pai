@@ -4,7 +4,7 @@ import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioPlayer, useAu
 import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { mediaSource, type PrivateMessage, type PrivateMessageInput } from './api';
+import { mediaSource, REACTION_EMOJIS, type PrivateMessage, type PrivateMessageInput } from './api';
 import { ALLOWED_STICKERS } from './stickers';
 import { Avatar, CHAT_DARK, KIDS } from './theme';
 
@@ -22,6 +22,8 @@ type Props = {
   safeTop?: boolean;
   /** Cabeçalhos de autenticação para baixar fotos, áudios e vídeos (a mídia é privada). */
   getMediaHeaders?: () => Promise<Record<string, string>>;
+  /** 1.1: reagir (emoji null remove). Sem isto (ex.: espelho), segurar a mensagem não abre reações. */
+  onReact?: (messageId: string, emoji: string | null) => Promise<void>;
 };
 
 type ChatTheme = {
@@ -336,7 +338,7 @@ function VideoMessage({ contentUrl, getHeaders, theme, mine }: { contentUrl: str
   );
 }
 
-export function PrivateChat({ title, subtitle = 'Conversa privada da família', ownUserId, loadMessages, sendMessage, onBack, headerAction, readOnly = false, variant = 'default', safeTop = false, getMediaHeaders }: Props) {
+export function PrivateChat({ title, subtitle = 'Conversa privada da família', ownUserId, loadMessages, sendMessage, onBack, headerAction, readOnly = false, variant = 'default', safeTop = false, getMediaHeaders, onReact }: Props) {
   const theme = variant === 'kids' ? KIDS_THEME : ADULT_THEME;
   const kids = theme.kids;
   const insets = useSafeAreaInsets();
@@ -346,6 +348,10 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stickerPickerOpen, setStickerPickerOpen] = useState(false);
+  // 1.1: menu ao segurar a mensagem (reações + responder) e citação no composer.
+  const [actionFor, setActionFor] = useState<PrivateMessage | null>(null);
+  const [replyingTo, setReplyingTo] = useState<PrivateMessage | null>(null);
+  const inputRef = useRef<TextInput>(null);
   const recorder = useAudioRecorder({
     ...RecordingPresets.LOW_QUALITY,
     extension: '.m4a',
@@ -385,9 +391,11 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
     setSending(true);
     setError(null);
     try {
-      const created = await sendMessage(input);
+      const payload: PrivateMessageInput = replyingTo ? { ...input, replyToMessageId: replyingTo.id } : input;
+      const created = await sendMessage(payload);
       setMessages((current) => current.some((message) => message.id === created.id) ? current : [...current, created]);
       setDraft('');
+      setReplyingTo(null);
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível enviar a mensagem.');
@@ -471,6 +479,35 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
     }
   };
 
+  const nameOf = (senderId: string) => {
+    if (senderId === ownUserId) return 'Você';
+    return messages.find((m) => m.senderId === senderId && m.senderName)?.senderName ?? title;
+  };
+
+  const react = async (message: PrivateMessage, emoji: string) => {
+    setActionFor(null);
+    if (!onReact) return;
+    const mineNow = message.reactions?.find((r) => r.userId === ownUserId)?.emoji ?? null;
+    const next = mineNow === emoji ? null : emoji;
+    // Otimista: atualiza já, o polling confirma.
+    setMessages((current) => current.map((m) => m.id !== message.id ? m : {
+      ...m,
+      reactions: [...(m.reactions ?? []).filter((r) => r.userId !== ownUserId), ...(next ? [{ emoji: next, userId: ownUserId }] : [])],
+    }));
+    try {
+      await onReact(message.id, next);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível reagir.');
+      void refresh();
+    }
+  };
+
+  const startReply = (message: PrivateMessage) => {
+    setActionFor(null);
+    setReplyingTo(message);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
   const canSend = !!draft.trim() && !sending;
   const toolSize = kids ? 46 : 42;
 
@@ -492,11 +529,43 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
     const senderLabel = !mine && message.senderName ? (
       <Text style={[styles.senderName, { color: senderColor(theme, message.senderName) }]}>{message.senderName}</Text>
     ) : null;
+    const quote = message.replyTo ? (
+      <View style={[styles.quote, { borderLeftColor: kids ? KIDS.green : theme.accent, backgroundColor: mine ? 'rgba(0,0,0,0.12)' : 'rgba(127,127,127,0.12)' }]}>
+        <Text numberOfLines={1} style={[styles.quoteName, { color: mine ? theme.mineText : theme.accent }]}>{nameOf(message.replyTo.senderId)}</Text>
+        <Text numberOfLines={2} style={[styles.quoteText, { color: mine ? theme.mineText : theme.otherText }]}>{previewText(message.replyTo)}</Text>
+      </View>
+    ) : null;
+    const grouped = groupReactions(message.reactions);
+    const myReaction = message.reactions?.find((r) => r.userId === ownUserId)?.emoji ?? null;
+    const reactionBar = grouped.length > 0 ? (
+      <View style={[styles.reactionBar, mine ? { alignSelf: 'flex-end' } : { alignSelf: 'flex-start' }]}>
+        {grouped.map(({ emoji, count }) => (
+          <Pressable
+            key={emoji}
+            accessibilityRole="button"
+            accessibilityLabel={`Reação ${emoji}, ${count}`}
+            disabled={readOnly || !onReact}
+            onPress={() => void react(message, emoji)}
+            style={[styles.reactionChip, { backgroundColor: theme.composerBg, borderColor: myReaction === emoji ? (kids ? KIDS.green : theme.accent) : theme.border }]}
+          >
+            <Text style={styles.reactionChipText}>{emoji}{count > 1 ? ` ${count}` : ''}</Text>
+          </Pressable>
+        ))}
+      </View>
+    ) : null;
+    const canAct = !readOnly && !!onReact;
     return (
+      <Pressable
+        onLongPress={canAct ? () => setActionFor(message) : undefined}
+        delayLongPress={280}
+        accessibilityHint={canAct ? 'Segure para reagir ou responder' : undefined}
+        style={[styles.messageCol, mine && styles.messageColMine]}
+      >
       <View style={[styles.messageRow, mine && styles.messageRowMine]}>
         {sticker ? (
           <View style={styles.stickerMessage}>
             {senderLabel}
+            {quote}
             <Text accessibilityLabel={`Figurinha ${sticker}`} style={styles.sticker}>{sticker}</Text>
             <Text style={[styles.time, { color: theme.otherTime }]}>{time}</Text>
           </View>
@@ -512,6 +581,7 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
             },
           ]}>
             {senderLabel}
+            {quote}
             {message.type === 'photo' && mediaUrl ? <PhotoMessage contentUrl={mediaUrl} getHeaders={getMediaHeaders} color={mine ? theme.mineText : theme.otherText} /> : null}
             {message.type === 'audio' && mediaUrl ? <AudioMessage contentUrl={mediaUrl} getHeaders={getMediaHeaders} theme={theme} mine={mine} /> : null}
             {message.type === 'video' && mediaUrl ? <VideoMessage contentUrl={mediaUrl} getHeaders={getMediaHeaders} theme={theme} mine={mine} /> : null}
@@ -521,6 +591,8 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
           </View>
         )}
       </View>
+      {reactionBar}
+      </Pressable>
     );
   };
 
@@ -560,6 +632,17 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
         />
       )}
       {!!error && <Text accessibilityRole="alert" style={[styles.error, { color: theme.danger }]}>{error}</Text>}
+      {!readOnly && replyingTo ? (
+        <View style={[styles.replyBar, { backgroundColor: theme.composerBg, borderTopColor: theme.border }]}>
+          <View style={[styles.quote, { flex: 1, marginBottom: 0, borderLeftColor: kids ? KIDS.green : theme.accent, backgroundColor: 'rgba(127,127,127,0.12)' }]}>
+            <Text numberOfLines={1} style={[styles.quoteName, { color: theme.accent }]}>Respondendo a {nameOf(replyingTo.senderId)}</Text>
+            <Text numberOfLines={1} style={[styles.quoteText, { color: theme.inputText }]}>{previewText({ type: replyingTo.type, textContent: replyingTo.textContent, sticker: replyingTo.contentUrl?.startsWith('emoji:') ? replyingTo.contentUrl.slice(6) : null })}</Text>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Cancelar resposta" hitSlop={10} onPress={() => setReplyingTo(null)} style={{ padding: 6 }}>
+            <Feather name="x" size={20} color={theme.inputText} />
+          </Pressable>
+        </View>
+      ) : null}
       {!readOnly && <View style={[styles.composer, { backgroundColor: theme.composerBg, borderTopColor: theme.border, paddingBottom: Math.max(12, insets.bottom + 8) }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Anexar foto ou vídeo" disabled={sending} onPress={() => void pickMedia()} style={[styles.toolButton, { width: toolSize, height: toolSize, borderRadius: toolSize / 2, backgroundColor: theme.toolPlus }]}>
           <Feather name="plus" size={20} color={theme.toolIcon} />
@@ -569,6 +652,7 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
         </Pressable>
         {recorderState.isRecording ? <Text accessibilityLiveRegion="polite" style={{ color: theme.danger, fontSize: 12, fontWeight: '700' }}>{Math.floor(recorderState.durationMillis / 1000)}s</Text> : null}
         <TextInput
+          ref={inputRef}
           accessibilityLabel="Mensagem"
           value={draft}
           onChangeText={setDraft}
@@ -607,6 +691,26 @@ export function PrivateChat({ title, subtitle = 'Conversa privada da família', 
           </View>
         </View>
       </Modal>}
+      {canReactModal(readOnly, onReact) && <Modal visible={!!actionFor} transparent animationType="fade" onRequestClose={() => setActionFor(null)}>
+        <Pressable style={styles.actionBackdrop} onPress={() => setActionFor(null)}>
+          <Pressable style={[styles.actionSheet, { backgroundColor: theme.sheetBg }]} onPress={() => {}}>
+            <View style={styles.reactionPickRow}>
+              {REACTION_EMOJIS.map((emoji) => {
+                const selected = actionFor?.reactions?.some((r) => r.userId === ownUserId && r.emoji === emoji);
+                return (
+                  <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`Reagir com ${emoji}`} onPress={() => actionFor && void react(actionFor, emoji)} style={[styles.reactionPick, selected && { backgroundColor: 'rgba(127,127,127,0.25)' }]}>
+                    <Text style={styles.reactionPickText}>{emoji}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable accessibilityRole="button" onPress={() => actionFor && startReply(actionFor)} style={[styles.actionItem, { borderTopColor: theme.border }]}>
+              <Feather name="corner-up-left" size={19} color={theme.sheetText} />
+              <Text style={[styles.actionItemText, { color: theme.sheetText }]}>Responder</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>}
     </KeyboardAvoidingView>
   );
 }
@@ -630,6 +734,22 @@ const styles = StyleSheet.create({
   dayChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
   dayText: { fontSize: 11, fontWeight: '700' },
   messageRow: { flexDirection: 'row', justifyContent: 'flex-start' },
+  messageCol: { alignItems: 'flex-start' },
+  messageColMine: { alignItems: 'flex-end' },
+  quote: { borderLeftWidth: 3, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5, marginBottom: 6 },
+  quoteName: { fontSize: 12, fontWeight: '800' },
+  quoteText: { fontSize: 13, opacity: 0.9 },
+  reactionBar: { flexDirection: 'row', gap: 4, marginTop: -4, marginBottom: 2, marginHorizontal: 8 },
+  reactionChip: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2 },
+  reactionChipText: { fontSize: 14 },
+  replyBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth },
+  actionBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 24 },
+  actionSheet: { borderRadius: 20, overflow: 'hidden' },
+  reactionPickRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 12, paddingHorizontal: 8 },
+  reactionPick: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  reactionPickText: { fontSize: 28 },
+  actionItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth },
+  actionItemText: { fontSize: 16, fontWeight: '600' },
   messageRowMine: { justifyContent: 'flex-end' },
   senderName: { fontSize: 11, fontWeight: '800', marginBottom: 3 },
   bubble: { maxWidth: '82%', minWidth: 70, paddingHorizontal: 13, paddingTop: 9, paddingBottom: 6, borderRadius: 18 },
@@ -662,3 +782,23 @@ const styles = StyleSheet.create({
   stickerButton: { width: '14.28%', minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   stickerOption: { fontSize: 27 },
 });
+
+function canReactModal(readOnly: boolean, onReact: unknown): boolean {
+  return !readOnly && !!onReact;
+}
+
+function previewText(m: { type: string; textContent: string | null; sticker?: string | null }): string {
+  if (m.sticker) return `Figurinha ${m.sticker}`;
+  if (m.textContent) return m.textContent;
+  if (m.type === 'photo') return '📷 Foto';
+  if (m.type === 'audio') return '🎤 Mensagem de voz';
+  if (m.type === 'video') return '🎬 Vídeo';
+  return 'Mensagem';
+}
+
+function groupReactions(reactions?: Array<{ emoji: string; userId: string }>): Array<{ emoji: string; count: number }> {
+  if (!reactions?.length) return [];
+  const counts = new Map<string, number>();
+  for (const r of reactions) counts.set(r.emoji, (counts.get(r.emoji) ?? 0) + 1);
+  return [...counts.entries()].map(([emoji, count]) => ({ emoji, count }));
+}

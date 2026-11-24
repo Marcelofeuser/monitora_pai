@@ -6,6 +6,10 @@ export type ChatMessageLike = {
   type: string;
   textContent: string | null;
   contentUrl: string | null;
+  /** 1.1: vindo da API — prévia da mensagem respondida. */
+  replyTo?: { id: string; senderId: string; type: string; textContent: string | null; sticker: string | null } | null;
+  /** 1.1: reações ({ emoji, userId }). */
+  reactions?: Array<{ emoji: string; userId: string }>;
 };
 
 const STICKER_PREFIX = 'emoji:';
@@ -125,7 +129,48 @@ function AudioContent({ contentUrl, authHeaders }: { contentUrl: string; authHea
  * repassado pro fetch autenticado de foto/vídeo (Bearer do Clerk pro
  * Responsável, X-Child-Token pra Criança — ver PrivateMessagesList.tsx).
  */
-export function MessageContent({
+function replyPreviewText(r: NonNullable<ChatMessageLike['replyTo']>): string {
+  if (r.sticker) return `${tx('Figurinha')} ${r.sticker}`;
+  if (r.textContent) return r.textContent;
+  if (r.type === 'photo') return `📷 ${tx('Foto')}`;
+  if (r.type === 'audio') return `🎤 ${tx('Mensagem de voz')}`;
+  if (r.type === 'video') return `🎬 ${tx('Vídeo')}`;
+  return tx('Mensagem');
+}
+
+/**
+ * 1.1: citação + reações em volta do conteúdo. Só exibe (o web ainda não
+ * cria reação/resposta; isso é feito pelos apps Ampara e Ampara Kids).
+ */
+export function MessageContent(props: { message: ChatMessageLike; authHeaders: HeadersInit }) {
+  const { message } = props;
+  const quote = message.replyTo ? (
+    <div className="mb-1.5 rounded-md border-l-[3px] border-current/60 bg-black/10 px-2 py-1 text-xs opacity-90" data-testid="message-reply-quote">
+      <span className="line-clamp-2">↩︎ {replyPreviewText(message.replyTo)}</span>
+    </div>
+  ) : null;
+  const counts = new Map<string, number>();
+  for (const r of message.reactions ?? []) counts.set(r.emoji, (counts.get(r.emoji) ?? 0) + 1);
+  const reactions = counts.size > 0 ? (
+    <div className="mt-1 flex flex-wrap gap-1" data-testid="message-reactions">
+      {[...counts.entries()].map(([emoji, count]) => (
+        <span key={emoji} className="rounded-full bg-black/10 px-1.5 py-0.5 text-xs leading-none">
+          {emoji}{count > 1 ? ` ${count}` : ''}
+        </span>
+      ))}
+    </div>
+  ) : null;
+  if (!quote && !reactions) return <MessageBody {...props} />;
+  return (
+    <>
+      {quote}
+      <MessageBody {...props} />
+      {reactions}
+    </>
+  );
+}
+
+function MessageBody({
   message,
   authHeaders,
 }: {

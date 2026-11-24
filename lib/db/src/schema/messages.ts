@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, boolean, pgEnum, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -45,6 +45,9 @@ export const messagesTable = pgTable("messages", {
   type: messageTypeEnum("type").notNull(),
   contentUrl: text("content_url"),
   textContent: text("text_content"),
+  // 1.1: "responder" uma mensagem específica. Nulo = mensagem normal.
+  // ON DELETE SET NULL: se a original sumir, a resposta fica sem citação.
+  replyToMessageId: uuid("reply_to_message_id").references((): AnyPgColumn => messagesTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
