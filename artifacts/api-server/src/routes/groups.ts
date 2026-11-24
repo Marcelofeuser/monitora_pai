@@ -11,6 +11,7 @@ import { sendFcmToParent } from "../lib/fcm";
 import { requireChildAuth, type ChildAuthedRequest } from "../middlewares/childAuth";
 import { requireContactAuth, type ContactAuthedRequest } from "../middlewares/contactAuth";
 import { isGuardianOfChild, getGuardiansOfChild } from "../lib/guardians";
+import { withChatExtras, readReplyId, resolveReplyTo } from "../lib/chatExtras";
 
 const router: IRouter = Router();
 
@@ -259,11 +260,14 @@ router.get("/groups/:id/messages", async (req, res) => {
     return res.status(403).json({ error: "not_the_parent_of_this_child" });
   }
 
-  const messages = await db
-    .select()
-    .from(groupMessagesTable)
-    .where(eq(groupMessagesTable.groupId, group.id))
-    .orderBy(asc(groupMessagesTable.createdAt));
+  const messages = await withChatExtras(
+    await db
+      .select()
+      .from(groupMessagesTable)
+      .where(eq(groupMessagesTable.groupId, group.id))
+      .orderBy(asc(groupMessagesTable.createdAt)),
+    "group",
+  );
   const names = await participantNames({ ...group });
 
   return res.json({ group, messages, participantNames: names });
@@ -298,6 +302,7 @@ router.post("/groups/:id/messages", uploadSingleMediaFile, async (req: Request<{
       type: input.type,
       textContent: input.textContent,
       contentUrl: input.contentUrl,
+      replyToMessageId: await resolveReplyTo("group", group.id, readReplyId(req.body)),
     })
     .returning();
 
@@ -309,7 +314,7 @@ router.post("/groups/:id/messages", uploadSingleMediaFile, async (req: Request<{
     url: "./",
   });
 
-  return res.status(201).json(message);
+  return res.status(201).json((await withChatExtras([message], "group"))[0]);
 });
 
 const GROUP_RENOTIFY_INTERVAL_MS = 30 * 60 * 1000;
@@ -444,11 +449,14 @@ router.get("/child/groups/:id/messages", requireChildAuth, async (req: ChildAuth
   const group = await assertChildInGroup(req.childId as string, req.params.id);
   if (!group) return res.status(404).json({ error: "not_found" });
 
-  const messages = await db
-    .select()
-    .from(groupMessagesTable)
-    .where(eq(groupMessagesTable.groupId, group.id))
-    .orderBy(asc(groupMessagesTable.createdAt));
+  const messages = await withChatExtras(
+    await db
+      .select()
+      .from(groupMessagesTable)
+      .where(eq(groupMessagesTable.groupId, group.id))
+      .orderBy(asc(groupMessagesTable.createdAt)),
+    "group",
+  );
   const names = await participantNames({ ...group });
 
   return res.json({ group, messages, participantNames: names });
@@ -469,13 +477,13 @@ router.post("/child/groups/:id/messages", requireChildAuth, uploadSingleMediaFil
 
   const [message] = await db
     .insert(groupMessagesTable)
-    .values({ groupId: group.id, senderId: childId, type: input.type, textContent: input.textContent, contentUrl: input.contentUrl })
+    .values({ groupId: group.id, senderId: childId, type: input.type, textContent: input.textContent, contentUrl: input.contentUrl, replyToMessageId: await resolveReplyTo("group", group.id, readReplyId(req.body)) })
     .returning();
 
   const [child] = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, childId)).limit(1);
   await notifyParentOfGroupMessage(group, child?.name ?? "Crianca");
 
-  return res.status(201).json(message);
+  return res.status(201).json((await withChatExtras([message], "group"))[0]);
 });
 
 /**
@@ -513,11 +521,14 @@ router.get("/contact/groups/:id/messages", requireContactAuth, async (req: Conta
   const group = await assertContactInGroup(req.contactUserId as string, req.params.id);
   if (!group) return res.status(404).json({ error: "not_found" });
 
-  const messages = await db
-    .select()
-    .from(groupMessagesTable)
-    .where(eq(groupMessagesTable.groupId, group.id))
-    .orderBy(asc(groupMessagesTable.createdAt));
+  const messages = await withChatExtras(
+    await db
+      .select()
+      .from(groupMessagesTable)
+      .where(eq(groupMessagesTable.groupId, group.id))
+      .orderBy(asc(groupMessagesTable.createdAt)),
+    "group",
+  );
   const names = await participantNames({ ...group });
 
   return res.json({ group, messages, participantNames: names });
@@ -539,7 +550,7 @@ router.post("/contact/groups/:id/messages", requireContactAuth, uploadSingleMedi
 
   const [message] = await db
     .insert(groupMessagesTable)
-    .values({ groupId: group.id, senderId: contactUserId, type: input.type, textContent: input.textContent, contentUrl: input.contentUrl })
+    .values({ groupId: group.id, senderId: contactUserId, type: input.type, textContent: input.textContent, contentUrl: input.contentUrl, replyToMessageId: await resolveReplyTo("group", group.id, readReplyId(req.body)) })
     .returning();
 
   const [contact] = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, contactUserId)).limit(1);
@@ -548,7 +559,7 @@ router.post("/contact/groups/:id/messages", requireContactAuth, uploadSingleMedi
     sendPushToChild(group.childId, { title: group.name, body: `${contact?.name ?? "Contato"}: nova mensagem no grupo`, url: "./" }),
   ]);
 
-  return res.status(201).json(message);
+  return res.status(201).json((await withChatExtras([message], "group"))[0]);
 });
 
 export default router;

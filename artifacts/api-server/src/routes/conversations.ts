@@ -9,6 +9,7 @@ import { kindForMime, maxBytesForMime, saveMedia } from "../lib/mediaStorage";
 import { isAllowedSticker } from "../lib/stickers";
 import { notifyChildOfActivity, notifyParentOfActivity } from "../lib/notify";
 import { mirrorAndNotify } from "../lib/mirror";
+import { withChatExtras, readReplyId, resolveReplyTo } from "../lib/chatExtras";
 import { isGuardianOfChild, getGuardiansOfChild } from "../lib/guardians";
 
 const router: IRouter = Router();
@@ -41,11 +42,12 @@ async function getOrCreatePrivateConversation(parentId: string, childId: string)
 }
 
 async function listMessages(conversationId: string) {
-  return db
+  const rows = await db
     .select()
     .from(messagesTable)
     .where(eq(messagesTable.conversationId, conversationId))
     .orderBy(asc(messagesTable.createdAt));
+  return withChatExtras(rows, "direct");
 }
 
 type MessageInput = {
@@ -159,6 +161,7 @@ router.post("/conversations/private/messages", uploadSingleMediaFile, async (req
       type: input.type,
       textContent: input.textContent,
       contentUrl: input.contentUrl,
+      replyToMessageId: await resolveReplyTo("direct", conversation.id, readReplyId(req.body)),
     })
     .returning();
 
@@ -167,7 +170,7 @@ router.post("/conversations/private/messages", uploadSingleMediaFile, async (req
   // deve ser avisada quando recebe mensagem, não só ele.
   await notifyChildOfActivity({ conversation, parentUserId: auth.userId, childId });
 
-  return res.status(201).json(message);
+  return res.status(201).json((await withChatExtras([message], "direct"))[0]);
 });
 
 /**
@@ -229,6 +232,7 @@ router.post(
         type: input.type,
         textContent: input.textContent,
         contentUrl: input.contentUrl,
+        replyToMessageId: await resolveReplyTo("direct", conversation.id, readReplyId(req.body)),
       })
       .returning();
 
@@ -236,7 +240,7 @@ router.post(
     // lado do Responsável não passa por aqui) — item 10 do pedido.
     await notifyParentOfActivity({ conversation, senderId: childId, parentUserId: child.parentId });
 
-    return res.status(201).json(message);
+    return res.status(201).json((await withChatExtras([message], "direct"))[0]);
   },
 );
 
@@ -343,12 +347,13 @@ router.post(
         type: input.type,
         textContent: input.textContent,
         contentUrl: input.contentUrl,
+        replyToMessageId: await resolveReplyTo("direct", conversation.id, readReplyId(req.body)),
       })
       .returning();
 
     await mirrorAndNotify({ conversation, messageId: message.id, senderId: childId, childId });
 
-    return res.status(201).json(message);
+    return res.status(201).json((await withChatExtras([message], "direct"))[0]);
   },
 );
 
@@ -437,12 +442,13 @@ router.post(
         type: input.type,
         textContent: input.textContent,
         contentUrl: input.contentUrl,
+        replyToMessageId: await resolveReplyTo("direct", conversation.id, readReplyId(req.body)),
       })
       .returning();
 
     await mirrorAndNotify({ conversation, messageId: message.id, senderId: contactUserId, childId: contactRow.childId });
 
-    return res.status(201).json(message);
+    return res.status(201).json((await withChatExtras([message], "direct"))[0]);
   },
 );
 
@@ -552,10 +558,11 @@ router.post(
         type: input.type,
         textContent: input.textContent,
         contentUrl: input.contentUrl,
+        replyToMessageId: await resolveReplyTo("direct", conversation.id, readReplyId(req.body)),
       })
       .returning();
 
-    return res.status(201).json(message);
+    return res.status(201).json((await withChatExtras([message], "direct"))[0]);
   },
 );
 
@@ -641,12 +648,13 @@ router.post(
         type: input.type,
         textContent: input.textContent,
         contentUrl: input.contentUrl,
+        replyToMessageId: await resolveReplyTo("direct", conversation.id, readReplyId(req.body)),
       })
       .returning();
 
     await notifyParentOfActivity({ conversation, senderId: contactUserId, parentUserId: parentId });
 
-    return res.status(201).json(message);
+    return res.status(201).json((await withChatExtras([message], "direct"))[0]);
   },
 );
 

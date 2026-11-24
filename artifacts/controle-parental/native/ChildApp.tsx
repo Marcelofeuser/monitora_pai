@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KIDS, useKidsColors } from './theme';
-import { confirmChildPairingCode, fetchChildBio, fetchChildGroupMessages, fetchChildGroups, fetchChildPrivateMessages, fetchChildScreenTimeStatus, reportChildLocation, revokeChildDevice, sendChildGroupMessage, sendChildPrivateMessage, sendChildScreenTimeHeartbeat, updateChildBio, uploadChildPhoto, type NativeUploadFile, type BioProfile, type ChildLockStatus, type GroupProfile, type PrivateMessageInput } from './api';
+import { confirmChildPairingCode, fetchChildBio, fetchChildGroupMessages, fetchChildGroups, fetchChildPrivateMessages, fetchChildScreenTimeStatus, reportChildLocation, revokeChildDevice, sendChildGroupMessage, sendChildPrivateMessage, sendChildScreenTimeHeartbeat, updateChildBio, reactAsChild, uploadChildPhoto, type NativeUploadFile, type BioProfile, type ChildLockStatus, type GroupProfile, type PrivateMessageInput } from './api';
 import { ChatChip, PrivateChat } from './PrivateChat';
 import { ProfilePhoto } from './ProfilePhoto';
 import { NativeCallOverlay } from './NativeCallOverlay';
@@ -37,6 +37,15 @@ export function ChildApp() {
   const scanLock = useRef(false);
   const call = useNativeCall(deviceToken ? { kind: 'child', token: deviceToken } : null);
   const childMediaHeaders = useCallback(async (): Promise<Record<string, string>> => (deviceToken ? { 'X-Child-Token': deviceToken } : {}), [deviceToken]);
+  // 1.1: reações.
+  const reactDirect = useCallback(async (messageId: string, emoji: string | null) => {
+    if (!deviceToken) throw new Error('Aparelho desconectado.');
+    await reactAsChild('direct', messageId, emoji, deviceToken);
+  }, [deviceToken]);
+  const reactGroup = useCallback(async (messageId: string, emoji: string | null) => {
+    if (!deviceToken) throw new Error('Aparelho desconectado.');
+    await reactAsChild('group', messageId, emoji, deviceToken);
+  }, [deviceToken]);
 
   const refreshChildLockStatus = useCallback(async () => {
     if (!deviceToken) return;
@@ -268,6 +277,7 @@ export function ChildApp() {
           ownUserId={childId}
           loadMessages={loadGroupMessages}
           sendMessage={sendGroupMessage}
+          onReact={reactGroup}
           onBack={() => { setSelectedGroup(null); setGroupPickerOpen(true); }}
           headerAction={<ChatChip kids label="Grupos" emoji="👥" color={KIDS.lilac} onPress={() => { setSelectedGroup(null); void openGroups(); }} />}
         />
@@ -285,6 +295,7 @@ export function ChildApp() {
         ownUserId={childId}
         loadMessages={loadMessages}
         sendMessage={sendMessage}
+        onReact={reactDirect}
         headerAction={<>
           <ChatChip kids label="Vídeo" emoji="📹" color={KIDS.green} disabled={!parentId || call.phase !== 'idle'} onPress={() => void call.startCall(parentId, parentName)} />
           <ChatChip kids label="Grupos" emoji="👥" color={KIDS.lilac} onPress={() => void openGroups()} />

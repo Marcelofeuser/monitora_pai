@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -72,6 +72,8 @@ export const groupMessagesTable = pgTable("group_messages", {
   type: messageTypeEnum("type").notNull(),
   contentUrl: text("content_url"),
   textContent: text("text_content"),
+  // 1.1: "responder" uma mensagem do grupo. Ver messagesTable.replyToMessageId.
+  replyToMessageId: uuid("reply_to_message_id").references((): AnyPgColumn => groupMessagesTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

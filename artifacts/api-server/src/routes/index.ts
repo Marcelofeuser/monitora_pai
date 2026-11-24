@@ -14,6 +14,7 @@ import callsRouter from "./calls";
 import devicesRouter from "./devices";
 import adminRouter from "./admin";
 import billingRouter from "./billing";
+import reactionsRouter from "./reactions";
 
 const router: IRouter = Router();
 
@@ -30,6 +31,7 @@ router.use(meRouter);
 router.use(guardiansRouter);
 router.use(callsRouter);
 router.use(devicesRouter);
+router.use(reactionsRouter);
 router.use("/admin", adminRouter);
 router.use("/billing", billingRouter);
 
