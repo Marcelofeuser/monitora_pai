@@ -1131,7 +1131,7 @@ function Dashboard() {
           data-testid="button-dashboard-open-mirror"
           className="flex items-center gap-2 rounded-full border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] px-6 py-3.5 text-sm font-extrabold shadow-[0_12px_32px_rgba(24,48,48,.14)] transition-transform hover:scale-105 active:scale-95"
         >
-          <EyeOff size={18} className="text-[hsl(var(--primary))]" /> Espelho
+          <EyeOff size={18} className="text-[hsl(var(--primary))]" /> {t.nav.conversations}
         </Link>
         <Link
           href="/meu-chat"
