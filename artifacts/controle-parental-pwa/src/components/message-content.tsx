@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useAuthedMediaUrl } from '@/lib/media';
 import { tx } from '@/lib/i18n';
 
@@ -24,6 +25,7 @@ function StickerContent({ contentUrl }: { contentUrl: string }) {
 
 function PhotoContent({ contentUrl, authHeaders }: { contentUrl: string; authHeaders: HeadersInit }) {
   const { url, error } = useAuthedMediaUrl(contentUrl, authHeaders);
+  const [open, setOpen] = useState(false);
   if (error) {
     return <p className="text-xs text-[hsl(var(--destructive))]">{tx('Não foi possível carregar a foto.')}</p>;
   }
@@ -34,7 +36,58 @@ function PhotoContent({ contentUrl, authHeaders }: { contentUrl: string; authHea
       </div>
     );
   }
-  return <img src={url} alt={tx('Foto enviada no chat')} className="max-h-64 max-w-full rounded-lg object-cover" />;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="block cursor-zoom-in rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))]"
+        aria-label={tx('Abrir foto em tela cheia')}
+        data-testid="button-open-photo"
+      >
+        <img src={url} alt={tx('Foto enviada no chat')} className="max-h-64 max-w-full rounded-lg object-cover" />
+      </button>
+      {open ? <PhotoLightbox url={url} onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
+
+/** Foto em tela cheia. Clique fora, no X ou Esc fecha; pinça do navegador amplia. */
+function PhotoLightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = previous; };
+  }, [onClose]);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={tx('Foto em tela cheia')}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-2"
+      style={{ touchAction: 'pinch-zoom' }}
+      onClick={onClose}
+      data-testid="dialog-photo"
+    >
+      <img
+        src={url}
+        alt={tx('Foto em tela cheia')}
+        className="max-h-full max-w-full object-contain"
+        onClick={(event) => event.stopPropagation()}
+      />
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-4 top-4 flex size-10 items-center justify-center rounded-full bg-white/20 text-xl font-bold text-white"
+        aria-label={tx('Fechar foto')}
+        data-testid="button-close-photo"
+      >
+        ✕
+      </button>
+    </div>
+  );
 }
 
 function VideoContent({ contentUrl, authHeaders }: { contentUrl: string; authHeaders: HeadersInit }) {
