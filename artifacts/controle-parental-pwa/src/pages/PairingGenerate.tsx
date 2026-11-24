@@ -39,6 +39,7 @@ export function PairingGenerate() {
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [pairedChildLabel, setPairedChildLabel] = useState('');
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
   const [deletingChildId, setDeletingChildId] = useState<string | null>(null);
@@ -68,12 +69,13 @@ export function PairingGenerate() {
     };
   }, [getToken]);
 
-  function buildQr(childLabel: string, result: { joinUrl: string; expiresAt: string }) {
+  function buildQr(childLabel: string, result: { joinUrl: string; expiresAt: string; pairingCode?: string | null }) {
     return QRCode.toDataURL(result.joinUrl, { width: 280, margin: 2 }).then((dataUrl) => {
       setQrDataUrl(dataUrl);
       setJoinUrl(result.joinUrl);
       setExpiresAt(result.expiresAt);
       setPairedChildLabel(childLabel);
+      setPairingCode(result.pairingCode ?? null);
     });
   }
 
@@ -147,6 +149,7 @@ export function PairingGenerate() {
     setJoinUrl(null);
     setExpiresAt(null);
     setPairedChildLabel('');
+    setPairingCode(null);
     setChildName('');
     setChildAge('');
     setConsentChecked(false);
@@ -288,7 +291,14 @@ export function PairingGenerate() {
 
       {qrDataUrl && (
         <div className="flex flex-col items-center gap-4 rounded-lg border border-[hsl(var(--border))] p-6">
-          <img src={qrDataUrl} alt={`QR code de pareamento para ${pairedChildLabel}`} width={280} height={280} />
+          {pairingCode && (
+            <div className="w-full rounded-lg border border-[hsl(var(--primary))] p-4 text-center" data-testid="pairing-code-box">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">{tx('Código para o app Ampara Kids')}</p>
+              <p className="mt-1 font-mono text-3xl font-extrabold tracking-[.2em]" data-testid="text-pairing-code">{pairingCode.slice(0, 4)} {pairingCode.slice(4)}</p>
+              <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{tx('No celular da criança, abra o Ampara Kids e digite este código. Ou use o QR code abaixo.')}</p>
+            </div>
+          )}
+          <img src={qrDataUrl} alt={`QR code ${pairedChildLabel}`} width={280} height={280} />
           <p className="text-center text-sm text-[hsl(var(--muted-foreground))]">
             {tx('Peça para')} {pairedChildLabel} {tx('abrir a câmera do aparelho dela e apontar para este código.')}
             {minutesLeft !== null && (

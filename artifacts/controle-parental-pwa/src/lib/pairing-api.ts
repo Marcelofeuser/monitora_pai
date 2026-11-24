@@ -25,6 +25,8 @@ function authHeaders(token?: string | null): HeadersInit {
 
 export type CreatePairingResponse = {
   token: string;
+  // Código de 8 dígitos para digitar no app nativo Ampara Kids.
+  pairingCode?: string | null;
   joinUrl: string;
   expiresAt: string;
 };
