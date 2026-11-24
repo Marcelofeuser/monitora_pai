@@ -104,6 +104,8 @@ const TOUR_KEY_PREFIX = 'amparo-onboarding-completed';
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+// crianca.amparakids.com abre direto a tela da Criança (digitar o código), não o cadastro do Responsável.
+const isChildHost = typeof window !== 'undefined' && window.location.hostname.startsWith('crianca.');
 
 const pt = {
   language: { brazil: 'Português do Brasil', english: 'Inglês', spanish: 'Espanhol', switcher: 'Idioma' },
@@ -4119,7 +4121,7 @@ function Router() {
   const { language } = useLanguage();
   const { userId } = useAuth();
   setProfileOwner(userId);
-  return <ErrorBoundary resetKey={location}><Fragment key={language}><Switch><Route path="/" component={Onboarding} /><Route path="/baixar/crianca" component={ChildAppDownload} /><Route path="/superadmin" component={SuperadminRoute} /><Route path="/billing" component={BillingRoute} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/invites" component={InvitesRoute} /><Route path="/groups/new" component={CreateGroupRoute} /><Route path="/meu-chat" component={MyChatRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route path="/join-contact" component={ContactJoin} /><Route path="/aceitar-responsavel" component={GuardianJoin} /><Route path="/contact" component={ContactChat} /><Route path="/contact/bio" component={ContactBio} /><Route path="/perfil" component={ParentBioRoute} /><Route component={NotFound} /></Switch></Fragment></ErrorBoundary>;
+  return <ErrorBoundary resetKey={location}><Fragment key={language}><Switch><Route path="/" component={isChildHost ? PairingJoin : Onboarding} /><Route path="/baixar/crianca" component={ChildAppDownload} /><Route path="/superadmin" component={SuperadminRoute} /><Route path="/billing" component={BillingRoute} /><Route path="/dashboard" component={DashboardRoute} /><Route path="/conversations" component={ConversationsRoute} /><Route path="/invites" component={InvitesRoute} /><Route path="/groups/new" component={CreateGroupRoute} /><Route path="/meu-chat" component={MyChatRoute} /><Route path="/location" component={LocationRoute} /><Route path="/screen-time" component={ScreenTimeRoute} /><Route path="/settings" component={SettingsRoute} /><Route path="/pair" component={PairingRoute} /><Route path="/join" component={PairingJoin} /><Route path="/join-contact" component={ContactJoin} /><Route path="/aceitar-responsavel" component={GuardianJoin} /><Route path="/contact" component={ContactChat} /><Route path="/contact/bio" component={ContactBio} /><Route path="/perfil" component={ParentBioRoute} /><Route component={NotFound} /></Switch></Fragment></ErrorBoundary>;
 }
 // /join não exige o Responsável logado — é a rota que o QR code abre no
 // aparelho da Criança, que ainda não tem conta. /pair é o gerador do QR,

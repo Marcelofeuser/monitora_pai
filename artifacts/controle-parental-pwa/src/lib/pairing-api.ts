@@ -89,10 +89,20 @@ export type ConfirmPairingResponse = {
 // o pedido que cria a conta dela. O endpoint /api/pairing/confirm é público
 // por natureza (protegido pelo token de pareamento em si, não por login).
 export async function confirmPairing(pairingToken: string): Promise<ConfirmPairingResponse> {
+  return confirmPairingBody({ token: pairingToken });
+}
+
+// Mesmo endpoint, mas com o código de 8 dígitos digitado pela Criança em
+// crianca.amparakids.com (sem link nem QR code).
+export async function confirmPairingWithCode(code: string): Promise<ConfirmPairingResponse> {
+  return confirmPairingBody({ code: code.replace(/\D/g, '') });
+}
+
+async function confirmPairingBody(body: { token: string } | { code: string }): Promise<ConfirmPairingResponse> {
   const res = await fetch(`${API_URL}/api/pairing/confirm`, {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ token: pairingToken }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
