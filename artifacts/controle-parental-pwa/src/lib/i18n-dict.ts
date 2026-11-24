@@ -375,4 +375,7 @@ export const DICT: Record<string, { en: string; es: string }> = {
   'Última localização de': { en: 'Last location of', es: 'Última ubicación de' },
   'Último uso:': { en: 'Last used:', es: 'Último uso:' },
   '— só leitura': { en: '— read only', es: '— solo lectura' },
+  'Abrir foto em tela cheia': { en: 'Open photo full screen', es: 'Abrir foto en pantalla completa' },
+  'Foto em tela cheia': { en: 'Full-screen photo', es: 'Foto en pantalla completa' },
+  'Fechar foto': { en: 'Close photo', es: 'Cerrar foto' },
 };

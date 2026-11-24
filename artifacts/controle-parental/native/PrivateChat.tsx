@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
-import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { mediaSource, type PrivateMessage, type PrivateMessageInput } from './api';
@@ -234,9 +234,59 @@ function MediaFailed({ text, color }: { text: string; color: string }) {
 function PhotoMessage({ contentUrl, getHeaders, color }: { contentUrl: string; getHeaders: GetHeaders; color: string }) {
   const source = useMediaSource(contentUrl, getHeaders);
   const [failed, setFailed] = useState(false);
+  const [zoomOpen, setZoomOpen] = useState(false);
   if (failed) return <MediaFailed text="Não foi possível abrir a foto." color={color} />;
   if (!source) return <View style={[styles.photo, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator color={color} /></View>;
-  return <Image accessibilityLabel="Foto enviada na conversa" source={source} resizeMode="cover" style={styles.photo} onError={(event) => { console.log('[MEDIA] foto falhou', source.uri, event.nativeEvent?.error); setFailed(true); }} />;
+  return (
+    <>
+      <Pressable accessibilityRole="imagebutton" accessibilityLabel="Abrir foto em tela cheia" onPress={() => setZoomOpen(true)}>
+        <Image accessibilityLabel="Foto enviada na conversa" source={source} resizeMode="cover" style={styles.photo} onError={(event) => { console.log('[MEDIA] foto falhou', source.uri, event.nativeEvent?.error); setFailed(true); }} />
+      </Pressable>
+      <PhotoViewer source={source} visible={zoomOpen} onClose={() => setZoomOpen(false)} />
+    </>
+  );
+}
+
+/** Foto em tela cheia: pinça para ampliar (iOS, via ScrollView) e toque duplo alterna 1x/2,5x. */
+function PhotoViewer({ source, visible, onClose }: { source: { uri: string; headers: Record<string, string> }; visible: boolean; onClose: () => void }) {
+  const scrollRef = useRef<ScrollView>(null);
+  const zoomedRef = useRef(false);
+  const lastTapRef = useRef(0);
+  const { width, height } = useWindowDimensions();
+  const handleTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 280) {
+      const next = zoomedRef.current ? 1 : 2.5;
+      zoomedRef.current = !zoomedRef.current;
+      // iOS: zoom programático pelo ScrollView
+      (scrollRef.current as any)?.getScrollResponder?.()?.scrollResponderZoomTo?.({ x: width / 2 - width / (2 * next), y: height / 2 - height / (2 * next), width: width / next, height: height / next, animated: true });
+    }
+    lastTapRef.current = now;
+  };
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={styles.viewerBackdrop}>
+        <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ width, height, alignItems: 'center', justifyContent: 'center' }}
+          maximumZoomScale={4}
+          minimumZoomScale={1}
+          bouncesZoom
+          centerContent
+          showsHorizontalScrollIndicator={false}
+          showsVerticalScrollIndicator={false}
+        >
+          <Pressable onPress={handleTap} style={{ width, height, alignItems: 'center', justifyContent: 'center' }}>
+            <Image accessibilityLabel="Foto em tela cheia" source={source} resizeMode="contain" style={{ width, height }} />
+          </Pressable>
+        </ScrollView>
+        <Pressable accessibilityRole="button" accessibilityLabel="Fechar foto" onPress={() => { zoomedRef.current = false; onClose(); }} style={styles.viewerClose} hitSlop={12}>
+          <Text style={styles.viewerCloseText}>✕</Text>
+        </Pressable>
+      </View>
+    </Modal>
+  );
 }
 
 function AudioMessage({ contentUrl, getHeaders, theme, mine }: { contentUrl: string; getHeaders: GetHeaders; theme: ChatTheme; mine: boolean }) {
@@ -596,6 +646,9 @@ const styles = StyleSheet.create({
   send: { alignItems: 'center', justifyContent: 'center' },
   toolButton: { alignItems: 'center', justifyContent: 'center' },
   photo: { width: 220, height: 170, borderRadius: 12, marginBottom: 6 },
+  viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.96)' },
+  viewerClose: { position: 'absolute', top: 54, right: 18, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  viewerCloseText: { color: '#fff', fontSize: 20, fontWeight: '700' },
   video: { width: 240, height: 180, borderRadius: 12, marginBottom: 6, backgroundColor: '#000', overflow: 'hidden' },
   mediaLink: { minHeight: 40, justifyContent: 'center' },
   audioPill: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14 },
