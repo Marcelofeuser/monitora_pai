@@ -2,13 +2,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KIDS, useKidsColors } from './theme';
 import { confirmChildPairingCode, fetchChildBio, fetchChildGroupMessages, fetchChildGroups, fetchChildPrivateMessages, fetchChildScreenTimeStatus, reportChildLocation, revokeChildDevice, sendChildGroupMessage, sendChildPrivateMessage, sendChildScreenTimeHeartbeat, updateChildBio, reactAsChild, uploadChildPhoto, type NativeUploadFile, type BioProfile, type ChildLockStatus, type GroupProfile, type PrivateMessageInput } from './api';
 import { ChatChip, PrivateChat } from './PrivateChat';
 import { ProfilePhoto } from './ProfilePhoto';
 import { NativeCallOverlay } from './NativeCallOverlay';
 import { useNativeCall } from './useNativeCall';
+
+/** Página que leva o responsável à loja certa do app Ampara (iOS/Android). */
+const PARENT_APP_DOWNLOAD_URL = 'https://amparakids.com/baixar';
 
 const DEVICE_TOKEN_KEY = 'ampara-child-device-token';
 const CHILD_NAME_KEY = 'ampara-child-name';
@@ -331,6 +334,11 @@ export function ChildApp() {
             <Pressable accessibilityRole="button" disabled={manualValue.length !== 8} onPress={() => void pairWithCode(manualValue)} style={[styles.primaryButton, { backgroundColor: KIDS.green, opacity: manualValue.length === 8 ? 1 : 0.5 }]}><Text style={[styles.buttonText, { color: '#0F2D2A' }]}>Conectar meu aparelho</Text></Pressable>
           </>
         )}
+      </View>
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: KIDS.aqua }]}>
+        <Text style={[styles.cardTitle, { color: colors.foreground }]}>Seu responsável ainda não tem o Ampara?</Text>
+        <Text style={[styles.body, { color: colors.mutedForeground }]}>O Ampara Kids só funciona conectado ao Ampara, o app do responsável. Primeiro o pai, a mãe ou o responsável instala o Ampara no celular dele e gera o código.</Text>
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(PARENT_APP_DOWNLOAD_URL)} style={[styles.primaryButton, { backgroundColor: KIDS.aqua, marginTop: 10 }]}><Text style={[styles.buttonText, { color: '#0F2D2A' }]}>Baixar o Ampara (responsável)</Text></Pressable>
       </View>
       <Text style={[styles.privacy, { color: colors.mutedForeground }]}>Nada é compartilhado antes de você confirmar o vínculo.</Text>
     </ScrollView>
