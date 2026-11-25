@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Termos de Uso — Ampara</title>
+<meta name="description" content="Termos de Uso do Ampara e do Ampara Kids: quem pode usar, planos e cancelamento, regras de uso e responsabilidades." />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="canonical" href="https://amparakids.com/termos" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --cream: #F7F2E8;
+    --cream-2: #FBF7EF;
+    --ink: #24343A;
+    --ink-soft: #55636A;
+    --teal: #1F4C4A;
+    --teal-2: #2A615E;
+    --gold: #E7B867;
+    --gold-2: #D9A63F;
+    --line: #E4D9C4;
+    --radius-lg: 26px;
+    --radius-md: 16px;
+    --shadow: 0 18px 40px -18px rgba(31, 76, 74, 0.28);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Manrope', system-ui, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--teal); }
+  .serif { font-family: 'Newsreader', Georgia, serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  header.site {
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(247, 242, 232, 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; max-width: 1120px; margin: 0 auto; padding-left: 24px; padding-right: 24px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -0.01em; text-decoration: none; color: var(--ink); }
+  .brand svg { flex: none; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; font-weight: 700; font-size: 14px; padding: 10px 18px; text-decoration: none; background: var(--teal); color: var(--cream-2); }
+
+  main { padding: 56px 0 96px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(231, 184, 103, 0.28); color: #8A5A16;
+    font-weight: 700; font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase;
+    padding: 7px 14px; border-radius: 999px; margin-bottom: 18px;
+  }
+  h1 { font-family: 'Newsreader', Georgia, serif; font-size: 40px; line-height: 1.12; margin: 0 0 12px; letter-spacing: -0.01em; }
+  .updated { color: var(--ink-soft); font-size: 14px; margin: 0 0 40px; }
+
+  .doc-card {
+    background: var(--cream-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: 40px clamp(20px, 5vw, 56px);
+  }
+
+  section.part { margin-top: 44px; }
+  section.part:first-of-type { margin-top: 0; }
+  h2 { font-family: 'Newsreader', Georgia, serif; font-size: 26px; color: var(--teal); margin: 0 0 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+  section.part:first-of-type h2 { border-top: none; padding-top: 0; }
+  h3 { font-size: 16px; font-weight: 800; margin: 24px 0 8px; }
+  p { margin: 0 0 14px; font-size: 15.5px; }
+  ul, ol.items { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 6px; font-size: 15.5px; }
+  strong { font-weight: 800; }
+
+  .faq-item {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    background: var(--cream);
+  }
+  .faq-item summary { font-weight: 700; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item summary .plus { color: var(--teal); font-size: 20px; font-weight: 800; }
+  .faq-item[open] summary .plus { transform: rotate(45deg); }
+  .faq-item p { margin-top: 10px; margin-bottom: 0; color: var(--ink-soft); }
+
+  .contact-card {
+    display: flex; flex-wrap: wrap; gap: 24px; justify-content: space-between;
+    background: var(--teal); color: var(--cream-2);
+    border-radius: var(--radius-md); padding: 24px 28px; margin-top: 8px;
+  }
+  .contact-card h3 { color: var(--cream-2); margin-top: 0; }
+  .contact-card a { color: var(--gold); font-weight: 700; }
+  .contact-card p { margin: 0; font-size: 14px; opacity: 0.9; }
+
+  footer.site { border-top: 1px solid var(--line); padding: 32px 0; }
+  .footer-bottom { max-width: 1120px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--ink-soft); font-size: 13px; }
+
+  @media (max-width: 640px) {
+    h1 { font-size: 30px; }
+    .doc-card { padding: 28px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="nav">
+    <a class="brand" href="/">
+      <svg width="30" height="30" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="180" height="180" rx="42" fill="#E7B867"/>
+        <path d="M90 35L133 51V84C133 112 114 132 90 144C66 132 47 112 47 84V51L90 35Z" fill="#1F4C4A"/>
+        <path d="M70 88L83 101L111 72" stroke="#F7F2E8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Ampara
+    </a>
+    <a class="btn" href="/">Voltar ao site</a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="eyebrow">Termos</div>
+    <h1>Termos de Uso do Ampara</h1>
+    <p class="updated">Versão de 25/11/2026 · Vale para o site amparakids.com e para os apps Ampara e Ampara Kids.</p>
+
+    <div class="doc-card">
+
+      <section class="part" id="s1">
+        <h2>1. Aceite e quem somos</h2>
+        <p>Estes Termos de Uso regem o uso do site amparakids.com e dos apps <strong>Ampara</strong> (responsável) e <strong>Ampara Kids</strong> (criança), oferecidos pela SEVENGO SMART TECNOLOGY INOVA SIMPLES (I.S.), CNPJ 65.280.576/0001-03, Goiânia (GO).</p>
+        <p>Ao criar uma conta, parear um aparelho ou usar os apps, você concorda com estes Termos e com a <a href="/privacidade.html">Política de Privacidade</a>.</p>
+      </section>
+
+      <section class="part" id="s2">
+        <h2>2. O que é o Ampara</h2>
+        <p>O Ampara é uma plataforma de acompanhamento familiar: conversa privada entre responsável e criança, chamadas de vídeo, contatos aprovados pelo responsável, espelhamento das conversas da criança com esses contatos, grupos familiares, localização compartilhada pela criança e controle de tempo de uso.</p>
+        <p>A conversa privada entre responsável e criança não é espelhada para ninguém.</p>
+      </section>
+
+      <section class="part" id="s3">
+        <h2>3. Quem pode usar</h2>
+        <ul>
+          <li>A conta de responsável é exclusiva para <strong>maiores de 18 anos</strong> que tenham a guarda, tutela ou responsabilidade legal pela criança ou adolescente acompanhado (filhos, netos, sobrinhos, tutelados).</li>
+          <li>A criança <strong>não cria conta</strong>: o perfil e o pareamento do aparelho são feitos pelo responsável, em conformidade com o ECA Digital (Lei 15.211/2025).</li>
+          <li>Contatos convidados (por exemplo, avós e tios) só conversam com a criança depois da aprovação do responsável.</li>
+        </ul>
+      </section>
+
+      <section class="part" id="s4">
+        <h2>4. Sua conta</h2>
+        <ul>
+          <li>Você é responsável por manter seus dados de acesso em segurança e por toda atividade feita na sua conta.</li>
+          <li>As informações cadastradas devem ser verdadeiras.</li>
+          <li>Você pode excluir sua conta a qualquer momento, no app (Menu → Minha conta → Excluir conta) ou como descrito em <a href="/excluir-conta">amparakids.com/excluir-conta</a>.</li>
+        </ul>
+      </section>
+
+      <section class="part" id="s5">
+        <h2>5. Uso permitido e proibido</h2>
+        <p>O Ampara existe para apoiar o exercício da responsabilidade parental. É proibido:</p>
+        <ul>
+          <li>usar a plataforma para vigiar cônjuges, outros adultos ou qualquer pessoa sem relação de guarda ou tutela com você;</li>
+          <li>tentar acessar dados de crianças que não estão sob sua responsabilidade;</li>
+          <li>enviar conteúdo ilegal, violento, sexual, discriminatório ou que exponha a criança a risco;</li>
+          <li>contornar, desativar ou manipular mecanismos de segurança da plataforma;</li>
+          <li>revender, sublicenciar ou compartilhar seu acesso com terceiros não autorizados.</li>
+        </ul>
+      </section>
+
+      <section class="part" id="s6">
+        <h2>6. Conteúdo enviado</h2>
+        <p>Mensagens, fotos, vídeos e áudios enviados continuam sendo de quem os enviou. Você nos autoriza a armazená-los e transmiti-los apenas para que a plataforma funcione (entregar a mensagem, exibir no espelhamento ao responsável). Não usamos esse conteúdo para publicidade.</p>
+        <p>Você é responsável pelo que envia. Conteúdo que viole estes Termos pode ser removido.</p>
+      </section>
+
+      <section class="part" id="s7">
+        <h2>7. Planos, pagamento e cancelamento</h2>
+        <ul>
+          <li>Criar a conta é gratuito. Os recursos completos dependem de assinatura nos planos descritos em <a href="/#preco">amparakids.com</a>, com cobrança recorrente mensal, trimestral ou anual, processada pelo Stripe.</li>
+          <li>A assinatura é feita no site; os apps não vendem nada dentro deles.</li>
+          <li><strong>Direito de arrependimento:</strong> você pode desistir da contratação em até 7 dias após a primeira compra, com reembolso integral (art. 49 do Código de Defesa do Consumidor).</li>
+          <li>Depois desse prazo, você pode cancelar a qualquer momento: o cancelamento interrompe as cobranças futuras e o acesso continua até o fim do período já pago, sem reembolso proporcional, salvo disposição legal em contrário.</li>
+          <li>Excluir a conta cancela a assinatura ativa.</li>
+        </ul>
+      </section>
+
+      <section class="part" id="s8">
+        <h2>8. Disponibilidade</h2>
+        <p>Trabalhamos para manter a plataforma disponível continuamente, mas não garantimos funcionamento ininterrupto: manutenções e instabilidades pontuais podem ocorrer. Recursos como localização e chamadas dependem da conexão e das permissões do aparelho.</p>
+        <p>O Ampara é uma ferramenta de apoio e <strong>não substitui</strong> a supervisão do responsável nem os serviços de emergência.</p>
+      </section>
+
+      <section class="part" id="s9">
+        <h2>9. Suspensão e encerramento</h2>
+        <p>Podemos suspender ou encerrar contas que violem estes Termos ou que coloquem crianças em risco, inclusive comunicando autoridades quando a lei exigir.</p>
+      </section>
+
+      <section class="part" id="s10">
+        <h2>10. Propriedade intelectual</h2>
+        <p>A marca Ampara, os apps, o site e seus elementos visuais pertencem à SevenGo Smart Technology. O uso da plataforma não transfere esses direitos a você.</p>
+      </section>
+
+      <section class="part" id="s11">
+        <h2>11. Alterações destes Termos</h2>
+        <p>Podemos atualizar estes Termos. Mudanças relevantes serão avisadas no app ou por e-mail com antecedência razoável. Continuar usando o Ampara depois disso significa concordar com a nova versão.</p>
+      </section>
+
+      <section class="part" id="s12">
+        <h2>12. Lei aplicável e contato</h2>
+        <p>Estes Termos são regidos pelas leis brasileiras. Fica eleito o foro do domicílio do consumidor, conforme o Código de Defesa do Consumidor.</p>
+        <p>Dúvidas: <a href="mailto:contato@amparakids.com">contato@amparakids.com</a>.</p>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="footer-bottom">
+    <span>&copy; <span id="year"></span> Ampara. Todos os direitos reservados.</span>
+    <span>Goiânia, Brasil</span>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+
+</body>
+</html>
